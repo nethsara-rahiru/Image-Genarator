@@ -1,11 +1,11 @@
 # Build progress and continuation
 
-Repository inspected 2026-10-25: initial commit 4213469 contained only README.md. No application/CI existed. Existing history preserved. Main remains unchanged; merge/release authorization has not been given.
+Repository inspected 2026-10-25: initial commit 4213469 contained only README.md. No application/CI existed. Existing history preserved. The user explicitly authorized merging the feature branches to main on 2026-10-25. PRs #1 and #2 have merged; PR #3 targets main for the final integration. Release tagging remains gated by live acceptance and separate authorization.
 
 | Milestone | Implementation / evidence                                                                                        | Remaining acceptance                                                       |
 | --------- | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| M01       | ba7661d, PR #1, Node configuration/health/CI; CI green                                                           | Authorized merge                                                           |
-| M02       | 632118a, PR #2, Mongo models/indexes/DTOs/APIs/isolation tested                                                  | Authorized merge                                                           |
+| M01       | ba7661d, PR #1, Node configuration/health/CI; CI green                                                           | Merged into main                                                           |
+| M02       | 632118a, PR #2, Mongo models/indexes/DTOs/APIs/isolation tested                                                  | Merged into main                                                           |
 | M03       | Nine responsive vanilla pages, real HTTPS auth/session/CSRF and UI tests                                         | VPS accessibility/security acceptance                                      |
 | M04       | Profile leases, WSS viewer/TTL, local verification flow and persistent-cookie isolation tested                   | Actual Google/MFA/session reuse UNVERIFIED                                 |
 | M05       | New/resumed conversation adapter and saved URLs, fixtures pass                                                   | Current Gemini UI/account identity UNVERIFIED                              |
@@ -27,8 +27,8 @@ Local automated suite: 33 passing tests using actual temporary MongoDB processes
 
 ## Continue precisely
 
-1. Fetch and inspect latest feat/m09-dashboard-handover head; run `npm ci`, `npx playwright install --with-deps chromium`, `npm run lint`, `npm test`, production audit and shell syntax checks. Do not rerun real generation unless explicitly opt-in.
-2. Inspect PR checks/reviews and this report. Feature branches are stacked: merge #1 into main only when authorized, then retarget/merge #2, then final PR after all required checks/reviews. Do not force-push or bypass branch protection.
+1. Fetch main after PR #3 is merged and inspect its immutable head; run `npm ci`, `npx playwright install --with-deps chromium`, `npm run lint`, `npm test`, production audit and shell syntax checks. Do not rerun real generation unless explicitly opt-in.
+2. Merge authorization has been granted. PR #1 merged as fb9affdf412551ebe8c3102d88b0fdc20ad8649e; PR #2 merged as 23fb824a4e4504731e3d1e05226c0b1cf9e3d1ec. PR #3 was retargeted to main and includes this integration record. Verify its merged state and main CI before deployment. Do not force-push or bypass branch protection.
 3. Deploy only a reviewed immutable commit on an Ubuntu 24.04 VPS following docs/deployment.md. Configure all secrets in the SSH terminal/service environment, never chat. No VPS connection or real credentials exist in this cloud session.
 4. Administrator must bootstrap app and interact with Google login/2FA. Complete the target acceptance checklist, including two accounts, actual Gemini/Groq, interrupted jobs, TLS/firewall and restore/reboot drill. Record sanitized evidence.
 5. Keep live integrations marked UNVERIFIED until those checks are completed. Do not create v1.0.0 or claim a production release until authorized merge and release gates pass.
@@ -41,4 +41,4 @@ Single VPS/shared DATA_DIR only; no distributed browser fencing. File/DB writes 
 
 PR #3: https://github.com/nethsara-rahiru/Image-Genarator/pull/3. Implementation 0ebd8f7 and follow-up 77a7522 are pushed. Node 22 CI passed on 77a7522 for both push and PR: [run 40181254723](https://github.com/nethsara-rahiru/Image-Genarator/actions/runs/40181254723) and [run 40181293859](https://github.com/nethsara-rahiru/Image-Genarator/actions/runs/40181293859). Dashboard fixture previews are attached as CI artifacts. Local full suite: **33 passed, 1 intentionally skipped live test**; final dashboard E2E also passed separately after the running-count adjustment. Production dependency audit: 0 vulnerabilities. Backup fail-closed guards additionally checked using controlled PM2/mongodump fixtures; real Mongo dump/restore remains UNVERIFIED. Follow-on documentation/backup guard commit is checked by the same CI workflow; latest PR check status is authoritative.
 
-No merges, force pushes, release tags or live Google/Groq calls were performed. Main remains at 4213469. To deploy the current candidate before an authorized merge, use the exact reviewed PR head SHA, not main. Remaining user actions: provide/configure target VPS and trusted TLS in an SSH terminal, provision admin, complete Google login and target acceptance checklist, configure Groq locally if desired, then authorize reviews/merges/release only after gates pass.
+The user subsequently authorized main integration. PRs #1 and #2 merged in dependency order; PR #3 targets main for the authorized final merge after its checks pass. The GitHub PR merge record identifies the resulting main commit. No force pushes, release tags or live Google/Groq calls were performed. Remaining user actions: provide/configure target VPS and trusted TLS in an SSH terminal, provision admin, complete Google login and target acceptance checklist, configure Groq locally if desired, and authorize release only after the remaining gates pass.
