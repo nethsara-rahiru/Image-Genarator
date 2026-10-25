@@ -1,8 +1,111 @@
-import path from 'node:path';import {chromium} from 'playwright';import {LockManager} from './jobQueue.js';import {GoogleAccount} from '../models/index.js';import {AppError} from '../utils/errors.js';import {safePath} from '../utils/files.js';
-export function allowedNavigation(value){try{const u=new URL(value);return u.protocol==='https:'&&['gemini.google.com','accounts.google.com','myaccount.google.com','consent.google.com'].includes(u.hostname)&&!u.username&&!u.password;}catch{return false;}}
-export async function signedIn(page){return new URL(page.url()).hostname==='gemini.google.com'&&await page.locator('[contenteditable="true"][role="textbox"],textarea[aria-label*="prompt" i]').count()>0&&await page.getByRole('link',{name:/sign in/i}).count()===0;}
-export class BrowserManager{
- constructor(config){this.config=config;this.sessions=new Map();}
- async open(accountId,{login=false}={}){const id=String(accountId);const account=await GoogleAccount.findById(id);if(!account||account.disabled)throw new AppError('ACCOUNT','Account unavailable');const locks=new LockManager(undefined,this.config.LEASE_MS);if(!await locks.acquire(`profile:${id}`))throw new AppError('PROFILE_BUSY','Account profile is in use',409);let context;let timer;try{context=await chromium.launchPersistentContext(safePath(path.join(this.config.DATA_DIR,'profiles'),id),{headless:true,acceptDownloads:true,viewport:{width:1280,height:800},permissions:[]});await context.route('**/*',async route=>{const r=route.request();if(r.isNavigationRequest()&&r.frame()===r.frame().page().mainFrame()&&!allowedNavigation(r.url()))return route.abort('blockedbyclient');return route.continue();});const page=context.pages()[0]||await context.newPage();const session={context,page,locks,login,accountId:id,close:async()=>{clearInterval(timer);await context.close().catch(()=>{});await locks.release(`profile:${id}`);this.sessions.delete(id);}};timer=setInterval(()=>locks.heartbeat(`profile:${id}`).catch(()=>session.close()),Math.floor(this.config.LEASE_MS/3));timer.unref();this.sessions.set(id,session);await page.goto('https://gemini.google.com/app',{waitUntil:'domcontentloaded',timeout:45000});return session;}catch(e){clearInterval(timer);if(context)await context.close().catch(()=>{});await locks.release(`profile:${id}`);throw e;}}
- async close(){await Promise.all([...this.sessions.values()].map(s=>s.close()));}
+import path from "node:path";
+import { chromium } from "playwright";
+import { LockManager } from "./jobQueue.js";
+import { GoogleAccount } from "../models/index.js";
+import { AppError } from "../utils/errors.js";
+import { safePath } from "../utils/files.js";
+export function allowedNavigation(value) {
+  try {
+    const u = new URL(value);
+    return (
+      u.protocol === "https:" &&
+      [
+        "gemini.google.com",
+        "accounts.google.com",
+        "myaccount.google.com",
+        "consent.google.com",
+      ].includes(u.hostname) &&
+      !u.username &&
+      !u.password
+    );
+  } catch {
+    return false;
+  }
+}
+export async function signedIn(page) {
+  return (
+    new URL(page.url()).hostname === "gemini.google.com" &&
+    (await page
+      .locator(
+        '[contenteditable="true"][role="textbox"],textarea[aria-label*="prompt" i]',
+      )
+      .count()) > 0 &&
+    (await page.getByRole("link", { name: /sign in/i }).count()) === 0 &&
+    (await page.getByRole("button", { name: /^sign in$/i }).count()) === 0
+  );
+}
+export class BrowserManager {
+  constructor(config) {
+    this.config = config;
+    this.sessions = new Map();
+  }
+  async open(accountId, { login = false } = {}) {
+    const id = String(accountId);
+    const account = await GoogleAccount.findById(id);
+    if (!account || account.disabled)
+      throw new AppError("ACCOUNT", "Account unavailable");
+    const locks = new LockManager(undefined, this.config.LEASE_MS);
+    if (!(await locks.acquire(`profile:${id}`)))
+      throw new AppError("PROFILE_BUSY", "Account profile is in use", 409);
+    let context;
+    let timer;
+    try {
+      context = await chromium.launchPersistentContext(
+        safePath(path.join(this.config.DATA_DIR, "profiles"), id),
+        {
+          headless: true,
+          locale: "en-US",
+          acceptDownloads: true,
+          viewport: { width: 1280, height: 800 },
+          permissions: [],
+        },
+      );
+      await context.route("**/*", async (route) => {
+        const r = route.request();
+        if (
+          r.isNavigationRequest() &&
+          r.frame() === r.frame().page().mainFrame() &&
+          !allowedNavigation(r.url())
+        )
+          return route.abort("blockedbyclient");
+        return route.continue();
+      });
+      const page = context.pages()[0] || (await context.newPage());
+      const session = {
+        context,
+        page,
+        locks,
+        login,
+        accountId: id,
+        close: async () => {
+          clearInterval(timer);
+          await context.close().catch(() => {});
+          await locks.release(`profile:${id}`);
+          this.sessions.delete(id);
+        },
+      };
+      timer = setInterval(
+        () =>
+          locks
+            .heartbeat(`profile:${id}`)
+            .catch(() => session.close().catch(() => {})),
+        Math.floor(this.config.LEASE_MS / 3),
+      );
+      timer.unref();
+      this.sessions.set(id, session);
+      await page.goto("https://gemini.google.com/app", {
+        waitUntil: "domcontentloaded",
+        timeout: 45000,
+      });
+      return session;
+    } catch (e) {
+      clearInterval(timer);
+      if (context) await context.close().catch(() => {});
+      await locks.release(`profile:${id}`);
+      throw e;
+    }
+  }
+  async close() {
+    await Promise.all([...this.sessions.values()].map((s) => s.close()));
+  }
 }

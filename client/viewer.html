@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Secure Google login</title>
+    <link rel="stylesheet" href="/css/style.css" />
+    <link rel="stylesheet" href="/css/dashboard.css" />
+  </head>
+  <body class="viewer-body">
+    <div class="row between">
+      <div>
+        <h2>Temporary Google login browser</h2>
+        <p class="muted">
+          Click the browser and type directly. Tab, Enter and paste are
+          supported. Five minute session.
+        </p>
+      </div>
+      <button id="finish">Verify & finish</button>
+    </div>
+    <p id="status" role="status">Connecting…</p>
+    <canvas
+      id="screen"
+      width="1280"
+      height="800"
+      tabindex="0"
+      aria-label="Interactive remote Google browser. Use Tab and Enter to navigate."
+    ></canvas>
+    <script type="module" src="/js/viewer.js"></script>
+  </body>
+</html>

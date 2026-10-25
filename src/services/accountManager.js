@@ -1,8 +1,67 @@
-import {GoogleAccount} from '../models/index.js';import {signedIn} from './browserManager.js';import {AppError} from '../utils/errors.js';import {emit} from './eventService.js';
-export class AccountManager{
- constructor(browsers){this.browsers=browsers;this.logins=new Map();}
- async login(id){if(this.logins.has(String(id)))throw new AppError('PROFILE_BUSY','Login already active',409);const session=await this.browsers.open(id,{login:true});await GoogleAccount.findByIdAndUpdate(id,{state:'authenticating'});const key=String(id);const timer=setTimeout(()=>this.finish(key,false).catch(()=>{}),5*60*1000);timer.unref();this.logins.set(key,{...session,timer});await emit('account.login','Interactive login started',{accountId:id});return{viewerUrl:`/viewer.html?account=${id}`,expiresAt:new Date(Date.now()+300000)};}
- async finish(id,verify=true){const s=this.logins.get(String(id));if(!s)throw new AppError('LOGIN_SESSION','No active login session',404);let ready=false;try{ready=verify&&await signedIn(s.page);await GoogleAccount.findByIdAndUpdate(id,{state:ready?'ready':'login_required',lastVerified:new Date()});}finally{clearTimeout(s.timer);this.logins.delete(String(id));await s.close();}await emit('account.verified',ready?'Signed-in UI verified':'Login required',{accountId:id});return{ready};}
- async verify(id){if(this.logins.has(String(id)))return this.finish(id);const s=await this.browsers.open(id);try{const ready=await signedIn(s.page);await GoogleAccount.findByIdAndUpdate(id,{state:ready?'ready':'login_required',lastVerified:new Date()});return{ready};}finally{await s.close();}}
- async close(){for(const id of this.logins.keys())await this.finish(id,false);}
+import { GoogleAccount } from "../models/index.js";
+import { signedIn } from "./browserManager.js";
+import { AppError } from "../utils/errors.js";
+import { emit } from "./eventService.js";
+export class AccountManager {
+  constructor(browsers) {
+    this.browsers = browsers;
+    this.logins = new Map();
+  }
+  async login(id) {
+    if (this.logins.has(String(id)))
+      throw new AppError("PROFILE_BUSY", "Login already active", 409);
+    const session = await this.browsers.open(id, { login: true });
+    await GoogleAccount.findByIdAndUpdate(id, { state: "authenticating" });
+    const key = String(id);
+    const timer = setTimeout(
+      () => this.finish(key, false).catch(() => {}),
+      5 * 60 * 1000,
+    );
+    timer.unref();
+    this.logins.set(key, { ...session, timer });
+    await emit("account.login", "Interactive login started", { accountId: id });
+    return {
+      viewerUrl: `/viewer.html?account=${id}`,
+      expiresAt: new Date(Date.now() + 300000),
+    };
+  }
+  async finish(id, verify = true) {
+    const s = this.logins.get(String(id));
+    if (!s) throw new AppError("LOGIN_SESSION", "No active login session", 404);
+    let ready = false;
+    try {
+      ready = verify && (await signedIn(s.page));
+      await GoogleAccount.findByIdAndUpdate(id, {
+        state: ready ? "ready" : "login_required",
+        lastVerified: new Date(),
+      });
+    } finally {
+      clearTimeout(s.timer);
+      this.logins.delete(String(id));
+      await s.close();
+    }
+    await emit(
+      "account.verified",
+      ready ? "Signed-in UI verified" : "Login required",
+      { accountId: id },
+    );
+    return { ready };
+  }
+  async verify(id) {
+    if (this.logins.has(String(id))) return this.finish(id);
+    const s = await this.browsers.open(id);
+    try {
+      const ready = await signedIn(s.page);
+      await GoogleAccount.findByIdAndUpdate(id, {
+        state: ready ? "ready" : "login_required",
+        lastVerified: new Date(),
+      });
+      return { ready };
+    } finally {
+      await s.close();
+    }
+  }
+  async close() {
+    for (const id of this.logins.keys()) await this.finish(id, false);
+  }
 }
