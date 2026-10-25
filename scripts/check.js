@@ -1,2 +1,19 @@
-import { readdirSync } from 'node:fs';import { spawnSync } from 'node:child_process';
-function walk(p){for(const e of readdirSync(p,{withFileTypes:true})){if(['.git','node_modules','runtime'].includes(e.name))continue;const f=`${p}/${e.name}`;if(e.isDirectory())walk(f);else if(/\.(js|cjs)$/.test(f)){const r=spawnSync(process.execPath,['--check',f],{encoding:'utf8'});if(r.status){process.stderr.write(r.stderr);process.exitCode=1;}}}}walk('.');
+import { readdirSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+function walk(p) {
+  for (const e of readdirSync(p, { withFileTypes: true })) {
+    if ([".git", "node_modules", "runtime"].includes(e.name)) continue;
+    const f = `${p}/${e.name}`;
+    if (e.isDirectory()) walk(f);
+    else if (/\.(js|cjs)$/.test(f)) {
+      const r = spawnSync(process.execPath, ["--check", f], {
+        encoding: "utf8",
+      });
+      if (r.status) {
+        process.stderr.write(r.stderr);
+        process.exitCode = 1;
+      }
+    }
+  }
+}
+walk(".");

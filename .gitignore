@@ -7,3 +7,10 @@ coverage/
 test-results/
 *.log
 *.tgz
+
+profiles/
+uploads/
+outputs/
+monitor/
+dumps/
+/data/

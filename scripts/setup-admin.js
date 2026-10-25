@@ -1,2 +1,44 @@
-import readline from 'node:readline/promises';import {Writable} from 'node:stream';import argon2 from 'argon2';import mongoose from 'mongoose';import {configuration} from '../src/config/index.js';import {connect,AdminUser} from '../src/models/index.js';
-if(!process.stdin.isTTY)throw new Error('Run this command in an interactive SSH terminal');const config=configuration();await connect(config.MONGODB_URI);if(await AdminUser.exists({singleton:'admin'}))throw new Error('Administrator already exists. Use authenticated password change.');const rl=readline.createInterface({input:process.stdin,output:process.stdout});const username=(await rl.question('Administrator username: ')).trim();rl.close();if(!/^[a-zA-Z0-9_.-]{3,100}$/.test(username))throw new Error('Invalid username');process.stdout.write('Password (14+ characters; hidden): ');const silent=new Writable({write(chunk,enc,done){done();}});const secret=readline.createInterface({input:process.stdin,output:silent,terminal:true});const password=await secret.question('');secret.close();process.stdout.write('\n');if(password.length<14||password.length>256)throw new Error('Password must be 14–256 characters');await AdminUser.create({username,passwordHash:await argon2.hash(password,{type:argon2.argon2id})});await mongoose.disconnect();console.log('Administrator created.');
+import readline from "node:readline/promises";
+import { Writable } from "node:stream";
+import argon2 from "argon2";
+import mongoose from "mongoose";
+import { configuration } from "../src/config/index.js";
+import { connect, AdminUser } from "../src/models/index.js";
+if (!process.stdin.isTTY)
+  throw new Error("Run this command in an interactive SSH terminal");
+const config = configuration();
+await connect(config.MONGODB_URI);
+if (await AdminUser.exists({ singleton: "admin" }))
+  throw new Error(
+    "Administrator already exists. Use authenticated password change.",
+  );
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout,
+});
+const username = (await rl.question("Administrator username: ")).trim();
+rl.close();
+if (!/^[a-zA-Z0-9_.-]{3,100}$/.test(username))
+  throw new Error("Invalid username");
+process.stdout.write("Password (14+ characters; hidden): ");
+const silent = new Writable({
+  write(chunk, enc, done) {
+    done();
+  },
+});
+const secret = readline.createInterface({
+  input: process.stdin,
+  output: silent,
+  terminal: true,
+});
+const password = await secret.question("");
+secret.close();
+process.stdout.write("\n");
+if (password.length < 14 || password.length > 256)
+  throw new Error("Password must be 14–256 characters");
+await AdminUser.create({
+  username,
+  passwordHash: await argon2.hash(password, { type: argon2.argon2id }),
+});
+await mongoose.disconnect();
+console.log("Administrator created.");

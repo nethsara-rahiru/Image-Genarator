@@ -12,4 +12,11 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run lint
+      - run: npm audit --omit=dev --audit-level=high
       - run: npm test
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: dashboard-fixture-previews
+          path: /tmp/gemini-artifacts/
+          if-no-files-found: ignore
