@@ -1,6 +1,6 @@
 # Test report — implementation candidate
 
-2026-10-25, Codex Cloud Linux, Node 24.19.0. CI separately uses Node 22. Latest local implementation suite: **33 passed**, no failures; explicit live acceptance test is skipped unless RUN_LIVE_GEMINI=1. Syntax/Prettier checks and bash syntax checks passed. Production dependency audit after upgrading Sharp: **0 vulnerabilities**. These are development checks, not a production security audit.
+2026-10-25, Codex Cloud Linux, Node 24.19.0. CI separately uses Node 22. Original implementation suite: **33 passed**, no failures; explicit live acceptance test is skipped unless RUN_LIVE_GEMINI=1. Syntax/Prettier checks and bash syntax checks passed. Production dependency audit after upgrading Sharp: **0 vulnerabilities**. These are development checks, not a production security audit.
 
 ## Automated evidence
 
@@ -50,3 +50,7 @@ Optional opt-in generation test on VPS: with PM2 worker already running and a ve
 ## Recorded GitHub CI
 
 Node 22 runs [40181254723](https://github.com/nethsara-rahiru/Image-Genarator/actions/runs/40181254723) and [40181293859](https://github.com/nethsara-rahiru/Image-Genarator/actions/runs/40181293859) passed at implementation 77a7522. Final dashboard E2E passed separately after the visible running-count adjustment. A controlled shell check also confirmed backup refusal for online services, invalid PM2 data and an active worker OS lock, plus offline archive creation with mocked mongodump. This is not a real Mongo backup/restore acceptance test. Check the latest PR head status for subsequent documentation/backup hardening changes.
+
+## Login viewer lifecycle fix — 2026-10-26
+
+Local full suite: **38 passed, 1 opt-in live test skipped**. Five new Chromium/Mongo regressions verify that a failed verification preserves the browser, allowed Google popup tabs become the active page, expiry releases the profile lease, lost profile ownership closes with a distinct reason, and navigation capture failures preserve the stream while queued input remains ordered and revoked administrator sessions still terminate it. The HTTPS/WSS dashboard E2E additionally interrupts the viewer connection, forces a screenshot failure, verifies automatic reconnection to the same browser, checks that unsuccessful verification remains interactive, and uses Open Gemini before successful verification. Test pages are controlled local Google-like fixtures; the user's actual VPS and live Google login remain unverified.

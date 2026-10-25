@@ -205,7 +205,7 @@ export async function renderPage(page, root) {
     );
   } else if (page === "accounts") {
     data = await api(`/accounts?page=${pageNumber}`);
-    root.innerHTML = `<form class="card row" id="add-account"><label>Google account display email<input type="email" name="email" required></label><button>Add account</button></form><p class="info">Google credentials are entered directly in the temporary browser viewer. Sessions expire after five minutes. Close the viewer using Verify & finish.</p><div class="card">${table(
+    root.innerHTML = `<form class="card row" id="add-account"><label>Google account display email<input type="email" name="email" required></label><button>Add account</button></form><p class="info">Google credentials are entered directly in the temporary browser viewer. The viewer shows its remaining session time. Complete Google sign-in, open Gemini, then use Verify & finish.</p><div class="card">${table(
       ["Account", "Status", "Verified", "Actions"],
       data.items.map(
         (a) =>

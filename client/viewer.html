@@ -13,12 +13,18 @@
         <h2>Temporary Google login browser</h2>
         <p class="muted">
           Click the browser and type directly. Tab, Enter and paste are
-          supported. Five minute session.
+          supported. Complete Google sign-in, open Gemini, then verify.
         </p>
       </div>
-      <button id="finish">Verify & finish</button>
+      <div class="row">
+        <button id="reconnect" class="quiet">Reconnect viewer</button
+        ><button id="open-gemini" class="quiet">Open Gemini</button
+        ><button id="finish">Verify & finish</button>
+      </div>
     </div>
+    <p id="expiry" class="muted" aria-live="off"></p>
     <p id="status" role="status">Connecting…</p>
+    <p id="verification-status" role="status"></p>
     <canvas
       id="screen"
       width="1280"

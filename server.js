@@ -24,7 +24,9 @@ await Setting.updateOne(
   { upsert: true },
 );
 const browsers = new BrowserManager(config);
-const accounts = new AccountManager(browsers);
+const accounts = new AccountManager(browsers, {
+  loginSessionMs: config.LOGIN_SESSION_MS,
+});
 const { app, sessionMiddleware, sessionStore } = createApp(config, accounts);
 const server =
   config.TLS_KEY && config.TLS_CERT

@@ -42,3 +42,5 @@ Lists accept `page` (1 based), `limit` (1–100), return `{items,total,page,limi
 Example generation body: `{ "accountId":"OBJECT_ID", "createNew":true, "prompt":"Create a blue geometric icon", "assetIds":[] }`. Use `createNew:false` with an existing chatId. Create-new pending chat records materialize when the worker opens the first generation.
 
 `POST /api/chats/:id/open` opens a saved active chat in a temporary authenticated remote viewer under its account profile lock. Verify & finish closes that viewer.
+
+Login lifecycle: `GET /api/accounts/:id/login/status` returns active, expiresAt, remainingMs, or an inactive reason. `POST /api/accounts/:id/login/gemini` opens the fixed Gemini URL in the active login browser after the admin completes Google sign-in. Failed interactive verification returns `{ready:false,active:true,message,...}` and preserves the browser. Successful verification closes it. `LOGIN_SESSION_MS` sets the bounded login lifetime (60000–1800000 ms; default 900000). Viewer transport reconnects reuse the same context and profile lock.

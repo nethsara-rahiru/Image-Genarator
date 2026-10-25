@@ -163,6 +163,43 @@ test("real HTTPS dashboard login, all pages, account create, queue submit and re
       document.querySelector("canvas").getContext("2d").getImageData(0, 0, 1, 1)
         .data[3] > 0,
   );
+  const loginSession = [...accounts.logins.values()][0];
+  await loginSession.page.setContent("<button>Sign in</button>");
+  await viewer.getByRole("button", { name: "Verify & finish" }).click();
+  await viewer
+    .locator("#verification-status")
+    .filter({ hasText: "Your browser remains open" })
+    .waitFor();
+  assert.equal(loginSession.page.isClosed(), false);
+  const originalScreenshot = loginSession.page.screenshot.bind(
+    loginSession.page,
+  );
+  let captureFailure = true;
+  loginSession.page.screenshot = async (...args) => {
+    if (captureFailure) {
+      captureFailure = false;
+      throw new Error("Navigation interrupted capture");
+    }
+    return originalScreenshot(...args);
+  };
+  for (const socket of viewers.clients) socket.terminate();
+  await viewer.waitForFunction(() =>
+    document.querySelector("#status").textContent.includes("Reconnecting"),
+  );
+  await viewer.waitForFunction(
+    () =>
+      document.querySelector("#status").textContent.startsWith("Connected") &&
+      document.querySelector("canvas").getContext("2d").getImageData(0, 0, 1, 1)
+        .data[3] > 0,
+  );
+  assert.equal([...accounts.logins.values()][0], loginSession);
+  await viewer
+    .getByRole("button", { name: "Open Gemini", exact: true })
+    .click();
+  await viewer
+    .locator("#verification-status")
+    .filter({ hasText: "Gemini opened" })
+    .waitFor();
   await viewer.getByRole("button", { name: "Verify & finish" }).click();
   await viewer
     .getByText("Signed-in UI verified. You can close this tab.")
