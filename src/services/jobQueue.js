@@ -29,6 +29,7 @@ export class LockManager {
       const l = await Lease.findOneAndUpdate(
         {
           _id: key,
+          ...(key === "worker" ? { blockedJobId: { $exists: false } } : {}),
           $or: [{ expiresAt: { $lte: now } }, { owner: this.owner }],
         },
         {
@@ -100,6 +101,9 @@ export async function enqueue(dto, key) {
   try {
     const job = await GenerationJob.create({
       ...dto,
+      executionMode: a.executionMode || "vps",
+      deviceId: a.deviceId,
+      browserId: a.browserId,
       idempotencyKey: key,
       requestHash: hash,
     });

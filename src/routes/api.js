@@ -1,3 +1,4 @@
+import { deviceAdminRoutes, localAccountAction } from "./devices.js";
 import { Router } from "express";
 import mongoose from "mongoose";
 import argon2 from "argon2";
@@ -14,6 +15,7 @@ import {
   GeneratedOutput,
   Asset,
   Lease,
+  LocalDevice,
   AutomationEvent,
   ElementLocator,
   Setting,
@@ -105,6 +107,7 @@ export function routes(config, accounts) {
     },
   );
   r.use(requireAdmin);
+  r.use("/devices", deviceAdminRoutes(config));
   r.post("/auth/logout", (req, res, next) =>
     req.session.destroy((e) =>
       e ? next(e) : res.clearCookie("gemini.sid").json({ ok: true }),
@@ -169,23 +172,32 @@ export function routes(config, accounts) {
   });
   r.get("/accounts/:id/login/status", async (req, res) => {
     await get(GoogleAccount, req.params.id);
+    const local = await get(GoogleAccount, req.params.id);
+    if (local.executionMode === "local") {
+      res.json({ mode: "local", state: local.state });
+      return;
+    }
     res.json(accounts.status(req.params.id));
   });
   r.post("/accounts/:id/login/gemini", async (req, res) => {
     id.parse(req.params.id);
-    res.json(await accounts.openGemini(req.params.id));
+    const local = await localAccountAction(req.params.id, "open");
+    res.json(local || (await accounts.openGemini(req.params.id)));
   });
   r.post("/accounts/:id/login", async (req, res) => {
     id.parse(req.params.id);
-    res.json(await accounts.login(req.params.id));
+    const local = await localAccountAction(req.params.id, "open");
+    res.json(local || (await accounts.login(req.params.id)));
   });
   r.post("/accounts/:id/verify", async (req, res) => {
     id.parse(req.params.id);
-    res.json(await accounts.verify(req.params.id));
+    const local = await localAccountAction(req.params.id, "verify");
+    res.json(local || (await accounts.verify(req.params.id)));
   });
   r.post("/accounts/:id/login/close", async (req, res) => {
     id.parse(req.params.id);
-    res.json(await accounts.finish(req.params.id, false));
+    const local = await localAccountAction(req.params.id, "close");
+    res.json(local || (await accounts.finish(req.params.id, false)));
   });
   r.delete("/accounts/:id", confirm, async (req, res) => {
     const a = await get(GoogleAccount, req.params.id);
@@ -232,6 +244,15 @@ export function routes(config, accounts) {
     const chat = await get(GeminiChat, req.params.id);
     if (chat.status !== "active" || !chat.url)
       throw new AppError("CHAT_PENDING", "Conversation has no saved URL yet");
+    const local = await localAccountAction(
+      chat.accountId,
+      "open_chat",
+      chatUrl(chat.url),
+    );
+    if (local) {
+      res.json(local);
+      return;
+    }
     const result = await accounts.login(chat.accountId);
     try {
       await accounts.logins
@@ -318,6 +339,27 @@ export function routes(config, accounts) {
       throw new AppError("CHAT", "Chat selection required");
     if (new Set(d.assetIds).size !== d.assetIds.length)
       throw new AppError("ASSETS", "Duplicate assets");
+    const selectedAccount = await get(GoogleAccount, d.accountId);
+    if (
+      selectedAccount.executionMode === "local" &&
+      config.EXECUTION_MODE !== "local"
+    )
+      throw new AppError(
+        "LOCAL_MODE_DISABLED",
+        "Set EXECUTION_MODE=local and restart the VPS processes first",
+        409,
+      );
+    if (
+      config.EXECUTION_MODE === "local" &&
+      (selectedAccount.executionMode !== "local" ||
+        !selectedAccount.deviceId ||
+        !selectedAccount.browserId)
+    )
+      throw new AppError(
+        "LOCAL_BINDING",
+        "Bind this account to a paired local browser in Devices first",
+        409,
+      );
     const key = z.string().min(8).max(128).parse(req.get("idempotency-key"));
     res.status(202).json(await enqueue(d, key));
   });
@@ -395,6 +437,12 @@ export function routes(config, accounts) {
         "Inspect the conversation and confirm possible duplicate generation before retry",
         409,
       );
+    if (j.remoteUncertain)
+      throw new AppError(
+        "RECONCILE_REQUIRED",
+        "Review and release the uncertain local run before retrying",
+        409,
+      );
     const result = await GenerationJob.findOneAndUpdate(
       { _id: j._id, state: j.state, attempts: j.attempts },
       {
@@ -418,6 +466,25 @@ export function routes(config, accounts) {
     if (!result) throw new AppError("CONFLICT", "Job state changed", 409);
     await emit("job.retry", "Administrator requested retry", { jobId: j._id });
     res.json(result);
+  });
+  r.post("/jobs/:id/reconcile", confirm, async (req, res) => {
+    const j = await get(GenerationJob, req.params.id);
+    if (!j.remoteUncertain || j.state !== "needs_review")
+      throw new AppError("REVIEW", "This job is not blocking the queue");
+    await Lease.updateOne(
+      { _id: "worker", blockedJobId: j._id },
+      { $unset: { blockedJobId: 1 } },
+    );
+    await GenerationJob.updateOne(
+      { _id: j._id, state: "needs_review" },
+      { $set: { remoteUncertain: false } },
+    );
+    await emit(
+      "job.reconciled",
+      "Administrator confirmed the old local run stopped and released the queue",
+      { jobId: j._id },
+    );
+    res.json({ ok: true });
   });
   r.get("/outputs", async (req, res) =>
     res.json(await list(GeneratedOutput, req)),
@@ -443,8 +510,22 @@ export function routes(config, accounts) {
   });
   r.get("/worker/status", async (req, res) => {
     const l = await Lease.findById("worker");
+    const localOnline =
+      config.EXECUTION_MODE === "local"
+        ? await LocalDevice.countDocuments({
+            revokedAt: null,
+            expiresAt: { $gt: new Date() },
+            lastSeenAt: { $gt: new Date(Date.now() - 15000) },
+            browsers: {
+              $elemMatch: { lastSeenAt: { $gt: new Date(Date.now() - 15000) } },
+            },
+          })
+        : 0;
     res.json({
-      online: Boolean(l?.owner && l.expiresAt > new Date()),
+      executionMode: config.EXECUTION_MODE,
+      blockedJobId: l?.blockedJobId,
+      online: Boolean(localOnline || (l?.owner && l.expiresAt > new Date())),
+      localDevices: localOnline,
       heartbeatExpiry: l?.expiresAt,
       screenshotAvailable: Boolean(l?.snapshotAt),
       screenshotAt: l?.snapshotAt,

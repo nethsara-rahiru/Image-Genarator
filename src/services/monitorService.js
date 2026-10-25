@@ -65,3 +65,44 @@ export async function captureMonitor(session, response, job, config, lock) {
     await fs.rm(safePath(root, previous.snapshotFilename), { force: true });
   return true;
 }
+
+export async function captureLocalOutput(buffer, job, config) {
+  const sharp = (await import("sharp")).default;
+  const preview = await sharp(buffer, { limitInputPixels: 100000000 })
+    .resize({
+      width: 1280,
+      height: 800,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
+    .png()
+    .toBuffer();
+  const filename = `${crypto.randomUUID()}.png`,
+    root = path.join(config.DATA_DIR, "monitor");
+  await fs.writeFile(safePath(root, filename), preview, {
+    flag: "wx",
+    mode: 0o600,
+  });
+  const previous = await Lease.findOneAndUpdate(
+    {
+      _id: "worker",
+      owner: job.owner,
+      fence: job.fence,
+      expiresAt: { $gt: new Date() },
+    },
+    {
+      $set: {
+        snapshotJobId: job._id,
+        snapshotAccountId: job.accountId,
+        snapshotFilename: filename,
+        snapshotAt: new Date(),
+      },
+    },
+  );
+  if (!previous) {
+    await fs.rm(safePath(root, filename), { force: true });
+    return;
+  }
+  if (previous.snapshotFilename)
+    await fs.rm(safePath(root, previous.snapshotFilename), { force: true });
+}
