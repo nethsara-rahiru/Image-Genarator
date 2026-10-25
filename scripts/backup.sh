@@ -6,7 +6,10 @@ if [[ $# != 2 ]]; then echo 'Usage: scripts/backup.sh ABSOLUTE_DATA_DIR ABSOLUTE
 [[ $1 = /* && $2 = /* ]] || { echo 'Absolute paths required'; exit 1; }
 command -v mongodump >/dev/null
 # Stop API and worker first for a consistent profile/database/files backup.
-if pm2 jlist | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>process.exit(JSON.parse(s).some(p=>["gemini-api","gemini-worker"].includes(p.name)&&p.pm2_env.status==="online")?0:1))'; then echo 'Stop API and worker before backup.' >&2; exit 1; fi
+command -v pm2 >/dev/null
+if ! pm2 jlist | node -e 'let s="";process.stdin.on("data",c=>s+=c).on("end",()=>{try{const apps=JSON.parse(s);process.exit(apps.some(p=>["gemini-api","gemini-worker"].includes(p.name)&&p.pm2_env.status==="online")?1:0);}catch{process.exit(2);}})'; then echo 'Stop API and worker; PM2 must confirm both are offline before backup.' >&2; exit 1; fi
+exec 9>"$1/worker.lock"
+flock -n 9 || { echo 'A worker still holds its OS lock; backup aborted.' >&2; exit 1; }
 backup_dir="$2/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -m 0700 -p "$backup_dir"
 backup_config=$(mktemp)

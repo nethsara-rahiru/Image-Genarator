@@ -46,3 +46,7 @@ CI uploads desktop/mobile **fixture dashboard** previews as artifacts; no login 
 10. Record date, VPS versions, reviewed SHA, pass/fail and sanitized evidence here. Only then authorize merge/release gates and v1.0.0.
 
 Optional opt-in generation test on VPS: with PM2 worker already running and a verified account, set non-secret RUN_LIVE_GEMINI=1, LIVE_ACCOUNT_ID and an explicitly approved LIVE_PROMPT in your protected local environment, then `npm run test:live`. It makes one real queued request, may consume Google quota, retains its output and fails explicitly if no image is returned. Default CI never makes this request. Do not put passwords/API keys into test fixtures or chat.
+
+## Recorded GitHub CI
+
+Node 22 runs [40181254723](https://github.com/nethsara-rahiru/Image-Genarator/actions/runs/40181254723) and [40181293859](https://github.com/nethsara-rahiru/Image-Genarator/actions/runs/40181293859) passed at implementation 77a7522. Final dashboard E2E passed separately after the visible running-count adjustment. A controlled shell check also confirmed backup refusal for online services, invalid PM2 data and an active worker OS lock, plus offline archive creation with mocked mongodump. This is not a real Mongo backup/restore acceptance test. Check the latest PR head status for subsequent documentation/backup hardening changes.
