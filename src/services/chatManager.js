@@ -1,0 +1,2 @@
+import {GeminiChat} from '../models/index.js';import {chatUrl} from '../utils/files.js';import {AppError} from '../utils/errors.js';
+export async function persistChat(chat,page){let url;try{url=chatUrl(page.url());}catch{throw new AppError('CHAT_URL_PENDING','Conversation URL could not be verified');}const other=await GeminiChat.exists({url,accountId:{$ne:chat.accountId}});if(other)throw new AppError('CHAT_ACCOUNT','Conversation is associated with another account');return GeminiChat.findByIdAndUpdate(chat._id,{url,status:'active'},{new:true});}
