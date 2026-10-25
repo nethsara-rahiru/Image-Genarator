@@ -19,7 +19,7 @@ Repository inspected 2026-10-25: initial commit 4213469 contained only README.md
 
 - M01: ba7661d — https://github.com/nethsara-rahiru/Image-Genarator/pull/1, two Node 22 CI checks passed.
 - Backend M02–M08: 632118a — https://github.com/nethsara-rahiru/Image-Genarator/pull/2, stacked on M01; two CI checks passed at that SHA.
-- Dashboard/reliability/handover: feature branch feat/m09-dashboard-handover, stacked on feat/m02-platform. Follow-on PR and final CI references are appended after push.
+- Dashboard/reliability/handover: 0ebd8f7 — https://github.com/nethsara-rahiru/Image-Genarator/pull/3, branch feat/m09-dashboard-handover, stacked on feat/m02-platform. Full local suite: 33 passed, 1 deliberately skipped live acceptance. Final CI evidence is appended below.
 
 ## Current evidence
 

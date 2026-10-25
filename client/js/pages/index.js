@@ -91,6 +91,16 @@ export async function renderPage(page, root) {
       ["Accounts", o.accounts],
       ["Ready", o.readyAccounts],
       ["Queued", o.counts.queued || 0],
+      [
+        "Running",
+        [
+          "running",
+          "uploading_assets",
+          "submitting_prompt",
+          "generating",
+          "downloading",
+        ].reduce((sum, state) => sum + (o.counts[state] || 0), 0),
+      ],
       ["Completed", o.counts.completed || 0],
       ["Failed", o.counts.failed || 0],
       ["Needs review", o.counts.needs_review || 0],
