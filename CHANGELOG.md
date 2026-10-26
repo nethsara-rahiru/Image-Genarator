@@ -7,3 +7,7 @@ Replaces the previous Gemini platform with a single-process Node.js remote brows
 ## Unreleased — debug console and Google search
 
 Adds private retained/live debug logs with filters, pause, copy/export/clear, per-action IDs/timings and safe network/browser cause codes. Adds Google search in the address bar and a Google shortcut. Includes startup doctor diagnostics and throttled scroll input. Actual user VPS diagnosis remains pending live log output.
+
+## Unreleased — public destination classification
+
+Corrects false blocks on legitimate public 2001:: IPv6 and 192.0.x.x IPv4 addresses using precise CIDR checks. Preserves private/metadata/mixed-DNS protection and adds safe block-reason diagnostics.

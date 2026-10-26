@@ -557,3 +557,25 @@ test("Google search and shortcut navigate the remote browser through the normal 
     /private search query|private%20search/,
   );
 });
+test("blocked DNS answers expose a safe reason without logging private addresses or search terms", async (t) => {
+  const h = await harness(t);
+  await h.login();
+  const { publicUrl } = await import("../src/security.js");
+  h.service.browser.action = async () =>
+    publicUrl("https://www.google.com/search?q=private-search", async () => [
+      { address: "10.1.2.3" },
+    ]);
+  const response = await h.request("/api/action", "POST", {
+    type: "navigate",
+    url: "private-search",
+  });
+  const result = await response.json();
+  assert.equal(result.code, "DESTINATION_BLOCKED");
+  assert.match(result.error, /resolves to a private or reserved IP/);
+  const logs = await (await h.request("/api/logs")).json();
+  const entry = logs.entries.find(
+    (e) => e.details.actionId === result.debugId && e.level === "error",
+  );
+  assert.equal(entry.details.reason, "NON_PUBLIC_DNS_ADDRESS");
+  assert.doesNotMatch(JSON.stringify(logs), /10\.1\.2\.3|private-search/);
+});

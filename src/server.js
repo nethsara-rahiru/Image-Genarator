@@ -257,6 +257,7 @@ export async function startServer(config, options = {}) {
           action: actionName,
           actionId,
           durationMs: Date.now() - queuedAt,
+          reason: diagnosed.reason,
         });
         if (error instanceof Error) error.debugId = actionId;
         throw error;

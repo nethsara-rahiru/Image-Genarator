@@ -89,7 +89,7 @@ export class RemoteBrowser {
           dns
             ? "A request hostname failed DNS resolution."
             : "A browser request was blocked by public-destination validation.",
-          {},
+          { reason: error.reason },
           3000,
         );
         await route.abort("blockedbyclient").catch(() => {});
