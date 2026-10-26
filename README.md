@@ -35,7 +35,7 @@ For public IP access at **https://162.35.181.135:3443**, use your existing Caddy
 ## Use the browser
 
 1. Sign in using the administrator created by `npm run setup-admin`.
-2. Click **Start browser**, enter a public website address and press Go.
+2. Click **Start browser**, enter a public website address or Google search terms and press Go. The **Google** shortcut opens its homepage.
 3. Click the remote screen, then type, scroll or use supported keyboard shortcuts. **Type / paste text** also works on mobile.
 4. Use the tab strip to switch/close tabs; ＋ opens another (maximum eight).
 5. To upload: click the website's file picker in the remote screen, then click the viewer's **Upload file** button (one file, up to 20 MB).
@@ -43,6 +43,12 @@ For public IP access at **https://162.35.181.135:3443**, use your existing Caddy
 7. **Stop** or **Sign out** closes tabs and saves the profile. Start again and navigate to the site to reuse sessions where allowed. Viewer disconnection does not immediately close Chromium; inactivity stops it after 30 minutes by default.
 
 Google and other sites may reject a VPS/browser sign-in. This project does not bypass MFA, captchas, security restrictions or account blocks. Audio/video streaming, microphone/camera, drag-and-drop, browser extensions, arbitrary native dialogs and full desktop access are not provided. The viewer streams images, so website accessibility is limited. See [security and limitations](docs/security.md).
+
+## Debug console
+
+Click **Debug console** in the viewer for live diagnostics, with level/source/text filters, pause/resume, copy, JSON export and confirmed history clearing. Errors show an action ID that matches the log entry, with timing and specific DNS/TLS/connection/timeout/profile/sandbox error codes. Logs include lifecycle events, HTTP failures, failed requests and summarized website JavaScript/console warnings. They omit typed text, keystrokes, credentials, URLs/query strings, page contents and raw website console messages.
+
+The newest 500 entries are available live and after reconnect/restart. Private files are stored in `DATA_DIR/logs/debug.jsonl` and one rotated file, approximately 1 MB each. The same sanitized JSON records appear in `pm2 logs vps-browser --lines 100`. If files cannot be written, the console flags the storage error and retains in-memory events. Stop/cancel a sensitive task before sharing an exported diagnostic file and review its contents. GET /api/logs, GET /api/logs/export and DELETE /api/logs require the administrator session; deletion also requires CSRF.
 
 ## Forgotten administrator password
 

@@ -72,3 +72,7 @@ Stop `vps-browser` before backing up. Archive `.env` and the entire runtime dire
 - **Website fails / private host:** private, local and cloud-metadata network destinations are intentionally blocked. This viewer is for public web browsing.
 - **Website refuses login:** stop and follow the site's supported security flow. Remote browsers aren't guaranteed to be accepted.
 - **Transfer failure:** check permissions and disk space; uploads are limited to 20 MB, saved downloads to 100 MB and 100 files. Chromium may use temporary disk space before a completed download is inspected; apply OS disk quotas for hard limits.
+
+## Inspecting failures
+
+After deploying this update and restarting vps-browser, refresh the viewer and open Debug console. Reproduce the action once, filter Errors and match the displayed action ID. Export logs if needed; they include safe cause codes and exclude typed text/URLs. Terminal alternative: pm2 logs vps-browser --lines 100. Browser startup errors still need npm run doctor if the cause is not known. The previously reported AppArmor failure is a target VPS configuration issue; diagnostics do not disable sandboxing. Google searches use the VPS network and may fail or be restricted; live Google availability is not claimed.

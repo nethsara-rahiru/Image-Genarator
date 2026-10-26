@@ -1,3 +1,4 @@
+import { navigationTarget } from "./navigation.js";
 import { browserStartupError } from "./browserErrors.js";
 import { chromium } from "playwright";
 import { randomUUID } from "node:crypto";
@@ -8,8 +9,12 @@ import { Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { publicUrl } from "./security.js";
 export class RemoteBrowser {
-  constructor(config, { validateUrl = publicUrl, test = false } = {}) {
+  constructor(
+    config,
+    { validateUrl = publicUrl, test = false, log = null } = {},
+  ) {
     this.config = config;
+    this.log = log;
     this.validateUrl = validateUrl;
     this.test = test;
     this.pages = new Map();
@@ -53,7 +58,19 @@ export class RemoteBrowser {
         args: ["--force-webrtc-ip-handling-policy=disable_non_proxied_udp"],
       },
     );
+    this.log?.write(
+      "info",
+      "browser",
+      "BROWSER_STARTED",
+      "Chromium started with a persistent profile.",
+    );
     this.context.on("close", () => {
+      this.log?.write(
+        "info",
+        "browser",
+        "BROWSER_STOPPED",
+        "Chromium closed; persistent profile retained.",
+      );
       this.context = null;
       this.pages.clear();
       this.activeId = null;
@@ -63,7 +80,18 @@ export class RemoteBrowser {
       try {
         await this.validateUrl(route.request().url());
         await route.continue();
-      } catch {
+      } catch (error) {
+        const dns = /ENOTFOUND|EAI_AGAIN/.test(String(error?.message));
+        this.log?.write(
+          "warn",
+          "network",
+          dns ? "DNS_FAILED" : "DESTINATION_BLOCKED",
+          dns
+            ? "A request hostname failed DNS resolution."
+            : "A browser request was blocked by public-destination validation.",
+          {},
+          3000,
+        );
         await route.abort("blockedbyclient").catch(() => {});
       }
     });
@@ -91,6 +119,59 @@ export class RemoteBrowser {
       return;
     }
     const id = randomUUID();
+    page.on("pageerror", () =>
+      this.log?.write(
+        "warn",
+        "browser",
+        "PAGE_SCRIPT_ERROR",
+        "Website JavaScript raised an exception; page content omitted.",
+        {},
+        5000,
+      ),
+    );
+    page.on("console", (message) => {
+      if (["error", "warning"].includes(message.type()))
+        this.log?.write(
+          "warn",
+          "browser",
+          "PAGE_CONSOLE_WARNING",
+          "Website console emitted a warning or error; content omitted.",
+          {},
+          5000,
+        );
+    });
+    page.on("crash", () =>
+      this.log?.write(
+        "error",
+        "browser",
+        "TAB_CRASHED",
+        "A Chromium tab crashed. Check VPS memory and process limits.",
+      ),
+    );
+    page.on("requestfailed", (request) => {
+      const failure = request.failure()?.errorText || "";
+      const code = failure.match(/(?:net::)?ERR_[A-Z0-9_]+/)?.[0];
+      if (code && code !== "net::ERR_ABORTED")
+        this.log?.write(
+          "warn",
+          "network",
+          "REQUEST_FAILED",
+          "A website request failed.",
+          { networkCode: code },
+          3000,
+        );
+    });
+    page.on("response", (response) => {
+      if (response.status() >= 400)
+        this.log?.write(
+          "warn",
+          "network",
+          "HTTP_ERROR",
+          "A website response returned an HTTP error.",
+          { status: response.status() },
+          3000,
+        );
+    });
     this.pages.set(id, page);
     this.activeId = id;
     page.on("close", () => {
@@ -108,7 +189,19 @@ export class RemoteBrowser {
       this.message = "Choose a local file using Upload in the toolbar.";
     });
     page.on("download", (download) => {
+      this.log?.write(
+        "info",
+        "browser",
+        "DOWNLOAD_STARTED",
+        "A website download started.",
+      );
       const transfer = this.saveDownload(download).catch(() => {
+        this.log?.write(
+          "error",
+          "browser",
+          "DOWNLOAD_FAILED",
+          "Download failed, exceeded its size limit, or storage is unavailable.",
+        );
         this.message =
           "Download failed, exceeded 100 MB, or storage is unavailable.";
       });
@@ -170,7 +263,7 @@ export class RemoteBrowser {
     }
     const page = this.page();
     if (d.type === "navigate") {
-      const url = await this.validateUrl(d.url);
+      const url = await this.validateUrl(navigationTarget(d.url));
       await page.goto(url, { waitUntil: "domcontentloaded", timeout: 20000 });
     } else if (d.type === "back")
       await page.goBack({ waitUntil: "domcontentloaded", timeout: 20000 });
@@ -229,6 +322,12 @@ export class RemoteBrowser {
       { timeout: 15000 },
     );
     this.lastUsed = Date.now();
+    this.log?.write(
+      "info",
+      "browser",
+      "UPLOAD_COMPLETED",
+      "File transferred into the selected website file picker.",
+    );
   }
   async saveDownload(download) {
     const name =
@@ -259,6 +358,12 @@ export class RemoteBrowser {
       if (await download.failure()) throw new Error("Interrupted download");
       await fs.rename(temp, target);
       this.message = `Downloaded ${name}`;
+      this.log?.write(
+        "info",
+        "browser",
+        "DOWNLOAD_COMPLETED",
+        "Original file saved; available in Downloads.",
+      );
     } catch (e) {
       await download.cancel().catch(() => {});
       await fs.rm(temp, { force: true });

@@ -311,7 +311,12 @@ test("WebSocket stream requires a session and exact origin; reset revokes an ope
     headers: { Origin: h.config.origin, Cookie: h.cookie() },
   });
   const initial = await new Promise((resolve, reject) => {
-    ws.once("message", (data) => resolve(JSON.parse(data.toString())));
+    ws.on("message", (data, binary) => {
+      if (!binary) {
+        const message = JSON.parse(data.toString());
+        if (message.type === "state") resolve(message);
+      }
+    });
     ws.once("error", reject);
   });
   assert.equal(initial.type, "state");
@@ -371,6 +376,62 @@ test("responsive dashboard signs in, streams real frames and controls remote tex
         .getContext("2d")
         .getImageData(20, 20, 1, 1).data[3] === 255,
   );
+  await page
+    .getByRole("button", { name: "Debug console", exact: true })
+    .click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#debug-output")
+      .textContent.includes("ACTION_COMPLETED"),
+  );
+  await page.locator("#debug-filter").fill("ACTION_COMPLETED");
+  assert.match(
+    await page.locator("#debug-output").textContent(),
+    /ACTION_COMPLETED/,
+  );
+  await page.locator("#debug-filter").fill("");
+  await page.locator("#debug-pause").click();
+  const frozen = await page.locator("#debug-output").textContent();
+  h.service.log.write(
+    "info",
+    "server",
+    "UI_TEST_EVENT",
+    "Synthetic viewer diagnostic.",
+  );
+  await page.waitForFunction(() =>
+    document.querySelector("#debug-status").textContent.includes("paused"),
+  );
+  assert.equal(await page.locator("#debug-output").textContent(), frozen);
+  await page.locator("#debug-pause").click();
+  await page.waitForFunction(() =>
+    document
+      .querySelector("#debug-output")
+      .textContent.includes("UI_TEST_EVENT"),
+  );
+  const exported = page.waitForEvent("download");
+  await page.locator("#debug-export").click();
+  const artifact = await exported;
+  const exportedJson = await fs.readFile(await artifact.path(), "utf8");
+  assert.match(exportedJson, /UI_TEST_EVENT/);
+  assert.doesNotMatch(exportedJson, /typed from local browser/);
+  const googleTargets = [];
+  const originalValidator = h.service.browser.validateUrl;
+  h.service.browser.validateUrl = async (url) => {
+    if (url.startsWith("https://www.google.com/")) {
+      googleTargets.push(url);
+      return `${h.fixtureBase}/google-fixture`;
+    }
+    return originalValidator(url);
+  };
+  await page.locator("#address").fill("browser search example");
+  await page.locator("#go").click();
+  await until(() =>
+    googleTargets.includes(
+      "https://www.google.com/search?q=browser%20search%20example",
+    ),
+  );
+  await page.locator("#google").click();
+  await until(() => googleTargets.includes("https://www.google.com/"));
   await fs.mkdir("test-results", { recursive: true });
   await page.screenshot({
     path: "test-results/remote-browser-desktop.png",
@@ -428,4 +489,71 @@ test("authenticated startup failures return a safe actionable diagnostic", async
   assert.equal(body.code, "BROWSER_MISSING");
   assert.match(body.error, /playwright install/);
   assert.doesNotMatch(body.error, /secret=hidden|\/private\/user/);
+});
+test("debug API is authenticated, replayable, exportable, CSRF-protected and omits action text", async (t) => {
+  const h = await harness(t);
+  assert.equal((await h.request("/api/logs")).status, 401);
+  assert.equal((await h.request("/api/logs/export")).status, 401);
+  await h.login();
+  h.service.browser.action = async () => {
+    throw new Error(
+      "net::ERR_NAME_NOT_RESOLVED https://private.example/?token=do-not-log",
+    );
+  };
+  const failed = await h.request("/api/action", "POST", {
+    type: "navigate",
+    url: "https://example.com/?secret=never-record",
+  });
+  const result = await failed.json();
+  assert.equal(result.code, "DNS_FAILED");
+  assert.ok(result.debugId);
+  const logs = await (await h.request("/api/logs")).json();
+  const entry = logs.entries.find(
+    (e) => e.details.actionId === result.debugId && e.level === "error",
+  );
+  assert.equal(entry.code, "DNS_FAILED");
+  const replay = await (
+    await h.request(`/api/logs?after=${encodeURIComponent(logs.cursor)}`)
+  ).json();
+  assert.equal(replay.entries.length, 0);
+  const onlyErrors = await (await h.request("/api/logs?level=error")).json();
+  assert.ok(onlyErrors.entries.every((e) => e.level === "error"));
+  const exported = await h.request("/api/logs/export");
+  assert.match(exported.headers.get("content-disposition"), /attachment/);
+  const text = await exported.text();
+  assert.doesNotMatch(text, /do-not-log|never-record/);
+  assert.equal(
+    (await h.request("/api/logs", "DELETE", null, { "X-CSRF-Token": "wrong" }))
+      .status,
+    403,
+  );
+  const cleared = await (await h.request("/api/logs", "DELETE")).json();
+  assert.equal(cleared.entries.length, 1);
+  assert.equal(cleared.entries[0].code, "LOG_CLEARED");
+});
+test("Google search and shortcut navigate the remote browser through the normal destination checks", async (t) => {
+  const h = await harness(t);
+  const b = h.service.browser;
+  const seen = [];
+  const original = b.validateUrl;
+  b.validateUrl = async (url) => {
+    if (url.startsWith("https://www.google.com/")) {
+      seen.push(url);
+      return `${h.fixtureBase}/google-fixture`;
+    }
+    return original(url);
+  };
+  await b.start();
+  await b.action({ type: "navigate", url: "test private search query" });
+  assert.ok(
+    seen.includes(
+      "https://www.google.com/search?q=test%20private%20search%20query",
+    ),
+  );
+  await b.action({ type: "navigate", url: "https://www.google.com/" });
+  assert.ok(seen.includes("https://www.google.com/"));
+  assert.doesNotMatch(
+    JSON.stringify(h.service.log.snapshot()),
+    /private search query|private%20search/,
+  );
 });

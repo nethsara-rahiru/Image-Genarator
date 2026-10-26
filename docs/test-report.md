@@ -20,3 +20,7 @@ Tests run with test-only private fixture routing and sandbox relaxation because 
 ## Recorded local evidence — 2026-10-26
 
 Commit candidate on feat/remote-browser-rebuild: **10 tests passed, 0 failed, 0 skipped** under Node 24.19.0/Linux. Node syntax and Prettier passed; installer shell syntax passed; production npm audit reported **0 vulnerabilities**. A separate actual `node app.js` smoke check verified startup, unconfigured-admin bootstrap and clean SIGTERM shutdown using an isolated temporary DATA_DIR. Desktop/mobile fixture previews were visually inspected. Both anonymous and foreign-origin viewer upgrades are rejected; a credential reset also prevents already-queued actions from executing. CI validates Node 22 separately; use the rebuild PR's current check result as evidence.
+
+## Debug console and Google search — 2026-10-26
+
+Full suite: **17 passed, 0 failed, 0 skipped**. Added deterministic search/URL handling and safe error classification, bounded journal rotation/restart replay/clear, metadata omission, authenticated log API/filter/replay/export/CSRF, and controlled Google navigation tests. The real responsive viewer E2E opens/filters/pauses/resumes the console, exports its JSON, checks streamed frames and input, submits a search and uses the Google shortcut against a controlled fixture. Visual mobile inspection passed. Actual Google search availability and the user's VPS error remain unverified until deployment and live diagnostics.

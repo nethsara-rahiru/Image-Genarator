@@ -404,3 +404,82 @@ code {
     flex-wrap: wrap;
   }
 }
+.debug-panel {
+  margin-top: 24px;
+  padding: 22px;
+}
+.debug-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.debug-controls label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.debug-controls select {
+  background: #0c131e;
+  color: inherit;
+  border: 1px solid #344156;
+  border-radius: 7px;
+  padding: 9px;
+  font: inherit;
+  font-size: 12px;
+}
+.debug-controls input {
+  flex: 1;
+  min-width: 150px;
+  font-size: 12px;
+}
+.debug-controls a {
+  font-size: 12px;
+  color: var(--accent);
+}
+.debug-autoscroll {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  margin: 16px 0;
+}
+#debug-output {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #080e16;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  height: 320px;
+  overflow: auto;
+  margin-bottom: 0;
+}
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (max-width: 650px) {
+  .workspace-heading > .actions {
+    flex-wrap: wrap;
+  }
+  .toolbar #google {
+    font-size: 10px;
+    padding: 8px 5px;
+  }
+  .debug-panel {
+    padding: 15px;
+  }
+  .debug-controls {
+    gap: 8px;
+  }
+  .debug-controls input {
+    flex-basis: 100%;
+  }
+  #debug-output {
+    font-size: 10px;
+  }
+}
