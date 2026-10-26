@@ -67,8 +67,12 @@ Stop `vps-browser` before backing up. Archive `.env` and the entire runtime dire
 - **Login rate limited:** wait 15 minutes. A forgotten password can be reset using the CLI; restarting clears in-memory sessions and rate counters.
 - **Unexpected host / HTTPS required:** correct PUBLIC_ORIGIN and Caddy's forwarded protocol. Keep the original host header through the proxy.
 - **502:** check `pm2 logs vps-browser --lines 50`, `pm2 status`, `ss -ltnp` and the proxy's port. Do not share credentials or page content in logs/screenshots.
-- **Browser cannot start:** install Chromium and system dependencies as the service user; verify non-root execution and sandbox/user-namespace support. Do not add `--no-sandbox` to production. Ubuntu 26.04 dependency compatibility must be tested on the target VPS. Ubuntu 24.04 LTS is a conservative deployment target.
+- **Browser cannot start:** first run `npm run doctor` from this directory as the same PM2 service user. This checks an isolated profile without visiting websites or exposing .env values. The viewer now shows a classified startup reason. install Chromium and system dependencies as the service user; verify non-root execution and sandbox/user-namespace support. Do not add `--no-sandbox` to production. Ubuntu 26.04 dependency compatibility must be tested on the target VPS. Ubuntu 24.04 LTS is a conservative deployment target.
 - **Viewer reconnecting:** verify Caddy WebSocket support, session expiry and browser network connection; the viewer reconnects without starting a second Chromium profile.
 - **Website fails / private host:** private, local and cloud-metadata network destinations are intentionally blocked. This viewer is for public web browsing.
 - **Website refuses login:** stop and follow the site's supported security flow. Remote browsers aren't guaranteed to be accepted.
 - **Transfer failure:** check permissions and disk space; uploads are limited to 20 MB, saved downloads to 100 MB and 100 files. Chromium may use temporary disk space before a completed download is inspected; apply OS disk quotas for hard limits.
+
+## Inspecting failures
+
+After deploying this update and restarting vps-browser, refresh the viewer and open Debug console. Reproduce the action once, filter Errors and match the displayed action ID. Export logs if needed; they include safe cause codes and exclude typed text/URLs. Terminal alternative: pm2 logs vps-browser --lines 100. Browser startup errors still need npm run doctor if the cause is not known. The previously reported AppArmor failure is a target VPS configuration issue; diagnostics do not disable sandboxing. Google searches use the VPS network and may fail or be restricted; live Google availability is not claimed.

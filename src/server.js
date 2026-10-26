@@ -1,3 +1,7 @@
+import { randomUUID } from "node:crypto";
+import { DebugLog } from "./debugLog.js";
+import { actionError } from "./actionErrors.js";
+import { BrowserStartupError } from "./browserErrors.js";
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -42,7 +46,8 @@ class SessionStore extends session.Store {
 }
 export async function startServer(config, options = {}) {
   await fs.mkdir(config.data, { recursive: true, mode: 0o700 });
-  const browser = new RemoteBrowser(config, options);
+  const log = new DebugLog(config.data, { stdout: !options.test });
+  const browser = new RemoteBrowser(config, { ...options, log });
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", "loopback");
@@ -164,12 +169,21 @@ export async function startServer(config, options = {}) {
     } finally {
       verifying--;
     }
-    if (!valid)
+    if (!valid) {
+      log.write(
+        "warn",
+        "auth",
+        "LOGIN_FAILED",
+        "Administrator login was rejected.",
+        {},
+        3000,
+      );
       return res.status(401).json({
         error: a
           ? "Incorrect username or password"
           : "Run npm run setup-admin on the VPS first",
       });
+    }
     await new Promise((resolve, reject) =>
       req.session.regenerate((e) => (e ? reject(e) : resolve())),
     );
@@ -177,6 +191,7 @@ export async function startServer(config, options = {}) {
     req.session.version = a.version;
     req.session.csrf = token();
     attempts.delete(key);
+    log.write("info", "auth", "LOGIN_SUCCEEDED", "Administrator signed in.");
     res.json({ csrf: req.session.csrf, username: a.username });
   });
   let chain = Promise.resolve();
@@ -188,17 +203,64 @@ export async function startServer(config, options = {}) {
     if (pending >= 64)
       return Promise.reject(new Error("Input queue full. Wait a moment."));
     pending++;
+    const actionId = randomUUID();
+    const queuedAt = Date.now();
+    const known = [
+      "start",
+      "stop",
+      "newTab",
+      "selectTab",
+      "closeTab",
+      "navigate",
+      "back",
+      "forward",
+      "reload",
+      "click",
+      "scroll",
+      "text",
+      "key",
+    ];
+    const actionName = known.includes(d.type) ? d.type : "unknown";
+    const noisy = ["click", "scroll", "text", "key"].includes(actionName);
     const result = chain.then(async () => {
-      if (request) {
-        const stored = sessions.items.get(request.sessionID);
-        if (
-          !stored ||
-          new Date(stored.cookie.expires) <= new Date() ||
-          !(await authenticated(request))
-        )
-          throw new Error("Session ended");
+      if (!noisy)
+        log.write(
+          "info",
+          "browser",
+          "ACTION_STARTED",
+          "Browser action started.",
+          { action: actionName, actionId },
+        );
+      try {
+        if (request) {
+          const stored = sessions.items.get(request.sessionID);
+          if (
+            !stored ||
+            new Date(stored.cookie.expires) <= new Date() ||
+            !(await authenticated(request))
+          )
+            throw new Error("Session ended");
+        }
+        const result = await browser.action(d);
+        if (!noisy)
+          log.write(
+            "info",
+            "browser",
+            "ACTION_COMPLETED",
+            "Browser action completed.",
+            { action: actionName, actionId, durationMs: Date.now() - queuedAt },
+          );
+        return result;
+      } catch (error) {
+        const diagnosed = actionError(error);
+        log.write("error", "browser", diagnosed.code, diagnosed.message, {
+          action: actionName,
+          actionId,
+          durationMs: Date.now() - queuedAt,
+        });
+        if (error instanceof Error) error.debugId = actionId;
+        throw error;
       }
-      return browser.action(d);
     });
     chain = result
       .catch(() => {})
@@ -230,12 +292,35 @@ export async function startServer(config, options = {}) {
     try {
       await action(d, req);
       res.json(await browser.state());
-    } catch {
-      res.status(400).json({
-        error:
-          "Action failed. Check the address, browser installation, or page state.",
+    } catch (error) {
+      const diagnosed = actionError(error);
+      res.status(error instanceof BrowserStartupError ? 503 : 400).json({
+        code: diagnosed.code,
+        error: diagnosed.message,
+        debugId: error.debugId,
       });
     }
+  });
+  app.get("/api/logs", auth, (req, res) => {
+    const level = req.query.level;
+    if (level && !["info", "warn", "error"].includes(level))
+      return res.status(400).json({ error: "Invalid log level" });
+    const snapshot = log.snapshot(
+      typeof req.query.after === "string" ? req.query.after : undefined,
+    );
+    if (level)
+      snapshot.entries = snapshot.entries.filter((e) => e.level === level);
+    res.json(snapshot);
+  });
+  app.get("/api/logs/export", auth, (req, res) =>
+    res
+      .attachment("vps-browser-debug.json")
+      .type("application/json")
+      .send(JSON.stringify(log.snapshot(), null, 2)),
+  );
+  app.delete("/api/logs", auth, (req, res) => {
+    log.clear();
+    res.json(log.snapshot());
   });
   const upload = multer({
     storage: multer.memoryStorage(),
@@ -324,6 +409,14 @@ export async function startServer(config, options = {}) {
     let busy = false;
     let inputs = 0;
     let sentState = "";
+    let logCursor = null,
+      logGeneration = null;
+    log.write(
+      "info",
+      "viewer",
+      "VIEWER_CONNECTED",
+      "Authenticated viewer stream connected.",
+    );
     const budget = setInterval(() => {
       inputs = 0;
     }, 1000);
@@ -344,6 +437,14 @@ export async function startServer(config, options = {}) {
           ws.close(4001, "Session expired");
           return;
         }
+        const history = log.snapshot(
+          logGeneration === log.generation ? logCursor : undefined,
+        );
+        if (history.entries.length || history.storageError) {
+          send({ type: "logs", ...history });
+          logCursor = history.cursor;
+          logGeneration = history.generation;
+        }
         const state = await browser.state();
         const json = JSON.stringify(state);
         if (json !== sentState) {
@@ -356,8 +457,19 @@ export async function startServer(config, options = {}) {
             .screenshot({ type: "jpeg", quality: 65, timeout: 3000 });
           if (ws.readyState === 1) ws.send(image, { binary: true });
         }
-      } catch {
+      } catch (error) {
         if (!sessions.items.has(req.sessionID)) ws.close(4001, "Session ended");
+        else {
+          const diagnosed = actionError(error);
+          log.write(
+            "warn",
+            "viewer",
+            "FRAME_UNAVAILABLE",
+            `Frame temporarily unavailable. ${diagnosed.code}: ${diagnosed.message}`,
+            {},
+            5000,
+          );
+        }
         // Navigation screenshots can fail transiently; retain the browser/stream.
       } finally {
         busy = false;
@@ -371,18 +483,22 @@ export async function startServer(config, options = {}) {
       try {
         const d = JSON.parse(buffer.toString());
         if (!d || typeof d.type !== "string") throw new Error();
-        action(d, req).catch(() =>
-          send({
-            type: "error",
-            message: "Action could not complete. Check page state or address.",
-          }),
-        );
+        action(d, req).catch((error) => {
+          const diagnosed = actionError(error);
+          send({ type: "error", ...diagnosed, debugId: error.debugId });
+        });
       } catch {
         send({ type: "error", message: "Invalid input" });
       }
     });
     ws.on("error", () => {});
     ws.on("close", () => {
+      log.write(
+        "info",
+        "viewer",
+        "VIEWER_DISCONNECTED",
+        "Viewer stream disconnected; browser remains available until idle timeout.",
+      );
       clearInterval(timer);
       clearInterval(budget);
     });
@@ -396,7 +512,14 @@ export async function startServer(config, options = {}) {
     server.once("error", reject);
     server.listen(config.port, "127.0.0.1", resolve);
   });
+  log.write(
+    "info",
+    "server",
+    "SERVICE_STARTED",
+    "VPS browser service started.",
+  );
   return {
+    log,
     server,
     app,
     browser,

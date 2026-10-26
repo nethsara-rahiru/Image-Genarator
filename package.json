@@ -11,7 +11,8 @@
     "setup-admin": "node --env-file-if-exists=.env scripts/admin.js",
     "reset-admin": "node --env-file-if-exists=.env scripts/admin.js --reset",
     "test": "node --test --test-concurrency=1 tests/*.test.js",
-    "lint": "node scripts/check.js && prettier --check ."
+    "lint": "node scripts/check.js && prettier --check .",
+    "doctor": "node --env-file-if-exists=.env scripts/doctor.js"
   },
   "dependencies": {
     "argon2": "^0.44.0",

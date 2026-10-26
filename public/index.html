@@ -59,7 +59,14 @@
           <div class="actions">
             <button id="start" class="primary">Start browser</button
             ><button id="stop" disabled>Stop</button
-            ><button id="downloads-toggle">Downloads</button>
+            ><button id="downloads-toggle">Downloads</button
+            ><button
+              id="debug-toggle"
+              aria-expanded="false"
+              aria-controls="debug-panel"
+            >
+              Debug console
+            </button>
           </div>
         </div>
         <p class="notice">
@@ -79,11 +86,14 @@
               →</button
             ><button id="reload" type="button" aria-label="Reload" disabled>
               ↻</button
-            ><label class="sr-only" for="address">Website address</label
+            ><button id="google" type="button" disabled title="Open Google">
+              Google</button
+            ><label class="sr-only" for="address"
+              >Search Google or enter a website address</label
             ><input
               id="address"
               type="text"
-              placeholder="https://example.com"
+              placeholder="Search Google or enter a URL"
               autocomplete="off"
               spellcheck="false"
               disabled
@@ -132,6 +142,67 @@
             retained.
           </p>
           <div id="download-list"></div>
+        </section>
+        <section
+          id="debug-panel"
+          class="panel debug-panel"
+          aria-label="Debug console"
+          hidden
+        >
+          <div class="workspace-heading">
+            <h2>Debug console</h2>
+            <span id="debug-status" class="muted" role="status"
+              >Waiting for logs…</span
+            >
+          </div>
+          <p class="muted">
+            Live server and browser diagnostics. Typed text, credentials, URL
+            queries and website console content are omitted. History persists
+            across restarts.
+          </p>
+          <div class="debug-controls">
+            <label for="debug-level">Level</label
+            ><select id="debug-level">
+              <option value="all">All levels</option>
+              <option value="error">Errors</option>
+              <option value="warn">Warnings</option>
+              <option value="info">Info</option>
+            </select>
+            <label for="debug-source">Source</label
+            ><select id="debug-source">
+              <option value="all">All sources</option>
+              <option value="browser">Browser</option>
+              <option value="network">Network</option>
+              <option value="viewer">Viewer</option>
+              <option value="server">Server</option>
+              <option value="auth">Authentication</option>
+            </select>
+            <label for="debug-filter" class="sr-only"
+              >Filter log text or action ID</label
+            ><input
+              id="debug-filter"
+              placeholder="Filter code or action ID"
+              type="search"
+            />
+            <button id="debug-pause">Pause</button
+            ><button id="debug-copy">Copy visible</button
+            ><a
+              id="debug-export"
+              href="/api/logs/export"
+              download="vps-browser-debug.json"
+              >Download logs</a
+            ><button id="debug-clear">Clear history</button>
+          </div>
+          <label class="debug-autoscroll"
+            ><input type="checkbox" id="debug-follow" checked /> Follow newest
+            entries</label
+          >
+          <p id="debug-storage" class="error" hidden>
+            Log files could not be written. In-memory history is still
+            available; check DATA_DIR permissions and disk space.
+          </p>
+          <pre id="debug-output" tabindex="0" aria-label="Debug log entries">
+No events yet.</pre>
         </section>
       </section>
       <p id="error" class="error" role="alert" hidden></p>

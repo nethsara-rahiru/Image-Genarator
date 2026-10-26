@@ -27,7 +27,9 @@ async function api(url, method = "GET", body) {
   const data = await res.json();
   if (!res.ok) {
     if (res.status === 401 && loggedIn) showLogin();
-    throw new Error(data.error || "Request failed");
+    throw new Error(
+      `${data.code ? `${data.code}: ` : ""}${data.error || "Request failed"}${data.debugId ? ` · Action ID: ${data.debugId}` : ""}`,
+    );
   }
   return data;
 }
@@ -40,6 +42,9 @@ function showLogin() {
   $("workspace").hidden = true;
   $("logout").hidden = true;
   $("connection").textContent = "Signed out";
+  logEntries = [];
+  logGeneration = null;
+  renderLogs();
 }
 function showWorkspace() {
   loggedIn = true;
@@ -114,7 +119,11 @@ function connect() {
     } else {
       const d = JSON.parse(event.data);
       if (d.type === "state") render(d);
-      if (d.type === "error") report(d.message);
+      if (d.type === "logs") receiveLogs(d);
+      if (d.type === "error")
+        report(
+          `${d.code || "ACTION_FAILED"}: ${d.message}${d.debugId ? ` · Action ID: ${d.debugId}` : ""}`,
+        );
     }
   };
   ws.onclose = (event) => {
@@ -148,6 +157,7 @@ function render(state) {
     "forward",
     "reload",
     "paste",
+    "google",
   ])
     $(id).disabled = !state.running;
   $("upload").disabled = !state.uploadReady;
@@ -190,9 +200,7 @@ $("start").onclick = async () => {
   try {
     render(await api("/api/action", "POST", { type: "start" }));
   } catch (e) {
-    report(
-      `${e.message} Run npx playwright install --with-deps chromium on the VPS if Chromium is missing.`,
-    );
+    report(e.message);
     $("start").disabled = false;
   }
 };
@@ -205,12 +213,17 @@ $("stop").onclick = () => {
     send({ type: "stop" });
 };
 $("new-tab").onclick = () => send({ type: "newTab" });
+$("google").onclick = () => {
+  report("");
+  send({ type: "navigate", url: "https://www.google.com/" });
+};
 for (const id of ["back", "forward", "reload"])
   $(id).onclick = () => send({ type: id });
 $("navigation").onsubmit = (e) => {
   e.preventDefault();
-  let url = $("address").value.trim();
-  if (!/^[a-z][a-z0-9+.-]*:/i.test(url)) url = `https://${url}`;
+  const url = $("address").value.trim();
+  if (!url) return;
+  report("");
   send({ type: "navigate", url });
   $("screen").focus();
 };
@@ -235,11 +248,22 @@ canvas.oncontextmenu = (e) => {
     y: ((e.clientY - r.top) * 800) / r.height,
   });
 };
+let wheelTimer = null,
+  wheelX = 0,
+  wheelY = 0;
 canvas.addEventListener(
   "wheel",
   (e) => {
     e.preventDefault();
-    send({ type: "scroll", x: e.deltaX, y: e.deltaY });
+    wheelX += e.deltaX;
+    wheelY += e.deltaY;
+    if (!wheelTimer)
+      wheelTimer = setTimeout(() => {
+        send({ type: "scroll", x: wheelX, y: wheelY });
+        wheelX = 0;
+        wheelY = 0;
+        wheelTimer = null;
+      }, 60);
   },
   { passive: false },
 );
@@ -364,4 +388,93 @@ $("downloads-toggle").onclick = () => {
   if (!$("downloads-panel").hidden) downloads();
 };
 $("refresh-downloads").onclick = downloads;
+let logEntries = [],
+  logGeneration = null,
+  logsPaused = false;
+function receiveLogs(snapshot) {
+  if (logGeneration !== snapshot.generation) {
+    logEntries = [];
+    logGeneration = snapshot.generation;
+  }
+  const known = new Set(logEntries.map((e) => e.id));
+  for (const entry of snapshot.entries)
+    if (!known.has(entry.id)) {
+      logEntries.push(entry);
+      known.add(entry.id);
+    }
+  logEntries = logEntries.slice(-500);
+  $("debug-storage").hidden = !snapshot.storageError;
+  $("debug-status").textContent =
+    `${logEntries.length} retained entries${logsPaused ? " · paused" : ""}`;
+  if (!logsPaused) renderLogs();
+}
+function visibleLogs() {
+  const level = $("debug-level").value,
+    source = $("debug-source").value,
+    query = $("debug-filter").value.trim().toLowerCase();
+  return logEntries.filter(
+    (e) =>
+      (level === "all" || e.level === level) &&
+      (source === "all" || e.source === source) &&
+      (!query || JSON.stringify(e).toLowerCase().includes(query)),
+  );
+}
+function renderLogs() {
+  const entries = visibleLogs();
+  $("debug-output").textContent = entries.length
+    ? entries
+        .map(
+          (
+            e,
+          ) => `${e.timestamp} ${e.level.toUpperCase().padEnd(5)} ${e.source} ${e.code}
+  ${e.message}${Object.keys(e.details || {}).length ? ` ${JSON.stringify(e.details)}` : ""}`,
+        )
+        .join("\n")
+    : "No matching events.";
+  if ($("debug-follow").checked)
+    $("debug-output").scrollTop = $("debug-output").scrollHeight;
+}
+$("debug-toggle").onclick = async () => {
+  $("debug-panel").hidden = !$("debug-panel").hidden;
+  $("debug-toggle").setAttribute(
+    "aria-expanded",
+    String(!$("debug-panel").hidden),
+  );
+  if (!$("debug-panel").hidden) {
+    try {
+      receiveLogs(await api("/api/logs"));
+    } catch (e) {
+      report(e.message);
+    }
+  }
+};
+for (const id of ["debug-level", "debug-source", "debug-filter"])
+  $(id).addEventListener("input", renderLogs);
+$("debug-pause").onclick = () => {
+  logsPaused = !logsPaused;
+  $("debug-pause").textContent = logsPaused ? "Resume" : "Pause";
+  $("debug-status").textContent =
+    `${logEntries.length} retained entries${logsPaused ? " · paused" : ""}`;
+  if (!logsPaused) renderLogs();
+};
+$("debug-copy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("debug-output").textContent);
+    $("debug-status").textContent = "Visible log entries copied";
+  } catch {
+    report(
+      "Clipboard unavailable. Select the console text to copy, or use Download logs.",
+    );
+  }
+};
+$("debug-clear").onclick = async () => {
+  if (confirm("Clear retained debug history on the server?")) {
+    try {
+      receiveLogs(await api("/api/logs", "DELETE"));
+      renderLogs();
+    } catch (e) {
+      report(e.message);
+    }
+  }
+};
 boot();

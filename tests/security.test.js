@@ -84,3 +84,20 @@ test("admin bootstrap is unique, hashed and reset invalidates prior identity ver
     await fs.rm(data, { recursive: true, force: true });
   }
 });
+test("browser startup diagnostics are actionable and never echo private launch text", async () => {
+  const { browserStartupError } = await import("../src/browserErrors.js");
+  for (const [message, code] of [
+    ["Executable doesn't exist at /private/user/browser", "BROWSER_MISSING"],
+    ["Host system is missing dependencies", "BROWSER_DEPENDENCIES"],
+    ["Failed to create ProcessSingleton", "BROWSER_PROFILE_BUSY"],
+    ["No usable sandbox! Operation not permitted", "BROWSER_SANDBOX"],
+    ["Run as a non-root Linux user", "BROWSER_ROOT"],
+    ["EACCES: private file", "BROWSER_PERMISSIONS"],
+    ["Timeout 30000ms exceeded", "BROWSER_START_TIMEOUT"],
+    ["unknown failure secret=do-not-echo", "BROWSER_START_FAILED"],
+  ]) {
+    const diagnosis = browserStartupError(new Error(message));
+    assert.equal(diagnosis.code, code);
+    assert.doesNotMatch(diagnosis.message, /do-not-echo|\/private\/user/);
+  }
+});
