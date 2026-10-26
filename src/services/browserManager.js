@@ -27,16 +27,21 @@ export async function signedIn(page) {
     new URL(page.url()).hostname === "gemini.google.com" &&
     (await page
       .locator(
-        '[contenteditable="true"][role="textbox"],textarea[aria-label*="prompt" i]',
+        '[contenteditable="true"][role="textbox"],rich-textarea [contenteditable="true"],.ql-editor[contenteditable="true"],textarea[aria-label*="prompt" i]',
       )
+      .filter({ visible: true })
       .count()) > 0 &&
     (await page.getByRole("link", { name: /sign in/i }).count()) === 0 &&
     (await page.getByRole("button", { name: /^sign in$/i }).count()) === 0
   );
 }
 export class BrowserManager {
-  constructor(config) {
+  constructor(
+    config,
+    { launch = chromium.launchPersistentContext.bind(chromium) } = {},
+  ) {
     this.config = config;
+    this.launch = launch;
     this.sessions = new Map();
   }
   async open(accountId, { login = false } = {}) {
@@ -50,7 +55,7 @@ export class BrowserManager {
     let context;
     let timer;
     try {
-      context = await chromium.launchPersistentContext(
+      context = await this.launch(
         safePath(path.join(this.config.DATA_DIR, "profiles"), id),
         {
           headless: true,
@@ -71,24 +76,54 @@ export class BrowserManager {
         return route.continue();
       });
       const page = context.pages()[0] || (await context.newPage());
+      let closePromise;
       const session = {
         context,
         page,
         locks,
         login,
         accountId: id,
-        close: async () => {
-          clearInterval(timer);
-          await context.close().catch(() => {});
-          await locks.release(`profile:${id}`);
-          this.sessions.delete(id);
+        close: (reason = "browser_closed") => {
+          session.closeReason ??= reason;
+          if (!closePromise)
+            closePromise = (async () => {
+              clearInterval(timer);
+              await context.close().catch(() => {});
+              await locks.release(`profile:${id}`);
+              this.sessions.delete(id);
+            })();
+          return closePromise;
         },
       };
+      context.once("close", () => {
+        session.closed = true;
+        session.close().catch(() => {});
+      });
+      if (login) {
+        const follow = (candidate) => {
+          const adopt = () => {
+            if (!candidate.isClosed() && allowedNavigation(candidate.url()))
+              session.page = candidate;
+          };
+          candidate.on("domcontentloaded", adopt);
+          candidate.on("close", () => {
+            if (session.page === candidate) {
+              const fallback = context
+                .pages()
+                .find((p) => !p.isClosed() && allowedNavigation(p.url()));
+              if (fallback) session.page = fallback;
+            }
+          });
+          adopt();
+        };
+        context.on("page", follow);
+        follow(page);
+      }
       timer = setInterval(
         () =>
           locks
             .heartbeat(`profile:${id}`)
-            .catch(() => session.close().catch(() => {})),
+            .catch(() => session.close("profile_lease_lost").catch(() => {})),
         Math.floor(this.config.LEASE_MS / 3),
       );
       timer.unref();

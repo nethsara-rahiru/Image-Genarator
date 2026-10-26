@@ -16,6 +16,12 @@ export function configuration(env = process.env) {
     GROQ_API_KEY: z.string().default(""),
     GROQ_MODEL: z.string().default("openai/gpt-oss-120b"),
     GENERATION_TIMEOUT_MS: z.coerce.number().int().min(1000).default(240000),
+    LOGIN_SESSION_MS: z.coerce
+      .number()
+      .int()
+      .min(60000)
+      .max(1800000)
+      .default(900000),
     LEASE_MS: z.coerce.number().int().min(5000).default(30000),
     TLS_KEY: z.string().default(""),
     TLS_CERT: z.string().default(""),

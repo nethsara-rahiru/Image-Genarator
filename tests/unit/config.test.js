@@ -8,6 +8,9 @@ const valid = {
 };
 test("secure defaults and validation", () => {
   assert.equal(configuration(valid).HOST, "127.0.0.1");
+  assert.equal(configuration(valid).LOGIN_SESSION_MS, 900000);
+  assert.throws(() => configuration({ ...valid, LOGIN_SESSION_MS: 1800001 }));
+  assert.throws(() => configuration({ ...valid, LOGIN_SESSION_MS: 0 }));
   assert.throws(() =>
     configuration({ ...valid, PUBLIC_ORIGIN: "http://public.example" }),
   );

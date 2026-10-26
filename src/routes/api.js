@@ -167,6 +167,14 @@ export function routes(config, accounts) {
     await a.save();
     res.json(a);
   });
+  r.get("/accounts/:id/login/status", async (req, res) => {
+    await get(GoogleAccount, req.params.id);
+    res.json(accounts.status(req.params.id));
+  });
+  r.post("/accounts/:id/login/gemini", async (req, res) => {
+    id.parse(req.params.id);
+    res.json(await accounts.openGemini(req.params.id));
+  });
   r.post("/accounts/:id/login", async (req, res) => {
     id.parse(req.params.id);
     res.json(await accounts.login(req.params.id));
