@@ -56,6 +56,14 @@ export class DebugLog {
     this.last.set(key, now);
     if (this.last.size > 100) this.last.delete(this.last.keys().next().value);
     const safe = {};
+    if (
+      [
+        "PRIVATE_HOSTNAME",
+        "NO_DNS_ADDRESSES",
+        "NON_PUBLIC_DNS_ADDRESS",
+      ].includes(details.reason)
+    )
+      safe.reason = details.reason;
     // Never persist typed text, key values, URLs, query strings, credentials or page console text.
     if (
       typeof details.action === "string" &&

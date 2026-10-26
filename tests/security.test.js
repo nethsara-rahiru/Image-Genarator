@@ -101,3 +101,82 @@ test("browser startup diagnostics are actionable and never echo private launch t
     assert.doesNotMatch(diagnosis.message, /do-not-echo|\/private\/user/);
   }
 });
+test("public IPv4 and IPv6 ranges are not confused with adjacent reserved subnets", async () => {
+  for (const ip of [
+    "192.0.78.24",
+    "192.0.1.1",
+    "192.0.0.9",
+    "192.0.0.10",
+    "100.63.255.255",
+    "100.128.0.1",
+    "172.15.255.255",
+    "172.32.0.1",
+    "2001:4860:4860::8888",
+    "2001:4860:4860::8844",
+    "2001:678::1",
+    "2606:4700:4700::1111",
+    "2a00:1450:4009:818::2004",
+    "2001:4860:4860:0000:0000:0000:0000:8888",
+  ])
+    assert.equal(privateAddress(ip), false, ip);
+  for (const ip of [
+    "192.0.0.1",
+    "192.0.2.1",
+    "192.88.99.1",
+    "198.51.100.1",
+    "203.0.113.1",
+    "100.64.0.0",
+    "100.127.255.255",
+    "172.16.0.0",
+    "172.31.255.255",
+    "224.0.0.1",
+    "255.255.255.255",
+    "2001:0:1234::1",
+    "2001:2::1",
+    "2001:db8::1",
+    "2001:10::1",
+    "2001:20::1",
+    "2002:7f00:1::1",
+    "3fff::1",
+    "64:ff9b::7f00:1",
+    "::ffff:192.168.1.1",
+    "::ffff:8.8.8.8",
+  ])
+    assert.equal(privateAddress(ip), true, ip);
+  for (const answers of [
+    [{ address: "192.0.78.24" }],
+    [{ address: "8.8.8.8" }, { address: "2001:4860:4860::8888" }],
+  ])
+    assert.equal(
+      await publicUrl("https://public.example/", async () => answers),
+      "https://public.example/",
+    );
+  await assert.rejects(
+    publicUrl("https://mixed.example/", async () => [
+      { address: "2001:4860:4860::8888" },
+      { address: "::1" },
+    ]),
+    (error) => error.reason === "NON_PUBLIC_DNS_ADDRESS",
+  );
+  await assert.rejects(
+    publicUrl("https://empty.example/", async () => []),
+    (error) => error.reason === "NO_DNS_ADDRESSES",
+  );
+});
+
+test("Google search accepts public 2001 IPv6 answers while mixed private answers stay blocked", async () => {
+  const target = "https://www.google.com/search?q=browser";
+  assert.equal(
+    await publicUrl(target, async () => [
+      { address: "142.250.180.100" },
+      { address: "2001:4860:4802:38::78" },
+    ]),
+    target,
+  );
+  await assert.rejects(
+    publicUrl(target, async () => [
+      { address: "142.250.180.100" },
+      { address: "169.254.169.254" },
+    ]),
+  );
+});

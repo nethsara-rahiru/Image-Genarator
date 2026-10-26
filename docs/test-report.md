@@ -24,3 +24,7 @@ Commit candidate on feat/remote-browser-rebuild: **10 tests passed, 0 failed, 0 
 ## Debug console and Google search — 2026-10-26
 
 Full suite: **17 passed, 0 failed, 0 skipped**. Added deterministic search/URL handling and safe error classification, bounded journal rotation/restart replay/clear, metadata omission, authenticated log API/filter/replay/export/CSRF, and controlled Google navigation tests. The real responsive viewer E2E opens/filters/pauses/resumes the console, exports its JSON, checks streamed frames and input, submits a search and uses the Google shortcut against a controlled fixture. Visual mobile inspection passed. Actual Google search availability and the user's VPS error remain unverified until deployment and live diagnostics.
+
+## Public-address regression repair — 2026-10-26
+
+Full local suite: **20 passed, 0 failed, 0 skipped**; syntax/Prettier pass. Regressions exercise public 2001::/16 allocations (including a synthetic Google search DNS response), public 192.0.78.0/24, CIDR boundaries, expanded/compressed IPv6, private/mapped/link-local/documentation/transition ranges, empty DNS and mixed public/private DNS. These are deterministic tests, not live Google/VPS DNS evidence. Private-network enforcement remains enabled.

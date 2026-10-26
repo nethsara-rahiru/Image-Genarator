@@ -1,5 +1,17 @@
+import { DestinationBlockedError } from "./security.js";
 import { BrowserStartupError } from "./browserErrors.js";
 export function actionError(error) {
+  if (error instanceof DestinationBlockedError)
+    return {
+      code: error.code,
+      reason: error.reason,
+      message:
+        error.reason === "PRIVATE_HOSTNAME"
+          ? "Local and private hostnames are blocked. Enter a public website address."
+          : error.reason === "NO_DNS_ADDRESSES"
+            ? "The website hostname returned no IP addresses. Check VPS DNS."
+            : "The destination resolves to a private or reserved IP address. Check VPS DNS; public and private mixed answers are blocked.",
+    };
   if (error instanceof BrowserStartupError)
     return { code: error.code, message: error.message };
   const text = String(error?.message || error);
