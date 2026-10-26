@@ -21,6 +21,9 @@ export const AdminUser = make("AdminUser", {
 });
 export const GoogleAccount = make("GoogleAccount", {
   email: { type: String, required: true },
+  executionMode: { type: String, enum: ["vps", "local"], default: "vps" },
+  deviceId: ref("LocalDevice", false),
+  browserId: String,
   state: {
     type: String,
     enum: [
@@ -36,6 +39,17 @@ export const GoogleAccount = make("GoogleAccount", {
   disabled: { type: Boolean, default: false },
   lastVerified: Date,
 });
+GoogleAccount.schema.index(
+  { deviceId: 1, browserId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      executionMode: "local",
+      deviceId: { $type: "objectId" },
+      browserId: { $type: "string" },
+    },
+  },
+);
 export const GeminiChat = make(
   "GeminiChat",
   {
@@ -56,6 +70,13 @@ export const GenerationJob = make(
     accountId: ref("GoogleAccount"),
     chatId: ref("GeminiChat", false),
     createNew: Boolean,
+    executionMode: { type: String, enum: ["vps", "local"], default: "vps" },
+    deviceId: ref("LocalDevice", false),
+    browserId: String,
+    runId: String,
+    profileFence: Number,
+    remoteUncertain: { type: Boolean, default: false },
+    remoteRecoveryCalls: { type: Number, default: 0 },
     prompt: { type: String, required: true },
     assetIds: [ref("Asset")],
     state: {
@@ -154,6 +175,7 @@ export const Lease = make("Lease", {
   snapshotJobId: { type: Schema.Types.ObjectId, ref: "GenerationJob" },
   snapshotAt: Date,
   snapshotFilename: String,
+  blockedJobId: ref("GenerationJob", false),
   snapshotAccountId: { type: Schema.Types.ObjectId, ref: "GoogleAccount" },
 });
 export const Setting = make("Setting", {
@@ -163,6 +185,36 @@ export const Setting = make("Setting", {
   retentionDays: { type: Number, default: 30 },
   groqEnabled: { type: Boolean, default: false },
   groqModel: { type: String, default: "openai/gpt-oss-120b" },
+});
+export const LocalDevice = make("LocalDevice", {
+  name: String,
+  platform: String,
+  tokenHash: { type: String, unique: true, select: false },
+  expiresAt: Date,
+  revokedAt: Date,
+  lastSeenAt: Date,
+  browsers: [{ id: String, label: String, lastSeenAt: Date }],
+});
+export const DevicePairing = make("DevicePairing", {
+  codeHash: { type: String, unique: true, select: false },
+  name: String,
+  expiresAt: { type: Date, index: { expireAfterSeconds: 0 } },
+  usedAt: Date,
+});
+export const LocalCommand = make("LocalCommand", {
+  deviceId: ref("LocalDevice"),
+  accountId: ref("GoogleAccount"),
+  browserId: String,
+  kind: { type: String, enum: ["open", "verify", "close", "open_chat"] },
+  chatUrl: String,
+  state: {
+    type: String,
+    enum: ["queued", "running", "completed", "failed"],
+    default: "queued",
+  },
+  expiresAt: { type: Date, index: { expireAfterSeconds: 0 } },
+  profileFence: Number,
+  result: Schema.Types.Mixed,
 });
 export async function connect(uri) {
   await mongoose.connect(uri, { serverSelectionTimeoutMS: 5000 });

@@ -15,6 +15,14 @@ export function errorHandler(err, req, res, next) {
       },
     });
   }
+  if (err.code === 11000)
+    return res.status(409).json({
+      error: {
+        code: "CONFLICT",
+        message:
+          "This browser profile or unique identifier is already assigned",
+      },
+    });
   const validation = err.name === "ZodError" || err.name === "CastError";
   res.status(err.status || (validation ? 400 : 500)).json({
     error: {

@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { test, before, after } from "node:test";
 import assert from "node:assert/strict";
 import https from "node:https";
@@ -330,4 +331,75 @@ test("real HTTPS dashboard login, all pages, account create, queue submit and re
   const auth = cookies.find((c) => c.name === "gemini.sid");
   assert(auth.secure && auth.httpOnly && auth.sameSite === "Strict");
   await context.close();
+});
+
+test("Devices dashboard creates one-time pairings, downloads standalone ZIP and binds isolated profiles", async () => {
+  const context = await browser.newContext({ ignoreHTTPSErrors: true });
+  try {
+    const p = await context.newPage();
+    await p.goto(origin);
+    await p.locator("[name=username]").fill("admin");
+    await p.locator("[name=password]").fill("testpassword123456");
+    await p.getByRole("button", { name: "Sign in securely" }).click();
+    await p.getByRole("heading", { name: "System status" }).waitFor();
+    await p.locator('nav a[href="#devices"]').click();
+    await p.locator("#pair-device input").fill("Fixture laptop");
+    await p
+      .getByRole("button", { name: "Create one-time pairing code" })
+      .click();
+    await p
+      .locator("#device-code")
+      .filter({ hasText: "Pairing code" })
+      .waitFor();
+    const code = /Pairing code \(one use\): ([A-Za-z0-9_-]+)/.exec(
+      await p.locator("#device-code").innerText(),
+    )[1];
+    const paired = await context.request.post(origin + "/api/companion/pair", {
+      data: { code, name: "test", platform: "test" },
+    });
+    assert.equal(paired.status(), 200);
+    const d = await paired.json(),
+      browserId = crypto.randomUUID();
+    const beat = await context.request.post(
+      origin + "/api/companion/heartbeat",
+      {
+        headers: { authorization: `Bearer ${d.deviceToken}` },
+        data: { browsers: [{ id: browserId, label: "Work browser profile" }] },
+      },
+    );
+    assert.equal(beat.status(), 200);
+    const download = p.waitForEvent("download");
+    await p
+      .getByRole("link", { name: "Download the local companion ZIP" })
+      .click();
+    const artifact = await download;
+    assert.equal(artifact.suggestedFilename(), "gemini-local-companion.zip");
+    await p.locator('nav a[href="#accounts"]').click();
+    await p.locator("#add-account input").fill("local-dashboard@example.test");
+    await p.getByRole("button", { name: "Add account", exact: true }).click();
+    await p
+      .getByText("local-dashboard@example.test", { exact: true })
+      .waitFor();
+    await p.locator('nav a[href="#devices"]').click();
+    await p
+      .locator("#bind-browser [name=accountId]")
+      .selectOption({ label: "local-dashboard@example.test" });
+    await p
+      .locator("#bind-browser [name=binding]")
+      .selectOption(`${d.deviceId}:${browserId}`);
+    p.once("dialog", (dialog) => dialog.accept());
+    await p.getByRole("button", { name: "Bind selected profile" }).click();
+    await p
+      .locator("#notice")
+      .filter({ hasText: "Browser profile bound" })
+      .waitFor();
+    const account = await GoogleAccount.findOne({
+      email: "local-dashboard@example.test",
+    });
+    assert.equal(account.executionMode, "local");
+    assert.equal(String(account.deviceId), d.deviceId);
+    assert.equal(account.browserId, browserId);
+  } finally {
+    await context.close();
+  }
 });

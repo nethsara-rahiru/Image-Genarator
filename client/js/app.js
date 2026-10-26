@@ -5,6 +5,7 @@ const pages = [
   ["overview", "◈", "Overview"],
   ["generator", "✦", "Generator"],
   ["accounts", "◎", "Accounts"],
+  ["devices", "⌘", "Local devices"],
   ["chats", "▤", "Chats"],
   ["jobs", "≡", "Jobs & queue"],
   ["outputs", "▧", "Outputs"],
@@ -77,7 +78,9 @@ async function start() {
     timer = setTimeout(() => {
       const page = location.hash.slice(1);
       if (
-        !["generator", "settings", "accounts", "chats"].includes(page) &&
+        !["generator", "settings", "accounts", "chats", "devices"].includes(
+          page,
+        ) &&
         !document.querySelector("input:focus,textarea:focus,select:focus")
       )
         render();
@@ -95,7 +98,8 @@ try {
 setInterval(() => {
   if (
     !document.querySelector("#login").open &&
-    ["#overview", "#monitor", "#jobs"].includes(location.hash)
+    ["#overview", "#monitor", "#jobs", "#accounts"].includes(location.hash) &&
+    !document.querySelector("input:focus,textarea:focus,select:focus")
   )
     render();
 }, 15000);

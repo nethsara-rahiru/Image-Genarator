@@ -224,6 +224,68 @@ export async function renderPage(page, root) {
           )}</td></tr>`,
       ),
     )}${pager(data)}</div>`;
+  } else if (page === "devices") {
+    const [devices, accounts] = await Promise.all([
+      api("/devices"),
+      queryAll("/accounts"),
+    ]);
+    root.innerHTML = `<div class="card"><h2>Run the browser on your computer</h2><button class="quiet" data-action="refresh">Refresh devices</button><p class="info">VPS execution mode: ${esc(devices.executionMode)}. Set EXECUTION_MODE=local in the VPS .env and restart both processes to use local companions. Google sessions stay in Chrome/Edge on your computer.</p><p><a href="/api/devices/companion.zip">Download the local companion ZIP ↓</a></p><p>Extract the entire ZIP, install Node.js 22+, then run <code>node app.js</code>. Follow its setup page to pair the VPS and browser extension. Use one Chrome/Edge profile per Google account.</p><form id="pair-device"><label>Computer name<input name="name" required maxlength="80" placeholder="My laptop"></label><button>Create one-time pairing code</button></form><pre id="device-code"></pre></div><form id="bind-browser" class="card"><h2>Bind account to browser profile</h2><label>Google account<select name="accountId" required>${options(accounts)}</select></label><label>Paired computer / registered profile<select name="binding" required><option value="">Choose registered profile</option>${devices.items
+      .filter((d) => !d.revokedAt)
+      .flatMap((d) =>
+        d.browsers.map(
+          (b) =>
+            `<option value="${d._id}:${b.id}">${esc(d.name)} / ${esc(b.label)}</option>`,
+        ),
+      )
+      .join(
+        "",
+      )}</select></label><p class="info">Confirm this browser profile belongs to the selected account. Each profile can bind to one Google account. Cancel queued jobs before changing a binding.</p><button>Bind selected profile</button></form><div class="card">${table(
+      ["Computer", "Last seen", "Profiles", "Actions"],
+      devices.items.map(
+        (d) =>
+          `<tr><td>${esc(d.name)} ${d.revokedAt ? badge("revoked") : ""}</td><td>${esc(date(d.lastSeenAt))}</td><td>${d.browsers.map((b) => esc(b.label)).join("<br>") || "Open companion and register extension"}</td><td>${!d.revokedAt ? buttons(d._id, [["revoke-device", "Revoke", true]]) : ""}</td></tr>`,
+      ),
+    )}</div>`;
+    root.querySelector("#pair-device").addEventListener(
+      "submit",
+      async (e) => {
+        e.preventDefault();
+        try {
+          const d = await post("/devices/pairings", {
+            name: e.target.name.value,
+          });
+          root.querySelector("#device-code").textContent =
+            `Pairing code (one use): ${d.code}\nExpires: ${date(d.expiresAt)}`;
+        } catch (err) {
+          document.querySelector("#notice").textContent = err.message;
+        }
+      },
+      { signal },
+    );
+    root.querySelector("#bind-browser").addEventListener(
+      "submit",
+      async (e) => {
+        e.preventDefault();
+        if (
+          !confirm("Bind this account to this dedicated local browser profile?")
+        )
+          return;
+        const [deviceId, browserId] = e.target.binding.value.split(":");
+        try {
+          await post("/devices/bindings", {
+            accountId: e.target.accountId.value,
+            deviceId,
+            browserId,
+            confirm: true,
+          });
+          document.querySelector("#notice").textContent =
+            "Browser profile bound. Use Accounts → Connect, then Verify after signing in on the paired computer.";
+        } catch (err) {
+          document.querySelector("#notice").textContent = err.message;
+        }
+      },
+      { signal },
+    );
   } else if (page === "chats") {
     const accounts = await queryAll("/accounts");
     data = await api(
@@ -254,7 +316,7 @@ export async function renderPage(page, root) {
       ["Job / prompt", "State", "Queue", "Progress", "Actions"],
       data.items.map(
         (j) =>
-          `<tr><td class="long"><small>${esc(j._id)}</small><br>${esc(j.prompt.slice(0, 130))}${j.error ? `<p>${esc(j.error.code)}: ${esc(j.error.message)}</p>` : ""}</td><td>${badge(j.state)}</td><td>${j.queuePosition ?? "—"}</td><td>${j.progress}%</td><td>${buttons(j._id, [["jobDetails", "History"], ...(["queued", "running", "uploading_assets", "submitting_prompt", "generating", "downloading"].includes(j.state) ? [["cancel", "Cancel", true]] : []), ...(["failed", "needs_login", "needs_review", "cancelled"].includes(j.state) ? [["retry", "Retry"]] : [])])}</td></tr>`,
+          `<tr><td class="long"><small>${esc(j._id)}</small><br>${esc(j.prompt.slice(0, 130))}${j.error ? `<p>${esc(j.error.code)}: ${esc(j.error.message)}</p>` : ""}</td><td>${badge(j.state)}</td><td>${j.queuePosition ?? "—"}</td><td>${j.progress}%</td><td>${buttons(j._id, [["jobDetails", "History"], ...(j.remoteUncertain ? [["reconcile", "Review & release queue", true]] : []), ...(["queued", "running", "uploading_assets", "submitting_prompt", "generating", "downloading"].includes(j.state) ? [["cancel", "Cancel", true]] : []), ...(["failed", "needs_login", "needs_review", "cancelled"].includes(j.state) ? [["retry", "Retry"]] : [])])}</td></tr>`,
       ),
     )}${pager(data)}</div>`;
     root.querySelector("#filter-state").value = filter;
@@ -304,7 +366,8 @@ export async function renderPage(page, root) {
   root.addEventListener(
     "submit",
     async (e) => {
-      if (e.target.id === "generate") return;
+      if (["generate", "pair-device", "bind-browser"].includes(e.target.id))
+        return;
       e.preventDefault();
       const b = e.submitter;
       b.disabled = true;
@@ -348,7 +411,10 @@ export async function renderPage(page, root) {
           const w = window.open("about:blank", "_blank");
           try {
             const d = await post(`/accounts/${id}/login`);
-            if (w) w.location = d.viewerUrl;
+            if (d.mode === "local") {
+              w?.close();
+              details(d);
+            } else if (w) w.location = d.viewerUrl;
             else details(d);
           } catch (e) {
             w?.close();
@@ -359,13 +425,30 @@ export async function renderPage(page, root) {
           const w = window.open("about:blank", "_blank");
           try {
             const d = await post(`/chats/${id}/open`);
-            if (w) w.location = d.viewerUrl;
+            if (d.mode === "local") {
+              w?.close();
+              details(d);
+            } else if (w) w.location = d.viewerUrl;
             else details(d);
           } catch (e) {
             w?.close();
             throw e;
           }
         }
+        if (
+          action === "revoke-device" &&
+          confirm(
+            "Revoke this computer? Active or disconnected generation may require review.",
+          )
+        )
+          await remove(`/devices/${id}`);
+        if (
+          action === "reconcile" &&
+          confirm(
+            "Confirm the old companion has stopped and any Google generation has finished. Release the global queue?",
+          )
+        )
+          await post(`/jobs/${id}/reconcile`, { confirm: true });
         if (action === "verify") details(await post(`/accounts/${id}/verify`));
         if (action === "closeLogin") await post(`/accounts/${id}/login/close`);
         if (["enable", "disable"].includes(action))

@@ -27,3 +27,5 @@ Use the [Ubuntu/PM2 deployment runbook](docs/deployment.md) for exact encrypted 
 - [Milestone progress / continuation](docs/progress.md)
 
 Google passwords are entered only into Google's page in the temporary authenticated browser stream. Groq secrets live only in the server environment. Runtime profiles, images, dumps, logs and .env are git-ignored. Admin credentials must be set in an SSH terminal, never chat. Feature PRs require review and authorized merge; no release tag is created automatically.
+
+For the local-browser approach, see [Local companion setup](docs/local-companion.md). Download the standalone ZIP from dashboard → Local devices, extract it, and run **`node app.js`** on a Windows/macOS/Linux computer with Node 22+. No npm packages are needed for the local companion. A one-time Chrome/Edge extension setup pairs the user's ordinary browser profile; Google cookies/passwords stay local. Set EXECUTION_MODE=local on the VPS to move generation off the server. Keep the terminal and extension tab open. Live Google and cross-platform acceptance remain unverified.

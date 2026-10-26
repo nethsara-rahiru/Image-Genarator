@@ -1,4 +1,5 @@
 import path from "node:path";
+import { expireRuns } from "../services/local/jobs.js";
 import { captureMonitor } from "../services/monitorService.js";
 import fs from "node:fs/promises";
 import {
@@ -37,6 +38,13 @@ export class Worker {
     this.busy = false;
   }
   async start() {
+    if (this.config.EXECUTION_MODE === "local") {
+      await emit(
+        "worker.local_mode",
+        "Local companions execute generation jobs; VPS retains storage and housekeeping",
+      );
+      return;
+    }
     if (!(await this.lock.acquire("worker")))
       throw new AppError(
         "WORKER_BUSY",
@@ -94,6 +102,15 @@ export class Worker {
       throw new AppError("CANCELLED", "Job cancelled by administrator");
   }
   async tick() {
+    if (this.config.EXECUTION_MODE === "local") {
+      await expireRuns(this.config);
+      return false;
+    }
+    const first = await GenerationJob.findOne({ state: "queued" }).sort({
+      enqueuedAt: 1,
+      _id: 1,
+    });
+    if (first?.executionMode === "local") return false;
     const job = await claim(this.lock);
     if (!job) return false;
     this.current = job;

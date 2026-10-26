@@ -1,4 +1,5 @@
 import express from "express";
+import { companionRoutes } from "./routes/companion.js";
 import helmet from "helmet";
 import session from "express-session";
 import MongoStore from "connect-mongo";
@@ -38,6 +39,7 @@ export function createApp(config, accounts, { store } = {}) {
     }),
   );
   app.use(express.json({ limit: "64kb" }));
+  app.use("/api/companion", companionRoutes(config));
   const sessionStore =
     store || MongoStore.create({ mongoUrl: config.MONGODB_URI, ttl: 3600 });
   const sessionMiddleware = session({
