@@ -1,11 +1,5 @@
 # Changelog
 
-## Unreleased — implementation candidate
+## Unreleased — private VPS browser rebuild
 
-Node 22 API and dedicated FIFO worker, Mongo-backed sessions/leases/events, nine-page vanilla administration dashboard, transient secure interactive browser login, isolated persistent Chromium profiles, bounded Groq locator repair, original image/JSON output storage, CI and Ubuntu/PM2 runbooks.
-
-Live Google/Gemini, Groq and target VPS deployment remain UNVERIFIED. Monitoring captures only current-response image elements; page chrome and login screens are excluded. No v1.0.0 release or merge authorization is inferred.
-
-## Unreleased — local browser companion
-
-Adds standalone `node app.js` execution on a user's computer, a one-time paired Chrome/Edge extension, local browser/account binding in the dashboard, narrow device APIs, reference transfer, original-image download/upload, global FIFO fencing and explicit reconciliation after uncertain submissions. Google sessions stay in the normal browser; no cookie export or publicly accessible browser/debug service. The VPS retains MongoDB, authenticated administration, Groq, events and outputs. Local setup: docs/local-companion.md. Live Google and Windows/macOS/Edge acceptance remain unverified.
+Replaces the previous Gemini platform with a single-process Node.js remote browser viewer: explicit administrator setup/reset, persistent Chromium session, authenticated live frames and input, tabs/navigation, file uploads/downloads, secure SSH/TLS deployment and controlled-browser regression tests. Previous source is recoverable in Git history. No MongoDB, Groq, worker, local companion or browser extension is required. Existing Atlas admin does not migrate; provision the new admin once. Target VPS/TLS/Google login remain unverified. No release tag or main merge has been performed for this rebuild.

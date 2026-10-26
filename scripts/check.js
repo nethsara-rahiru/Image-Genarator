@@ -1,16 +1,19 @@
 import { readdirSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-function walk(p) {
-  for (const e of readdirSync(p, { withFileTypes: true })) {
-    if ([".git", "node_modules", "runtime"].includes(e.name)) continue;
-    const f = `${p}/${e.name}`;
-    if (e.isDirectory()) walk(f);
-    else if (/\.(js|cjs)$/.test(f)) {
-      const r = spawnSync(process.execPath, ["--check", f], {
+function walk(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (
+      [".git", "node_modules", "runtime", "test-results"].includes(entry.name)
+    )
+      continue;
+    const file = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) walk(file);
+    else if (/\.(js|cjs)$/.test(file)) {
+      const check = spawnSync(process.execPath, ["--check", file], {
         encoding: "utf8",
       });
-      if (r.status) {
-        process.stderr.write(r.stderr);
+      if (check.status) {
+        console.error(check.stderr);
         process.exitCode = 1;
       }
     }

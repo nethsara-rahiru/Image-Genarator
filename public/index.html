@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Private VPS Browser</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/"
+        >◈ <span>Private browser<small>Your VPS workspace</small></span></a
+      >
+      <div class="header-right">
+        <span id="connection" role="status">Connecting…</span
+        ><button id="logout" hidden>Sign out</button>
+      </div>
+    </header>
+    <main>
+      <section id="login-panel" class="login panel" hidden>
+        <span class="eyebrow">PRIVATE ACCESS</span>
+        <h1>Your browser.<br />Your server.</h1>
+        <p>Open a persistent browser on your VPS, securely from this device.</p>
+        <form id="login-form">
+          <label for="username">Administrator username</label
+          ><input
+            id="username"
+            name="username"
+            autocomplete="username"
+            required
+            maxlength="100"
+          /><label for="password">Password</label
+          ><input
+            id="password"
+            name="password"
+            type="password"
+            autocomplete="current-password"
+            required
+            maxlength="256"
+          /><button class="primary" type="submit">Sign in →</button>
+        </form>
+        <p id="setup" hidden>
+          Create your administrator in the VPS terminal with
+          <code>npm run setup-admin</code>. Reset a forgotten password with
+          <code>npm run reset-admin</code>.
+        </p>
+        <p class="muted">
+          Credentials belong to this server. Google and other website sign-ins
+          happen inside the remote browser.
+        </p>
+      </section>
+      <section id="workspace" hidden>
+        <div class="workspace-heading">
+          <div>
+            <span class="eyebrow">REMOTE WORKSPACE</span>
+            <h1>Browser</h1>
+          </div>
+          <div class="actions">
+            <button id="start" class="primary">Start browser</button
+            ><button id="stop" disabled>Stop</button
+            ><button id="downloads-toggle">Downloads</button>
+          </div>
+        </div>
+        <p class="notice">
+          Websites see your VPS IP. Some services may reject remote browsers.
+          Sign-in and security checks remain under your control.
+        </p>
+        <section class="browser panel" aria-label="Remote browser">
+          <div class="tabbar">
+            <div id="tabs" role="tablist" aria-label="Browser tabs"></div>
+            <button id="new-tab" aria-label="New tab" title="New tab" disabled>
+              ＋
+            </button>
+          </div>
+          <form id="navigation" class="toolbar">
+            <button id="back" type="button" aria-label="Back" disabled>←</button
+            ><button id="forward" type="button" aria-label="Forward" disabled>
+              →</button
+            ><button id="reload" type="button" aria-label="Reload" disabled>
+              ↻</button
+            ><label class="sr-only" for="address">Website address</label
+            ><input
+              id="address"
+              type="text"
+              placeholder="https://example.com"
+              autocomplete="off"
+              spellcheck="false"
+              disabled
+            /><button id="go" class="primary" disabled>Go</button>
+          </form>
+          <div class="screen">
+            <div id="empty">
+              <span class="empty-icon">◈</span>
+              <h2>A private space to browse</h2>
+              <p>
+                Start your VPS browser to open a website.<br />Your session is
+                saved when you stop it.
+              </p>
+            </div>
+            <canvas
+              id="screen"
+              width="1280"
+              height="800"
+              tabindex="0"
+              role="application"
+              aria-label="Remote browser display. Click to interact; use keyboard to type. Website accessibility is limited in streamed mode."
+              hidden
+            ></canvas>
+          </div>
+          <div class="footer">
+            <span id="browser-status" role="status">Browser stopped</span>
+            <div class="actions">
+              <button id="paste" disabled>Type / paste text</button
+              ><button id="upload" disabled>Upload file</button
+              ><input type="file" id="file" hidden />
+            </div>
+          </div>
+        </section>
+        <p class="muted tip">
+          Click the remote screen before typing. Ctrl/Cmd+A, Enter, Tab, arrows
+          and scrolling are supported. To upload, click a website's file picker
+          first. Uploads: 20 MB; saved downloads: 100 MB each.
+        </p>
+        <section id="downloads-panel" class="panel downloads" hidden>
+          <div class="workspace-heading">
+            <h2>Downloads</h2>
+            <button id="refresh-downloads">Refresh</button>
+          </div>
+          <p class="muted">
+            Stored privately on the VPS. The newest 100 completed files are
+            retained.
+          </p>
+          <div id="download-list"></div>
+        </section>
+      </section>
+      <p id="error" class="error" role="alert" hidden></p>
+    </main>
+    <dialog id="text-dialog">
+      <form id="text-form">
+        <h2>Type into the remote page</h2>
+        <p>First focus the destination field in the remote browser.</p>
+        <label for="text-value">Text</label
+        ><textarea id="text-value" maxlength="10000" rows="6"></textarea>
+        <div class="actions">
+          <button type="button" id="text-cancel">Cancel</button
+          ><button class="primary">Send text</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>
