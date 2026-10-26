@@ -184,6 +184,26 @@ export function companionRoutes(config) {
     );
     return ownedJob(req.device, req.params.id, run, config);
   };
+  r.get("/jobs/:id/result", async (req, res) => {
+    id.parse(req.params.id);
+    const run = runSchema.parse({
+      runId: req.query.runId,
+      fence: Number(req.query.fence),
+    });
+    const job = await GenerationJob.findOne({
+      _id: req.params.id,
+      deviceId: req.device._id,
+      runId: run.runId,
+      fence: run.fence,
+    });
+    if (!job)
+      throw new AppError("RUN_LOST", "Job is outside this companion run", 409);
+    res.json({
+      state: job.state,
+      remoteUncertain: job.remoteUncertain,
+      outputId: job.outputId,
+    });
+  });
   r.get("/jobs/:id/assets/:asset", async (req, res) => {
     const job = await authenticateRun(req);
     id.parse(req.params.asset);

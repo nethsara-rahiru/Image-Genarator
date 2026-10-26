@@ -79,6 +79,7 @@ export async function companionArchive() {
     "companion/public/app.js",
     "companion/public/style.css",
     "extension/manifest.json",
+    "extension/launcher.js",
     "extension/background.js",
     "extension/bridge.js",
     "extension/engine.js",

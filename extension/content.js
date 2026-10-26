@@ -327,9 +327,7 @@
         throw e;
       });
       if (!response) return { pending: true };
-      const images = [...response.querySelectorAll("img")]
-        .filter(visible)
-        .slice(0, 5);
+      const images = [...response.querySelectorAll("img")].filter(visible);
       if (!images.length)
         throw Object.assign(new Error("No generated image"), {
           code: "NO_IMAGE",
@@ -356,7 +354,7 @@
             : null;
       if (!button)
         throw Object.assign(new Error("No associated download action"), {
-          code: "DOWNLOAD_FAILED",
+          code: "NO_DOWNLOAD_ACTION",
         });
       button.click();
       return { ok: true };

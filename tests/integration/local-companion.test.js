@@ -286,3 +286,62 @@ test("lost pre-submission browser run safely rejoins the queue", async () => {
   assert.equal((await GenerationJob.findById(j._id)).state, "queued");
   assert.equal((await Lease.findById("worker")).blockedJobId, undefined);
 });
+
+test("completed output lookup survives a lost acknowledgement and releases orphan barriers", async () => {
+  await reset();
+  const j = await enqueue(
+    {
+      accountId: String(account._id),
+      createNew: true,
+      prompt: "saved result",
+      assetIds: [],
+    },
+    "local-saved-result-key",
+  );
+  const run = (await call("post", "/claim", {})).body.job;
+  const saved = await GeneratedOutput.create({
+    jobId: j._id,
+    accountId: account._id,
+    filename: "fixture.png",
+    bytes: 5,
+    width: 1,
+    height: 1,
+    format: "png",
+  });
+  await GenerationJob.updateOne(
+    { _id: j._id },
+    { $set: { state: "completed", outputId: saved._id } },
+  );
+  await Lease.updateOne({ _id: "worker" }, { $set: { blockedJobId: j._id } });
+  await expireRuns(config);
+  assert.equal((await Lease.findById("worker")).blockedJobId, undefined);
+  const known = await call(
+    "get",
+    `/jobs/${j._id}/result?runId=${run.runId}&fence=${run.fence}`,
+  );
+  assert.equal(known.status, 200);
+  assert.equal(known.body.state, "completed");
+  assert.equal(known.body.outputId, String(saved._id));
+});
+test("stale account commands cannot operate another binding and profile identity is unique", async () => {
+  await reset();
+  const { enqueueCommand, claimCommand } =
+    await import("../../src/services/local/commands.js");
+  await enqueueCommand(account, "verify");
+  const original = account.browserId;
+  account.browserId = crypto.randomUUID();
+  await account.save();
+  assert.equal(await claimCommand(device, config, [original]), null);
+  account.browserId = original;
+  await account.save();
+  await assert.rejects(
+    () =>
+      GoogleAccount.create({
+        email: "duplicate@example.test",
+        executionMode: "local",
+        deviceId: device._id,
+        browserId: original,
+      }),
+    { code: 11000 },
+  );
+});

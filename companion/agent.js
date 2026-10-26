@@ -153,6 +153,20 @@ export class LocalAgent {
         this.notify("completed", { jobId: job.id });
         return;
       }
+      try {
+        const known = (
+          await this.api(
+            `/jobs/${job.id}/result?runId=${job.runId}&fence=${job.fence}`,
+          )
+        ).data;
+        if (known.state === "completed") {
+          job.completed = true;
+          this.settings.pendingRun = null;
+          await this.save();
+          this.notify("completed", { jobId: job.id, outputId: known.outputId });
+          return;
+        }
+      } catch {}
       const code = [
         "NEEDS_LOGIN",
         "NO_IMAGE",

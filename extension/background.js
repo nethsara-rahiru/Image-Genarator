@@ -6,3 +6,29 @@ async function open() {
 }
 chrome.action.onClicked.addListener(open);
 chrome.runtime.onInstalled.addListener(open);
+chrome.runtime.onStartup.addListener(async () => {
+  const saved = await chrome.storage.local.get("bridge");
+  if (saved.bridge?.token) await open();
+});
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (
+    message.type !== "openCompanion" ||
+    sender.id !== chrome.runtime.id ||
+    !sender.tab?.url
+  )
+    return;
+  try {
+    const url = new URL(sender.tab.url);
+    if (
+      url.protocol !== "http:" ||
+      url.hostname !== "127.0.0.1" ||
+      url.pathname !== "/"
+    )
+      return;
+  } catch {
+    return;
+  }
+  chrome.storage.local.get("bridge").then((saved) => {
+    if (saved.bridge?.token) open();
+  });
+});

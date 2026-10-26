@@ -192,6 +192,12 @@ test(
       );
       assert(stages.includes("generating"));
       assert(stages.includes("downloading"));
+      const localPage = await context.newPage();
+      await localPage.goto(companion.url);
+      await page.waitForFunction(async () => {
+        const current = await chrome.tabs.getCurrent();
+        return current.active;
+      });
     } finally {
       await context?.close();
       await companion?.close();

@@ -111,7 +111,7 @@ function captureDownload(runId, chatUrl, imageUrl, trigger) {
     const rename = (item, suggest) => {
       if (match(item))
         suggest({
-          filename: `gemini-agent-${runId}-${item.id}.${/\.jpe?g(?:\?|$)/i.test(item.filename) ? "jpg" : /\.webp(?:\?|$)/i.test(item.filename) ? "webp" : "png"}`,
+          filename: `gemini-agent-${runId}-${item.id}.${item.mime === "image/jpeg" || /\.jpe?g(?:\?|$)/i.test(item.filename) ? "jpg" : item.mime === "image/webp" || /\.webp(?:\?|$)/i.test(item.filename) ? "webp" : "png"}`,
           conflictAction: "uniquify",
         });
       else suggest();
@@ -255,12 +255,18 @@ export async function executeTask(task, action) {
       });
       for (let index = 0; index < response.images.length; index++) {
         check();
-        const filename = await captureDownload(
-          job.runId,
-          current.url,
-          response.images[index],
-          () => message(id, { type: "download", runId: job.runId, index }),
-        );
+        let filename;
+        try {
+          filename = await captureDownload(
+            job.runId,
+            current.url,
+            response.images[index],
+            () => message(id, { type: "download", runId: job.runId, index }),
+          );
+        } catch (e) {
+          if (e.code === "NO_DOWNLOAD_ACTION") continue;
+          throw e;
+        }
         const valid = await action({ action: "download", filename });
         if (valid.valid) return await action({ action: "output", filename });
       }

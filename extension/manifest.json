@@ -5,13 +5,22 @@
   "description": "Run approved Gemini jobs in your own browser. Google cookies stay local.",
   "permissions": ["storage", "tabs", "downloads"],
   "host_permissions": ["http://127.0.0.1/*", "https://gemini.google.com/*"],
-  "background": { "service_worker": "background.js" },
-  "action": { "default_title": "Open Gemini companion tab" },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Open Gemini companion tab"
+  },
   "options_page": "companion.html",
   "content_scripts": [
     {
       "matches": ["https://gemini.google.com/*"],
       "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://127.0.0.1/*"],
+      "js": ["launcher.js"],
       "run_at": "document_idle"
     }
   ]

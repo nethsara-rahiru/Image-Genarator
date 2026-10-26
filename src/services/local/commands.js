@@ -69,6 +69,22 @@ export async function claimCommand(device, config, available) {
     expiresAt: { $gt: new Date() },
   }).sort({ createdAt: 1 });
   if (!command) return null;
+  const bound = await GoogleAccount.exists({
+    _id: command.accountId,
+    deviceId: device._id,
+    browserId: command.browserId,
+    executionMode: "local",
+    ...(command.kind === "close" ? {} : { disabled: false }),
+  });
+  if (!bound) {
+    await LocalCommand.updateOne(
+      { _id: command._id, state: "queued" },
+      {
+        $set: { state: "failed", result: { error: "BROWSER_BINDING_CHANGED" } },
+      },
+    );
+    return null;
+  }
   const locks = new LockManager(
     `command:${command._id}`,
     Math.max(60000, config.LEASE_MS),

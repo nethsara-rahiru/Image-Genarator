@@ -230,6 +230,7 @@ test("downloadable ZIP starts with node app.js without npm packages or server se
     assert(!files.includes("node_modules"));
     assert(!files.includes("runtime/"));
     assert(files.includes("extension/manifest.json"));
+    assert(files.includes("extension/launcher.js"));
     child = spawn(process.execPath, ["app.js"], {
       cwd: path.join(folder, "app"),
       env: {
