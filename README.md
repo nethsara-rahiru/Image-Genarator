@@ -1,31 +1,77 @@
-# Gemini Automation Platform
+# Private VPS Browser
 
-A private Node.js 22+ / Express / MongoDB application with a vanilla HTML/CSS/JS dashboard and a dedicated Playwright worker. Queue one Gemini web UI image job at a time, reuse isolated Google account profiles, upload reference images and save one original download plus actual image metadata JSON.
+A private browser running on your VPS, controlled from your own web browser. Includes password-protected access, persistent website sessions, tabs, navigation, mouse/keyboard control, text paste, file uploads and original downloads. Vanilla HTML/CSS/JavaScript viewer; Node.js 22+, Express and Playwright Chromium on the server. No MongoDB, Groq, Redis, Docker or local extension required.
 
-**Implementation candidate, not live-validated.** Real Google login, Gemini image generation, Groq and target VPS installation are **UNVERIFIED**. Gemini can return text or refuse to generate; no output is promised. Browser automation can be constrained by Google's terms, security checks and interface changes.
+This is a full replacement for the earlier Gemini automation platform. It does not generate images or run background AI jobs. The old source remains in Git history. Existing MongoDB administrator credentials do not carry over; create the new administrator once.
+
+## Install on the VPS
+
+Run as a dedicated **non-root** user (your `dev` user is suitable). Use a supported Ubuntu release; CI validates the dependency installer on GitHub Ubuntu, not your actual VPS.
 
 ```bash
+cd ~/Image-Genarator
 npm ci
 npx playwright install --with-deps chromium
 cp .env.example .env
-# Configure Mongo URI, random SESSION_SECRET, trusted HTTPS origin and TLS/proxy.
+chmod 600 .env
 npm run setup-admin
-npm run lint
-npm test
-npm start
-# Separate terminal / production PM2 process:
-npm run worker
+node app.js
 ```
 
-Use the [Ubuntu/PM2 deployment runbook](docs/deployment.md) for exact encrypted SSH tunnel access, trusted TLS, administrator provision and interactive Google login. Node and Mongo must be installed. No Redis or Docker. Both services bind/use one VPS and a shared protected runtime directory. Never expose port 3000, a login viewer, browser debugging or admin credentials on public plaintext HTTP.
+`node app.js` loads `.env` automatically. Chromium needs its one-time installation above. An alternative dependency installer is `bash scripts/install-ubuntu.sh`. Google credentials are entered only into the remote website, never the app's administrator form.
 
-- [Architecture and consistency limits](docs/architecture.md)
-- [API contract](docs/api.md)
-- [Security model](docs/security.md)
-- [Operations, retention, backup and restore](docs/operations.md)
-- [Test evidence and live acceptance checklist](docs/test-report.md)
-- [Milestone progress / continuation](docs/progress.md)
+## Open it securely
 
-Google passwords are entered only into Google's page in the temporary authenticated browser stream. Groq secrets live only in the server environment. Runtime profiles, images, dumps, logs and .env are git-ignored. Admin credentials must be set in an SSH terminal, never chat. Feature PRs require review and authorized merge; no release tag is created automatically.
+Default: the service binds to `127.0.0.1:3030`. From **your PC**, open an SSH tunnel:
 
-For the local-browser approach, see [Local companion setup](docs/local-companion.md). Download the standalone ZIP from dashboard → Local devices, extract it, and run **`node app.js`** on a Windows/macOS/Linux computer with Node 22+. No npm packages are needed for the local companion. A one-time Chrome/Edge extension setup pairs the user's ordinary browser profile; Google cookies/passwords stay local. Set EXECUTION_MODE=local on the VPS to move generation off the server. Keep the terminal and extension tab open. Live Google and cross-platform acceptance remain unverified.
+```bash
+ssh -N -L 3030:127.0.0.1:3030 dev@162.35.181.135
+```
+
+Leave the SSH terminal open. On your PC visit **http://127.0.0.1:3030**. The public part of this connection is encrypted by SSH. Keep `PUBLIC_ORIGIN=http://127.0.0.1:3030` in `.env` for this method.
+
+For public IP access at **https://162.35.181.135:3443**, use your existing Caddy TLS proxy and set `PUBLIC_ORIGIN=https://162.35.181.135:3443`. See [deployment](docs/deployment.md). Never expose the Node port or viewer through public plaintext HTTP. A private Caddy CA must be trusted on your own device; don't enter credentials through a certificate warning.
+
+## Use the browser
+
+1. Sign in using the administrator created by `npm run setup-admin`.
+2. Click **Start browser**, enter a public website address and press Go.
+3. Click the remote screen, then type, scroll or use supported keyboard shortcuts. **Type / paste text** also works on mobile.
+4. Use the tab strip to switch/close tabs; ＋ opens another (maximum eight).
+5. To upload: click the website's file picker in the remote screen, then click the viewer's **Upload file** button (one file, up to 20 MB).
+6. Click a website's download link. Open **Downloads → Save to device** to retrieve the original. Completed files up to 100 MB are retained, newest 100. Delete removes the server copy.
+7. **Stop** or **Sign out** closes tabs and saves the profile. Start again and navigate to the site to reuse sessions where allowed. Viewer disconnection does not immediately close Chromium; inactivity stops it after 30 minutes by default.
+
+Google and other sites may reject a VPS/browser sign-in. This project does not bypass MFA, captchas, security restrictions or account blocks. Audio/video streaming, microphone/camera, drag-and-drop, browser extensions, arbitrary native dialogs and full desktop access are not provided. The viewer streams images, so website accessibility is limited. See [security and limitations](docs/security.md).
+
+## Forgotten administrator password
+
+In your VPS terminal, from this project directory:
+
+```bash
+npm run reset-admin
+```
+
+Enter the existing username or accept the displayed default, then a new password twice. Input is hidden. Existing sessions are invalidated. No database edits and no password pasted into chat are needed.
+
+## Run continuously
+
+After your manual smoke test, install PM2 if needed and run:
+
+```bash
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup
+```
+
+Run the exact privileged startup command PM2 prints. See [deployment](docs/deployment.md) for replacing the former `gemini-api` / `gemini-worker` services without a port conflict, updates and backups.
+
+## Verification
+
+```bash
+npm run lint
+npm test
+npm audit --omit=dev --audit-level=high
+```
+
+The suite uses real Chromium and controlled local pages, checks authenticated HTTP/WebSocket access, navigation/input, uploads/downloads, persistent profiles and desktop/mobile layout. Test-only private fixture routing and sandbox relaxation are not enabled in production. No test signs into Google. See [test report](docs/test-report.md).

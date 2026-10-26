@@ -1,33 +1,74 @@
-# Ubuntu 24.04 deployment runbook
+# Deployment and operations
 
-Status: implementation candidate, live Google/Gemini, target VPS and Groq **UNVERIFIED**. Do not treat passing fixtures as production acceptance. No release tag is authorized. Recommended minimum: 2 CPU, 4 GB RAM, SSD, Node 22+, MongoDB 8, one API and one worker. Never run Chromium as root. No Docker required.
+## Replace the old application
 
-1. Review source/PRs and choose an approved commit. Install Node 22 LTS or later from a trusted vendor. Run `sudo bash scripts/install-ubuntu.sh` from the reviewed checkout. It creates a dedicated service account, installs system libraries via Playwright and does not modify firewall or expose ports. It does not install Node/Mongo automatically.
-2. Install MongoDB 8 Community and MongoDB database tools following the official Ubuntu 24.04 vendor instructions (https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/). Bind mongod to 127.0.0.1, enable authentication, create a least privilege readWrite user for gemini_agent, and start mongod with systemd. No public 27017. Use an authenticated URI in .env. Never paste it into chat.
-3. As gemini-agent: clone the reviewed GitHub branch into `/opt/gemini-agent/app`, run `npm ci`, `npx playwright install chromium`. Install a reviewed PM2 version (`npm install --global pm2` as administrator if needed). `cp .env.example .env; chmod 600 .env`; use an SSH terminal editor to configure URI, `openssl rand -hex 32` session secret, and server-side Groq API key if desired. `DATA_DIR=/opt/gemini-agent/app/runtime`; HOST remains 127.0.0.1.
-4. Configure HTTPS even inside an SSH tunnel because authentication cookies require Secure. Option A: a valid TLS certificate in built-in server TLS_KEY/TLS_CERT, PORT=3443, PUBLIC_ORIGIN=https://localhost:3443 (certificate SAN must match localhost and be trusted on your workstation). Option B: loopback Caddy TLS proxy with an internal CA, described below. Do not skip certificate verification or click through warnings as a deployment strategy.
-5. `npm run setup-admin` in an interactive SSH terminal. Password entry is hidden; Google passwords are never provisioned here.
-6. `npm run lint && npm test`. Tests download temporary Mongo binaries and launch Chromium. Run `pm2 start ecosystem.config.cjs; pm2 save` as gemini-agent, configure `pm2 startup` with its printed systemd instructions as administrator. `pm2 status` should show API and worker. Never scale worker across hosts or use a second runtime directory.
-7. From your workstation: `ssh -N -L 3443:127.0.0.1:3443 your-ssh-user@VPS_IP`. Open **https://localhost:3443**. The VPS IP is used for SSH, never plaintext dashboard login. Verify certificate trust and sign in.
-8. Add one Google account display email → Connect → interact directly with Google/2FA in the temporary viewer → Verify & finish. If a challenge, blocked login or usage restriction occurs, stop and follow Google's normal process. The platform does not bypass security controls. Confirm the signed-in identity matches the account label.
-9. Submit a test prompt with a harmless reference image. Confirm current chat URL, a single original output, metadata dimensions/format/bytes and account isolation. Repeat with a second account, reconnect, restart, cancellation and crash recovery. Record results in docs/test-report.md before approving production use.
+This rebuild removes the previous Gemini platform source. It preserves Git history and does not delete Mongo Atlas data or runtime profiles. It uses a **new** administrator in `DATA_DIR/admin.json`; provision it with `npm run setup-admin`. Existing Atlas credentials are not used. You can retain old runtime data in a private offline backup. Do not publish it.
 
-## Optional loopback TLS proxy with Caddy internal CA
+With the former application idle, stop its services before starting this one:
 
-Install Caddy from its official repository. Keep API PORT=3000 and PUBLIC_ORIGIN=https://localhost:3443. Use a root-owned Caddyfile:
+```bash
+cd ~/Image-Genarator
+pm2 stop gemini-api gemini-worker
+```
+
+Fetch and check out the reviewed rebuild branch/commit (or main after the rebuild PR is merged). Do not force-reset a checkout containing local changes. `npm ci`; `npx playwright install --with-deps chromium`. Keep or replace your protected .env with the settings in `.env.example`. Old Atlas/Groq variables are ignored, but should be removed from the new .env after preserving any needed credentials securely. This app doesn't modify Atlas.
+
+Set `PORT=3030`, `DATA_DIR=./runtime`, and choose PUBLIC_ORIGIN to match the address actually used in your browser. Paths relative to your project directory must remain stable across PM2 updates.
+
+## Secure public IP access using existing Caddy
+
+For this VPS, set:
+
+```dotenv
+PORT=3030
+PUBLIC_ORIGIN=https://162.35.181.135:3443
+DATA_DIR=./runtime
+```
+
+Your existing Caddy configuration can remain:
 
 ```caddyfile
-https://localhost:3443 {
-    bind 127.0.0.1
+{
+    auto_https disable_redirects
+}
+162.35.181.135:3443 {
     tls internal
-    reverse_proxy 127.0.0.1:3000 {
+    reverse_proxy 127.0.0.1:3030 {
         flush_interval -1
     }
 }
 ```
 
-Caddy passes X-Forwarded-Proto; Express trusts loopback only. Caddy supports WebSockets and SSE. Do not enable access logging of viewer query strings. Start Caddy; transfer **only its public internal CA root certificate**, usually `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt`, to your workstation over SSH. Verify its SHA-256 fingerprint through the SSH terminal. Trust this specific certificate using your OS certificate manager (never copy private keys to your workstation). SSH-forward port 3443 as above. Remove this CA trust when decommissioning. Alternative: a proper domain and valid public TLS with the same proxy configuration, additional firewall review and matching PUBLIC_ORIGIN. Do not expose port 3000.
+Caddy supports the viewer's WebSocket upgrade. Node trusts forwarded transport/IP headers only from the loopback proxy. Do not place untrusted proxies directly on loopback or change the binding to a public interface. For multiple proxies, review the trust boundary first. The app checks the Host, Origin and encrypted transport; HTTPS sessions get Secure cookies.
 
-## Update / rollback
+A private CA certificate does not automatically become trusted on your PC. Copy only `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt` over authenticated SSH, verify its fingerprint and trust that public root on your device. Never copy the CA private key. Alternatively use a domain and a publicly trusted certificate. Keep TLS verification enabled. Only open 3443/tcp (and your SSH port) in both provider firewall and UFW; do not open 3030 or any browser/VNC/debugging port.
 
-Stop API and worker; take a consistent backup. `git fetch` and checkout an explicitly approved immutable commit; `npm ci`; `npx playwright install chromium`; lint/tests; `pm2 restart ecosystem.config.cjs --update-env`. Verify worker singleton, health and one fixture/live smoke job. Roll back by checking out the prior approved commit and running npm ci. No destructive database migrations currently exist; review future schema changes before rollback. Never git reset unrelated work, force push or run unreviewed installer scripts.
+Run `sudo caddy validate --config /etc/caddy/Caddyfile`, restart Caddy, and verify it is active. Then `npm run setup-admin` and `node app.js` as dev. Log into the viewer and test a public website. Stop the foreground app with Ctrl+C before starting PM2.
+
+## PM2 and startup
+
+```bash
+pm2 start ecosystem.config.cjs
+pm2 save
+pm2 startup
+```
+
+Run the command printed by `pm2 startup`. Once the replacement is working, optionally remove the stopped old entries with `pm2 delete gemini-api gemini-worker` and `pm2 save`. Keep one `vps-browser` instance. Never start two processes against one persistent profile. No worker or Mongo service is needed.
+
+Updates: with no active transfer, `pm2 stop vps-browser`, back up runtime and .env privately, fetch/check out the reviewed commit, `npm ci`, `npx playwright install --with-deps chromium`, `pm2 restart ecosystem.config.cjs --update-env`, `pm2 save`. Recheck login/browser, WebSocket and a small download. PM2's max-memory restart is a recovery guard, not a guaranteed resource quota for Chromium children. Use host disk/memory quotas for hard limits. Allow at least 2 GB RAM for modest browsing and monitor actual resource use. Large websites and many tabs consume substantially more.
+
+## Backup and restore
+
+Stop `vps-browser` before backing up. Archive `.env` and the entire runtime directory with mode 600 to private storage outside the web root. Browser profiles contain live website sessions; encrypt backups and restrict access. Restore only with the service stopped, owned by the service user; directories mode 700 and files private. Restore a compatible reviewed application and browser version, then restart. Some websites may require fresh authentication. Backups and restoration have not been validated on the user's VPS.
+
+## Troubleshooting
+
+- **Invalid credentials:** this is the new local-file admin, not the former Atlas identity. Run `npm run reset-admin` in the project directory using the same DATA_DIR as PM2. If no admin exists, use setup-admin. Usernames/passwords are case-sensitive.
+- **Login rate limited:** wait 15 minutes. A forgotten password can be reset using the CLI; restarting clears in-memory sessions and rate counters.
+- **Unexpected host / HTTPS required:** correct PUBLIC_ORIGIN and Caddy's forwarded protocol. Keep the original host header through the proxy.
+- **502:** check `pm2 logs vps-browser --lines 50`, `pm2 status`, `ss -ltnp` and the proxy's port. Do not share credentials or page content in logs/screenshots.
+- **Browser cannot start:** install Chromium and system dependencies as the service user; verify non-root execution and sandbox/user-namespace support. Do not add `--no-sandbox` to production. Ubuntu 26.04 dependency compatibility must be tested on the target VPS. Ubuntu 24.04 LTS is a conservative deployment target.
+- **Viewer reconnecting:** verify Caddy WebSocket support, session expiry and browser network connection; the viewer reconnects without starting a second Chromium profile.
+- **Website fails / private host:** private, local and cloud-metadata network destinations are intentionally blocked. This viewer is for public web browsing.
+- **Website refuses login:** stop and follow the site's supported security flow. Remote browsers aren't guaranteed to be accepted.
+- **Transfer failure:** check permissions and disk space; uploads are limited to 20 MB, saved downloads to 100 MB and 100 files. Chromium may use temporary disk space before a completed download is inspected; apply OS disk quotas for hard limits.
