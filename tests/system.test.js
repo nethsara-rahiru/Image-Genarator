@@ -414,3 +414,18 @@ test("revoked sessions cannot execute actions already waiting in the input queue
   assert.equal((await second).status, 400);
   assert.deepEqual(performed, ["first"]);
 });
+test("authenticated startup failures return a safe actionable diagnostic", async (t) => {
+  const h = await harness(t);
+  await h.login();
+  h.service.browser.launch = async () => {
+    throw new Error(
+      "Executable doesn't exist at /private/user/browser secret=hidden",
+    );
+  };
+  const res = await h.request("/api/action", "POST", { type: "start" });
+  assert.equal(res.status, 503);
+  const body = await res.json();
+  assert.equal(body.code, "BROWSER_MISSING");
+  assert.match(body.error, /playwright install/);
+  assert.doesNotMatch(body.error, /secret=hidden|\/private\/user/);
+});

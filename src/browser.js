@@ -1,3 +1,4 @@
+import { browserStartupError } from "./browserErrors.js";
 import { chromium } from "playwright";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
@@ -25,16 +26,18 @@ export class RemoteBrowser {
       return;
     }
     if (this.starting) return this.starting;
-    this.starting = this.launch().finally(() => {
-      this.starting = null;
-    });
+    this.starting = this.launch()
+      .catch((error) => {
+        throw browserStartupError(error);
+      })
+      .finally(() => {
+        this.starting = null;
+      });
     return this.starting;
   }
   async launch() {
     if (!this.test && process.getuid?.() === 0)
-      throw new Error(
-        "Run as a non-root Linux user so Chromium sandboxing remains enabled",
-      );
+      throw browserStartupError(new Error("Run as a non-root Linux user"));
     await fs.mkdir(this.downloadDir, { recursive: true, mode: 0o700 });
     this.context = await chromium.launchPersistentContext(
       path.join(this.config.data, "profile"),

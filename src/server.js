@@ -1,3 +1,4 @@
+import { BrowserStartupError } from "./browserErrors.js";
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -230,10 +231,13 @@ export async function startServer(config, options = {}) {
     try {
       await action(d, req);
       res.json(await browser.state());
-    } catch {
-      res.status(400).json({
-        error:
-          "Action failed. Check the address, browser installation, or page state.",
+    } catch (error) {
+      const startup = error instanceof BrowserStartupError;
+      res.status(startup ? 503 : 400).json({
+        code: startup ? error.code : "ACTION_FAILED",
+        error: startup
+          ? error.message
+          : "Action failed. Check the address or page state.",
       });
     }
   });
@@ -371,10 +375,13 @@ export async function startServer(config, options = {}) {
       try {
         const d = JSON.parse(buffer.toString());
         if (!d || typeof d.type !== "string") throw new Error();
-        action(d, req).catch(() =>
+        action(d, req).catch((error) =>
           send({
             type: "error",
-            message: "Action could not complete. Check page state or address.",
+            message:
+              error instanceof BrowserStartupError
+                ? error.message
+                : "Action could not complete. Check page state or address.",
           }),
         );
       } catch {

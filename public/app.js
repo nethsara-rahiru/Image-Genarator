@@ -190,9 +190,7 @@ $("start").onclick = async () => {
   try {
     render(await api("/api/action", "POST", { type: "start" }));
   } catch (e) {
-    report(
-      `${e.message} Run npx playwright install --with-deps chromium on the VPS if Chromium is missing.`,
-    );
+    report(e.message);
     $("start").disabled = false;
   }
 };

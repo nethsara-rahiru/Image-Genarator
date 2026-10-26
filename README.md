@@ -66,6 +66,10 @@ pm2 startup
 
 Run the exact privileged startup command PM2 prints. See [deployment](docs/deployment.md) for replacing the former `gemini-api` / `gemini-worker` services without a port conflict, updates and backups.
 
+## Browser startup diagnostics
+
+If Start browser fails, run `npm run doctor` as the **same user** running PM2. It launches an isolated empty profile with sandboxing enabled, never opens a website or reads the saved browsing profile, and reports the actual startup failure. Missing executable/dependencies, root execution, sandbox/AppArmor restrictions, profile locks and permissions now have distinct viewer errors. Never work around a sandbox error by adding `--no-sandbox` or disabling system security globally.
+
 ## Verification
 
 ```bash
