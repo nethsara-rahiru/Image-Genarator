@@ -483,3 +483,20 @@ select:focus-visible {
     font-size: 10px;
   }
 }
+#tabs {
+  font-size: 11px;
+  color: var(--muted);
+  padding: 8px;
+  line-height: 1.5;
+}
+.tabbar {
+  align-items: center;
+  padding-bottom: 8px;
+}
+.screen canvas {
+  width: 100%;
+  height: auto;
+}
+.screen {
+  min-height: 240px;
+}

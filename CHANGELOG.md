@@ -11,3 +11,7 @@ Adds private retained/live debug logs with filters, pause, copy/export/clear, pe
 ## Unreleased — public destination classification
 
 Corrects false blocks on legitimate public 2001:: IPv6 and 192.0.x.x IPv4 addresses using precise CIDR checks. Preserves private/metadata/mixed-DNS protection and adds safe block-reason diagnostics.
+
+## Unreleased — local native desktop browser
+
+Replaces production headless/Playwright control with OS-detected installed Chrome/Edge, native Windows/macOS window capture/control and private Linux desktop capture. Adds interactive first-run local bootstrap, normal Chrome DevTools shortcut, original native file transfers, profile locking and DNS-pinned browser proxy. Playwright is development-only. Local Chrome still may be rejected by Google; real Windows/macOS permissions and live Google remain unverified.

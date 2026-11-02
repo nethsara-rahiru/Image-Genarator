@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Private VPS Browser</title>
+    <title>Local Native Browser</title>
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js" defer></script>
   </head>
   <body>
     <header>
       <a class="brand" href="/"
-        >◈ <span>Private browser<small>Your VPS workspace</small></span></a
+        ><span>Local browser<small>Your local PC workspace</small></span></a
       >
       <div class="header-right">
         <span id="connection" role="status">Connecting…</span
@@ -20,8 +20,11 @@
     <main>
       <section id="login-panel" class="login panel" hidden>
         <span class="eyebrow">PRIVATE ACCESS</span>
-        <h1>Your browser.<br />Your server.</h1>
-        <p>Open a persistent browser on your VPS, securely from this device.</p>
+        <h1>Your browser.<br />Your PC.</h1>
+        <p>
+          Control a dedicated desktop Chrome window on your own PC, securely
+          from this device.
+        </p>
         <form id="login-form">
           <label for="username">Administrator username</label
           ><input
@@ -70,14 +73,26 @@
           </div>
         </div>
         <p class="notice">
-          Websites see your VPS IP. Some services may reject remote browsers.
-          Sign-in and security checks remain under your control.
+          Chrome uses this PC’s network. Google sign-in is not guaranteed. On
+          Windows/macOS, remote input focuses the dedicated Chrome window;
+          capture is limited to that window. Linux uses a private virtual
+          desktop.
         </p>
         <section class="browser panel" aria-label="Remote browser">
           <div class="tabbar">
-            <div id="tabs" role="tablist" aria-label="Browser tabs"></div>
+            <div id="tabs" aria-label="Native browser status">
+              OS detected automatically
+            </div>
+            <button
+              id="close-tab"
+              aria-label="Close active tab"
+              title="Close active tab"
+              disabled
+            >
+              Close tab
+            </button>
             <button id="new-tab" aria-label="New tab" title="New tab" disabled>
-              ＋
+              New tab
             </button>
           </div>
           <form id="navigation" class="toolbar">
@@ -85,7 +100,7 @@
             ><button id="forward" type="button" aria-label="Forward" disabled>
               →</button
             ><button id="reload" type="button" aria-label="Reload" disabled>
-              ↻</button
+              Reload</button
             ><button id="google" type="button" disabled title="Open Google">
               Google</button
             ><label class="sr-only" for="address"
@@ -102,10 +117,11 @@
           <div class="screen">
             <div id="empty">
               <span class="empty-icon">◈</span>
-              <h2>A private space to browse</h2>
+              <h2>Your regular desktop browser</h2>
               <p>
-                Start your VPS browser to open a website.<br />Your session is
-                saved when you stop it.
+                Start Chrome on this PC to open a website.<br />Your dedicated
+                profile is saved when you stop it. Grant any required desktop
+                permissions locally.
               </p>
             </div>
             <canvas
@@ -121,7 +137,8 @@
           <div class="footer">
             <span id="browser-status" role="status">Browser stopped</span>
             <div class="actions">
-              <button id="paste" disabled>Type / paste text</button
+              <button id="chrome-console" disabled>Chrome console</button
+              ><button id="paste" disabled>Type / paste text</button
               ><button id="upload" disabled>Upload file</button
               ><input type="file" id="file" hidden />
             </div>
@@ -129,8 +146,9 @@
         </section>
         <p class="muted tip">
           Click the remote screen before typing. Ctrl/Cmd+A, Enter, Tab, arrows
-          and scrolling are supported. To upload, click a website's file picker
-          first. Uploads: 20 MB; saved downloads: 100 MB each.
+          and scrolling are supported. To upload, open the website’s native file
+          picker first, then choose Upload file. Uploads: 20 MB; saved
+          downloads: 100 MB each.
         </p>
         <section id="downloads-panel" class="panel downloads" hidden>
           <div class="workspace-heading">
@@ -138,8 +156,8 @@
             <button id="refresh-downloads">Refresh</button>
           </div>
           <p class="muted">
-            Stored privately on the VPS. The newest 100 completed files are
-            retained.
+            Stored privately on this PC. The newest 100 completed files up to
+            100 MB are shown. Incomplete files remain hidden.
           </p>
           <div id="download-list"></div>
         </section>

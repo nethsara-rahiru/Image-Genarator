@@ -1,6 +1,8 @@
+import { NativeError } from "./native/common.js";
 import { DestinationBlockedError } from "./security.js";
-import { BrowserStartupError } from "./browserErrors.js";
 export function actionError(error) {
+  if (error instanceof NativeError)
+    return { code: error.code, message: error.message };
   if (error instanceof DestinationBlockedError)
     return {
       code: error.code,
@@ -9,17 +11,25 @@ export function actionError(error) {
         error.reason === "PRIVATE_HOSTNAME"
           ? "Local and private hostnames are blocked. Enter a public website address."
           : error.reason === "NO_DNS_ADDRESSES"
-            ? "The website hostname returned no IP addresses. Check VPS DNS."
-            : "The destination resolves to a private or reserved IP address. Check VPS DNS; public and private mixed answers are blocked.",
+            ? "The website hostname returned no IP addresses. Check host DNS."
+            : "The destination resolves to a private or reserved IP address. Check host DNS; public and private mixed answers are blocked.",
     };
-  if (error instanceof BrowserStartupError)
-    return { code: error.code, message: error.message };
   const text = String(error?.message || error);
   const rules = [
     [
+      /EACCES|EPERM|Permission denied/,
+      "HOST_PERMISSIONS",
+      "The host denied access to a required file or desktop resource. Check DATA_DIR ownership, browser permissions and npm run doctor.",
+    ],
+    [
+      /ENOSPC|No space left/,
+      "HOST_DISK_FULL",
+      "The host storage is full. Free space in the private runtime/download directories.",
+    ],
+    [
       /ERR_NAME_NOT_RESOLVED|ENOTFOUND|EAI_AGAIN/,
       "DNS_FAILED",
-      "The website hostname could not be resolved. Check its spelling and VPS DNS.",
+      "The website hostname could not be resolved. Check its spelling and host DNS.",
     ],
     [
       /ERR_CERT_|certificate/i,
@@ -29,7 +39,7 @@ export function actionError(error) {
     [
       /ERR_CONNECTION_REFUSED|ERR_CONNECTION_RESET|ERR_CONNECTION_CLOSED|ERR_INTERNET_DISCONNECTED|ERR_TUNNEL_CONNECTION_FAILED/,
       "CONNECTION_FAILED",
-      "The VPS could not connect to the website. Check network access and the destination.",
+      "The PC could not connect to the website. Check network access and the destination.",
     ],
     [
       /Private addresses are blocked/,

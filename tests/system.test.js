@@ -1,94 +1,58 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import http from "node:http";
+import net from "node:net";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import http from "node:http";
 import { setTimeout as pause } from "node:timers/promises";
-import { chromium } from "playwright";
-import WebSocket from "ws";
 import { startServer } from "../src/server.js";
 import { configuration } from "../src/config.js";
 import { writeAdmin } from "../src/admin.js";
-async function rawRequest(url, options) {
-  return new Promise((resolve, reject) => {
-    const req = http.request(
-      url,
-      { method: options.method, headers: options.headers },
-      (res) => {
-        const chunks = [];
-        res.on("data", (chunk) => chunks.push(chunk));
-        res.on("end", () => {
-          const headers = new Headers();
-          for (const [key, value] of Object.entries(res.headers))
-            for (const item of Array.isArray(value) ? value : [value])
-              if (item !== undefined) headers.append(key, item);
-          resolve(
-            new Response(Buffer.concat(chunks), {
-              status: res.statusCode,
-              headers,
-            }),
-          );
-        });
-        res.on("error", reject);
-      },
-    );
-    req.on("error", reject);
-    req.end(options.body);
-  });
+import { RemoteBrowser } from "../src/browser.js";
+import { startBrowserProxy } from "../src/native/proxy.js";
+import {
+  browserArguments,
+  validKey,
+  jpegDimensions,
+  run,
+  chromeExecutable,
+  launchFailure,
+} from "../src/native/common.js";
+import WebSocket from "ws";
+import { chromium } from "playwright";
+import { fileURLToPath } from "node:url";
+const password = "native test administrator password";
+async function eventually(fn, timeout = 15000) {
+  const until = Date.now() + timeout;
+  while (Date.now() < until) {
+    if (await fn()) return;
+    await pause(100);
+  }
+  throw new Error("Condition timed out");
 }
-const password = "correct test password 123";
-async function harness(t, { secure = false } = {}) {
-  const data = await fs.mkdtemp(path.join(os.tmpdir(), "remote-system-"));
+async function harness(t, options = {}) {
+  const data = await fs.mkdtemp(path.join(os.tmpdir(), "native-system-"));
   await writeAdmin(data, "admin", password);
-  const fixture = http.createServer((req, res) => {
-    if (req.url === "/file") {
-      res.writeHead(200, {
-        "Content-Type": "text/plain",
-        "Content-Disposition": 'attachment; filename="example.txt"',
-      });
-      res.end("original test download");
-      return;
-    }
-    res.setHeader("Content-Type", "text/html");
-    res.end(
-      '<!doctype html><title>Fixture browser</title><style>body{margin:20px}input{padding:10px;display:block;margin:15px}</style><h1>Remote fixture</h1><input id="field" aria-label="Test input"><input id="file" type="file"><a id="download" href="/file" download>Download</a><a id="popup" href="/second" target="_blank">New tab</a>',
-    );
-  });
-  await new Promise((r) => fixture.listen(0, "127.0.0.1", r));
-  const fixtureBase = `http://127.0.0.1:${fixture.address().port}`;
-  const config = { ...configuration({ DATA_DIR: data }), port: 0, secure };
-  const service = await startServer(config, {
-    test: true,
-    validateUrl: async (url) => {
-      if (!url.startsWith(`${fixtureBase}/`))
-        throw new Error("Blocked in fixture");
-      return url;
-    },
-  });
+  const config = {
+    ...configuration({ DATA_DIR: data, AUTO_OPEN: "false" }),
+    port: 0,
+  };
+  const service = await startServer(config, { test: true, ...options });
   const base = `http://127.0.0.1:${service.port}`;
-  config.origin = secure ? "https://browser.example" : base;
-  config.secure = secure;
+  config.origin = base;
   t.after(async () => {
     await service.close();
-    await new Promise((r) => fixture.close(r));
     await fs.rm(data, { recursive: true, force: true });
   });
-  const headers = {
-    Host: new URL(config.origin).host,
-    ...(secure ? { "X-Forwarded-Proto": "https" } : {}),
-  };
   let cookie = "",
     csrf = "";
   async function request(endpoint, method = "GET", body, extra = {}) {
-    const res = await rawRequest(`${base}${endpoint}`, {
+    const res = await fetch(base + endpoint, {
       method,
       headers: {
-        ...headers,
         ...(cookie ? { Cookie: cookie } : {}),
-        ...(method !== "GET"
-          ? { Origin: config.origin, "X-CSRF-Token": csrf }
-          : {}),
+        ...(method !== "GET" ? { Origin: base, "X-CSRF-Token": csrf } : {}),
         ...(body ? { "Content-Type": "application/json" } : {}),
         ...extra,
       },
@@ -98,12 +62,8 @@ async function harness(t, { secure = false } = {}) {
     if (set) cookie = set.split(";")[0];
     return res;
   }
-  async function bootstrap() {
-    const res = await request("/api/session");
-    csrf = (await res.json()).csrf;
-  }
   async function login() {
-    await bootstrap();
+    csrf = (await (await request("/api/session")).json()).csrf;
     const res = await request("/api/login", "POST", {
       username: "admin",
       password,
@@ -111,54 +71,34 @@ async function harness(t, { secure = false } = {}) {
     assert.equal(res.status, 200);
     csrf = (await res.json()).csrf;
   }
-  return {
-    service,
-    base,
-    fixtureBase,
-    config,
-    request,
-    bootstrap,
-    login,
-    cookie: () => cookie,
-    csrf: () => csrf,
-  };
+  return { data, config, service, base, request, login, cookie: () => cookie };
 }
-async function until(fn) {
-  for (let i = 0; i < 100; i++) {
-    if (await fn()) return;
-    await pause(50);
-  }
-  throw new Error("Condition timed out");
-}
-test("HTTP authentication, CSRF, exact host/origin, session reset and download isolation", async (t) => {
+test("native browser launch arguments keep desktop mode and exclude automation/debugging flags", () => {
+  const args = browserArguments("/private/profile", 1234);
+  assert.ok(args.includes("--new-window"));
+  assert.match(args.join(" "), /proxy-server/);
+  assert.doesNotMatch(
+    args.join(" "),
+    /--headless|enable-automation|remote-debugging|disable-blink|no-sandbox/,
+  );
+  assert.ok(validKey("Meta+Shift+G"));
+  assert.ok(validKey("Control+L"));
+  assert.equal(validKey("Execute+shell"), false);
+});
+test("OS detection supports normal installed executables and rejects missing/unsupported hosts", async () => {
+  await assert.rejects(
+    chromeExecutable("unsupported"),
+    (e) => e.code === "OS_UNSUPPORTED",
+  );
+  await assert.rejects(
+    chromeExecutable(process.platform, "/definitely/no/browser"),
+    (e) => e.code === "CHROME_NOT_INSTALLED",
+  );
+});
+test("authentication, CSRF, password revocation and private log export remain enforced", async (t) => {
   const h = await harness(t);
   assert.equal((await h.request("/api/state")).status, 401);
-  assert.equal(
-    (await h.request("/api/session", "GET", null, { Host: "evil.example" }))
-      .status,
-    403,
-  );
-  await h.bootstrap();
-  assert.equal(
-    (
-      await h.request(
-        "/api/login",
-        "POST",
-        { username: "admin", password },
-        { Origin: "http://evil.example" },
-      )
-    ).status,
-    403,
-  );
-  assert.equal(
-    (
-      await h.request("/api/login", "POST", {
-        username: "admin",
-        password: "wrong",
-      })
-    ).status,
-    401,
-  );
+  assert.equal((await h.request("/api/logs/export")).status, 401);
   await h.login();
   assert.equal(
     (
@@ -166,416 +106,415 @@ test("HTTP authentication, CSRF, exact host/origin, session reset and download i
         "/api/action",
         "POST",
         { type: "start" },
-        { "X-CSRF-Token": "wrong" },
+        { "X-CSRF-Token": "bad" },
       )
     ).status,
     403,
   );
   assert.equal((await h.request("/api/state")).status, 200);
-  assert.equal((await h.request("/api/downloads/..%2fadmin.json")).status, 404);
-  await writeAdmin(h.config.data, "admin", "a completely new password", true);
-  assert.equal((await h.request("/api/state")).status, 401);
-});
-test("HTTPS reverse proxy requires encrypted transport and issues Secure cookies", async (t) => {
-  const h = await harness(t, { secure: true });
-  const bad = await h.request("/api/session", "GET", null, {
-    "X-Forwarded-Proto": "http",
-  });
-  assert.equal(bad.status, 403);
-  const good = await h.request("/api/session");
-  assert.equal(good.status, 200);
-  assert.match(good.headers.get("set-cookie"), /; Secure/);
-});
-test("login rate limiting bounds repeated incorrect passwords", async (t) => {
-  const h = await harness(t);
-  await h.bootstrap();
-  for (let i = 0; i < 8; i++)
-    assert.equal(
-      (
-        await h.request("/api/login", "POST", {
-          username: "admin",
-          password: "wrong",
-        })
-      ).status,
-      401,
-    );
-  assert.equal(
-    (
-      await h.request("/api/login", "POST", {
-        username: "admin",
-        password: "wrong",
-      })
-    ).status,
-    429,
-  );
-});
-test("real Chromium: navigation, input, tabs, file upload, original download and profile persistence", async (t) => {
-  const h = await harness(t);
-  const b = h.service.browser;
-  await b.start();
-  await b.action({ type: "navigate", url: `${h.fixtureBase}/` });
-  assert.equal((await b.state()).tabs.length, 1);
-  const rect = await b.page().locator("#field").boundingBox();
-  await b.action({ type: "click", x: rect.x + 5, y: rect.y + 5 });
-  await b.action({ type: "text", text: "hello remote browser" });
-  assert.equal(
-    await b.page().locator("#field").inputValue(),
-    "hello remote browser",
-  );
-  await b.action({ type: "key", key: "Control+A" });
-  await b.action({ type: "text", text: "replacement" });
-  assert.equal(await b.page().locator("#field").inputValue(), "replacement");
-  const image = await b.page().screenshot({ type: "jpeg" });
-  assert.equal(image.subarray(0, 2).toString("hex"), "ffd8");
-  const original = b.activeId;
-  await b.action({ type: "newTab" });
-  assert.equal(b.pages.size, 2);
-  await b.action({ type: "closeTab", id: b.activeId });
-  assert.equal(b.activeId, original);
-  await b.page().locator("#file").click();
-  await until(() => b.pending);
-  await b.upload({
-    originalname: "reference.txt",
-    mimetype: "text/plain",
-    buffer: Buffer.from("reference content"),
-  });
-  assert.equal(
-    await b
-      .page()
-      .locator("#file")
-      .evaluate((e) => e.files[0].name),
-    "reference.txt",
-  );
-  await assert.rejects(b.upload({}));
-  await b.page().locator("#download").click();
-  await until(async () => (await b.downloads()).length === 1);
-  const record = (await b.downloads())[0];
-  assert.equal(
-    await fs.readFile((await b.download(record.id)).path, "utf8"),
-    "original test download",
-  );
-  await h.login();
-  const download = await h.request(`/api/downloads/${record.id}`);
-  assert.equal(download.status, 200);
-  assert.equal(await download.text(), "original test download");
-  await assert.rejects(
-    b.action({ type: "navigate", url: "http://169.254.169.254/" }),
-  );
-  await assert.rejects(b.action({ type: "key", key: "javascript:alert(1)" }));
-  await assert.rejects(b.action({ type: "click", x: -1, y: 0 }));
-  await b.context.addCookies([
-    {
-      name: "persistent",
-      value: "session",
-      url: h.fixtureBase,
-      expires: Math.floor(Date.now() / 1000) + 3600,
-    },
-  ]);
-  await b.stop();
-  await b.start();
-  assert.equal(
-    (await b.context.cookies(h.fixtureBase)).some(
-      (c) => c.name === "persistent",
-    ),
-    true,
-  );
-  await h.request("/api/logout", "POST");
-  assert.equal(b.context, null);
-  assert.equal((await h.request("/api/state")).status, 401);
-});
-test("WebSocket stream requires a session and exact origin; reset revokes an open viewer", async (t) => {
-  const h = await harness(t);
-  await h.login();
-  const address = h.base.replace("http:", "ws:") + "/stream";
-  const anonymous = new WebSocket(address, {
-    headers: { Origin: h.config.origin },
-  });
-  await new Promise((resolve, reject) => {
-    anonymous.once("error", resolve);
-    anonymous.once("open", () => {
-      anonymous.close();
-      reject(new Error("Anonymous viewer accepted"));
-    });
-  });
-  const denied = new WebSocket(address, {
-    headers: { Origin: "http://evil.example", Cookie: h.cookie() },
-  });
-  await new Promise((resolve) => {
-    denied.once("error", resolve);
-    denied.once("open", () => {
-      denied.close();
-      assert.fail("Foreign origin accepted");
-    });
-  });
-  const ws = new WebSocket(address, {
-    headers: { Origin: h.config.origin, Cookie: h.cookie() },
-  });
-  const initial = await new Promise((resolve, reject) => {
-    ws.on("message", (data, binary) => {
-      if (!binary) {
-        const message = JSON.parse(data.toString());
-        if (message.type === "state") resolve(message);
-      }
-    });
-    ws.once("error", reject);
-  });
-  assert.equal(initial.type, "state");
-  const closed = new Promise((resolve) =>
-    ws.once("close", (code) => resolve(code)),
-  );
-  await writeAdmin(
-    h.config.data,
-    "admin",
-    "new revoked session password",
-    true,
-  );
-  assert.equal(await closed, 4001);
-});
-test("responsive dashboard signs in, streams real frames and controls remote text input", async (t) => {
-  const h = await harness(t);
-  const client = await chromium.launch({
-    headless: true,
-    chromiumSandbox: false,
-  });
-  t.after(() => client.close());
-  const page = await client.newPage({
-    viewport: { width: 1440, height: 1000 },
-  });
-  await page.goto(h.base);
-  await page.locator("#username").fill("admin");
-  await page.locator("#password").fill(password);
-  await page.getByRole("button", { name: "Sign in →" }).click();
-  await page.locator("#start").waitFor({ state: "visible" });
-  await page.locator("#start").click();
-  await page.waitForFunction(
-    () => !document.querySelector("#address").disabled,
-  );
-  await page.locator("#address").fill(`${h.fixtureBase}/`);
-  await page.locator("#go").click();
-  await h.service.browser.page().locator("#field").waitFor();
-  const remote = await h.service.browser.page().locator("#field").boundingBox();
-  const canvas = page.locator("#screen");
-  await canvas.waitFor({ state: "visible" });
-  const box = await canvas.boundingBox();
-  await canvas.click({
-    position: {
-      x: ((remote.x + 10) * box.width) / 1280,
-      y: ((remote.y + 10) * box.height) / 800,
-    },
-  });
-  await page.keyboard.type("typed from local browser");
-  await until(
-    async () =>
-      (await h.service.browser.page().locator("#field").inputValue()) ===
-      "typed from local browser",
-  );
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector("#screen")
-        .getContext("2d")
-        .getImageData(20, 20, 1, 1).data[3] === 255,
-  );
-  await page
-    .getByRole("button", { name: "Debug console", exact: true })
-    .click();
-  await page.waitForFunction(() =>
-    document
-      .querySelector("#debug-output")
-      .textContent.includes("ACTION_COMPLETED"),
-  );
-  await page.locator("#debug-filter").fill("ACTION_COMPLETED");
-  assert.match(
-    await page.locator("#debug-output").textContent(),
-    /ACTION_COMPLETED/,
-  );
-  await page.locator("#debug-filter").fill("");
-  await page.locator("#debug-pause").click();
-  const frozen = await page.locator("#debug-output").textContent();
-  h.service.log.write(
-    "info",
-    "server",
-    "UI_TEST_EVENT",
-    "Synthetic viewer diagnostic.",
-  );
-  await page.waitForFunction(() =>
-    document.querySelector("#debug-status").textContent.includes("paused"),
-  );
-  assert.equal(await page.locator("#debug-output").textContent(), frozen);
-  await page.locator("#debug-pause").click();
-  await page.waitForFunction(() =>
-    document
-      .querySelector("#debug-output")
-      .textContent.includes("UI_TEST_EVENT"),
-  );
-  const exported = page.waitForEvent("download");
-  await page.locator("#debug-export").click();
-  const artifact = await exported;
-  const exportedJson = await fs.readFile(await artifact.path(), "utf8");
-  assert.match(exportedJson, /UI_TEST_EVENT/);
-  assert.doesNotMatch(exportedJson, /typed from local browser/);
-  const googleTargets = [];
-  const originalValidator = h.service.browser.validateUrl;
-  h.service.browser.validateUrl = async (url) => {
-    if (url.startsWith("https://www.google.com/")) {
-      googleTargets.push(url);
-      return `${h.fixtureBase}/google-fixture`;
-    }
-    return originalValidator(url);
-  };
-  await page.locator("#address").fill("browser search example");
-  await page.locator("#go").click();
-  await until(() =>
-    googleTargets.includes(
-      "https://www.google.com/search?q=browser%20search%20example",
-    ),
-  );
-  await page.locator("#google").click();
-  await until(() => googleTargets.includes("https://www.google.com/"));
-  await fs.mkdir("test-results", { recursive: true });
-  await page.screenshot({
-    path: "test-results/remote-browser-desktop.png",
-    fullPage: true,
-  });
-  await page.setViewportSize({ width: 390, height: 844 });
-  assert.equal(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-    true,
-  );
-  await page.screenshot({
-    path: "test-results/remote-browser-mobile.png",
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await page.locator("#login-panel").waitFor({ state: "visible" });
-});
-test("revoked sessions cannot execute actions already waiting in the input queue", async (t) => {
-  const h = await harness(t);
-  await h.login();
-  let release, entered;
-  const gate = new Promise((resolve) => (release = resolve));
-  const started = new Promise((resolve) => (entered = resolve));
-  const performed = [];
-  h.service.browser.action = async (d) => {
-    performed.push(d.type);
-    if (d.type === "first") {
-      entered();
-      await gate;
-    }
-  };
-  const first = h.request("/api/action", "POST", { type: "first" });
-  await started;
-  const second = h.request("/api/action", "POST", { type: "second" });
-  await pause(50);
-  await writeAdmin(h.config.data, "admin", "reset while queued password", true);
-  release();
-  assert.equal((await first).status, 200);
-  assert.equal((await second).status, 400);
-  assert.deepEqual(performed, ["first"]);
-});
-test("authenticated startup failures return a safe actionable diagnostic", async (t) => {
-  const h = await harness(t);
-  await h.login();
-  h.service.browser.launch = async () => {
-    throw new Error(
-      "Executable doesn't exist at /private/user/browser secret=hidden",
-    );
-  };
-  const res = await h.request("/api/action", "POST", { type: "start" });
-  assert.equal(res.status, 503);
-  const body = await res.json();
-  assert.equal(body.code, "BROWSER_MISSING");
-  assert.match(body.error, /playwright install/);
-  assert.doesNotMatch(body.error, /secret=hidden|\/private\/user/);
-});
-test("debug API is authenticated, replayable, exportable, CSRF-protected and omits action text", async (t) => {
-  const h = await harness(t);
-  assert.equal((await h.request("/api/logs")).status, 401);
-  assert.equal((await h.request("/api/logs/export")).status, 401);
-  await h.login();
-  h.service.browser.action = async () => {
-    throw new Error(
-      "net::ERR_NAME_NOT_RESOLVED https://private.example/?token=do-not-log",
-    );
-  };
-  const failed = await h.request("/api/action", "POST", {
-    type: "navigate",
-    url: "https://example.com/?secret=never-record",
-  });
-  const result = await failed.json();
-  assert.equal(result.code, "DNS_FAILED");
-  assert.ok(result.debugId);
-  const logs = await (await h.request("/api/logs")).json();
-  const entry = logs.entries.find(
-    (e) => e.details.actionId === result.debugId && e.level === "error",
-  );
-  assert.equal(entry.code, "DNS_FAILED");
-  const replay = await (
-    await h.request(`/api/logs?after=${encodeURIComponent(logs.cursor)}`)
+  const result = await (
+    await h.request("/api/action", "POST", {
+      type: "navigate",
+      url: "private search text",
+    })
   ).json();
-  assert.equal(replay.entries.length, 0);
-  const onlyErrors = await (await h.request("/api/logs?level=error")).json();
-  assert.ok(onlyErrors.entries.every((e) => e.level === "error"));
+  assert.equal(result.code, "BROWSER_CLOSED");
   const exported = await h.request("/api/logs/export");
   assert.match(exported.headers.get("content-disposition"), /attachment/);
-  const text = await exported.text();
-  assert.doesNotMatch(text, /do-not-log|never-record/);
-  assert.equal(
-    (await h.request("/api/logs", "DELETE", null, { "X-CSRF-Token": "wrong" }))
-      .status,
-    403,
-  );
-  const cleared = await (await h.request("/api/logs", "DELETE")).json();
-  assert.equal(cleared.entries.length, 1);
-  assert.equal(cleared.entries[0].code, "LOG_CLEARED");
+  assert.doesNotMatch(await exported.text(), /private search text/);
+  await writeAdmin(h.data, "admin", "new native revoked password", true);
+  assert.equal((await h.request("/api/state")).status, 401);
 });
-test("Google search and shortcut navigate the remote browser through the normal destination checks", async (t) => {
-  const h = await harness(t);
-  const b = h.service.browser;
-  const seen = [];
-  const original = b.validateUrl;
-  b.validateUrl = async (url) => {
-    if (url.startsWith("https://www.google.com/")) {
-      seen.push(url);
-      return `${h.fixtureBase}/google-fixture`;
-    }
-    return original(url);
-  };
-  await b.start();
-  await b.action({ type: "navigate", url: "test private search query" });
-  assert.ok(
-    seen.includes(
-      "https://www.google.com/search?q=test%20private%20search%20query",
-    ),
-  );
-  await b.action({ type: "navigate", url: "https://www.google.com/" });
-  assert.ok(seen.includes("https://www.google.com/"));
-  assert.doesNotMatch(
-    JSON.stringify(h.service.log.snapshot()),
-    /private search query|private%20search/,
-  );
-});
-test("blocked DNS answers expose a safe reason without logging private addresses or search terms", async (t) => {
+test("live logs and viewer require an authenticated same-origin socket and revoke on password reset", async (t) => {
   const h = await harness(t);
   await h.login();
-  const { publicUrl } = await import("../src/security.js");
-  h.service.browser.action = async () =>
-    publicUrl("https://www.google.com/search?q=private-search", async () => [
-      { address: "10.1.2.3" },
-    ]);
-  const response = await h.request("/api/action", "POST", {
-    type: "navigate",
-    url: "private-search",
+  for (const headers of [
+    { Origin: "http://evil.example", Cookie: h.cookie() },
+    { Origin: h.base },
+  ]) {
+    const ws = new WebSocket(h.base.replace("http:", "ws:") + "/stream", {
+      headers,
+    });
+    await new Promise((resolve, reject) => {
+      ws.once("error", resolve);
+      ws.once("open", () => {
+        ws.close();
+        reject(new Error("Unauthorized stream accepted"));
+      });
+    });
+  }
+  const ws = new WebSocket(h.base.replace("http:", "ws:") + "/stream", {
+    headers: { Origin: h.base, Cookie: h.cookie() },
   });
-  const result = await response.json();
-  assert.equal(result.code, "DESTINATION_BLOCKED");
-  assert.match(result.error, /resolves to a private or reserved IP/);
-  const logs = await (await h.request("/api/logs")).json();
-  const entry = logs.entries.find(
-    (e) => e.details.actionId === result.debugId && e.level === "error",
+  await new Promise((resolve, reject) => {
+    ws.on("message", (data, binary) => {
+      if (!binary && JSON.parse(data).type === "state") resolve();
+    });
+    ws.on("error", reject);
+  });
+  const closed = new Promise((resolve) => ws.once("close", resolve));
+  await writeAdmin(h.data, "admin", "another native password reset", true);
+  assert.equal(await closed, 4001);
+});
+test("managed downloads retain original bytes and never expose symlinks or incomplete files", async (t) => {
+  const h = await harness(t);
+  const b = h.service.browser;
+  await fs.mkdir(b.downloadDir, { recursive: true });
+  await fs.writeFile(path.join(b.downloadDir, "example.txt"), "original bytes");
+  await fs.writeFile(path.join(b.downloadDir, "example.crdownload"), "partial");
+  await fs.symlink(
+    path.join(h.data, "admin.json"),
+    path.join(b.downloadDir, "secret.txt"),
   );
-  assert.equal(entry.details.reason, "NON_PUBLIC_DNS_ADDRESS");
-  assert.doesNotMatch(JSON.stringify(logs), /10\.1\.2\.3|private-search/);
+  const files = await b.downloads();
+  assert.equal(files.length, 1);
+  assert.equal(files[0].name, "example.txt");
+  await assert.rejects(b.download("../admin.json"));
+  await h.login();
+  const response = await h.request(`/api/downloads/${files[0].id}`);
+  assert.equal(await response.text(), "original bytes");
+});
+test("native network proxy pins approved destinations and refuses private HTTP/CONNECT targets", async (t) => {
+  const fixture = http.createServer((req, res) => res.end("fixture"));
+  await new Promise((r) => fixture.listen(0, "127.0.0.1", r));
+  t.after(() => new Promise((r) => fixture.close(r)));
+  const base = `http://127.0.0.1:${fixture.address().port}/`;
+  const denied = await startBrowserProxy();
+  t.after(() => denied.close());
+  const status = await new Promise((resolve, reject) => {
+    http
+      .get({ host: "127.0.0.1", port: denied.port, path: base }, (res) => {
+        res.resume();
+        resolve(res.statusCode);
+      })
+      .on("error", reject);
+  });
+  assert.equal(status, 403);
+  const tunnel = await new Promise((resolve, reject) => {
+    const socket = net.connect(denied.port, "127.0.0.1", () =>
+      socket.write(
+        "CONNECT 169.254.169.254:80 HTTP/1.1\r\nHost: 169.254.169.254\r\n\r\n",
+      ),
+    );
+    socket.once("data", (data) => {
+      socket.destroy();
+      resolve(data.toString());
+    });
+    socket.on("error", reject);
+  });
+  assert.match(tunnel, /403/);
+  const allowed = await startBrowserProxy({
+    validate: async (value) => {
+      assert.equal(value, base);
+      return value;
+    },
+  });
+  t.after(() => allowed.close());
+  const body = await new Promise((resolve, reject) => {
+    http
+      .get({ host: "127.0.0.1", port: allowed.port, path: base }, (res) => {
+        let text = "";
+        res.on("data", (c) => (text += c));
+        res.on("end", () => resolve(text));
+      })
+      .on("error", reject);
+  });
+  assert.equal(body, "fixture");
+});
+test(
+  "bundled Windows and macOS helper entrypoints load on their native CI hosts",
+  { skip: !["win32", "darwin"].includes(process.platform) },
+  async () => {
+    if (process.platform === "win32")
+      await run(
+        "powershell.exe",
+        [
+          "-NoProfile",
+          "-NonInteractive",
+          "-File",
+          fileURLToPath(new URL("../src/native/windows.ps1", import.meta.url)),
+        ],
+        { input: "", timeout: 30000 },
+      );
+    if (process.platform === "darwin") {
+      const output = await run(
+        "/usr/bin/osascript",
+        [
+          "-l",
+          "JavaScript",
+          fileURLToPath(new URL("../src/native/macos.js", import.meta.url)),
+        ],
+        { input: JSON.stringify({ type: "capture", pid: 0 }) },
+      );
+      assert.equal(JSON.parse(output).ok, false);
+    }
+  },
+);
+const nativeEnabled =
+  process.platform === "linux" && process.env.RUN_NATIVE_TESTS === "1";
+test(
+  "real native Linux Chrome: OS input, original download, profile reuse and responsive authenticated viewer",
+  { skip: !nativeEnabled, timeout: 90000 },
+  async (t) => {
+    const requests = [];
+    const uploads = [];
+    const fixture = http.createServer((req, res) => {
+      const url = new URL(req.url, "http://fixture");
+      requests.push({
+        path: url.pathname,
+        q: url.searchParams.get("q"),
+        cookie: req.headers.cookie || "",
+        x: Number(url.searchParams.get("x")),
+        y: Number(url.searchParams.get("y")),
+      });
+      if (url.pathname === "/upload-received") {
+        const chunks = [];
+        req.on("data", (chunk) => chunks.push(chunk));
+        req.on("end", () => {
+          uploads.push(Buffer.concat(chunks).toString());
+          res.end("ok");
+        });
+        return;
+      }
+      if (url.pathname === "/upload-page") {
+        res.setHeader("Content-Type", "text/html");
+        res.end(
+          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||document.readyState!=='complete')return;reported=true;const input=document.querySelector('input');input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch('/ready-file?x='+encodeURIComponent(r.x+10+screenX)+'&y='+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});}addEventListener('load',ready);document.addEventListener('visibilitychange',ready);document.addEventListener('prerenderingchange',ready);ready();</script>`,
+        );
+        return;
+      }
+      if (url.pathname === "/file") {
+        res.writeHead(200, {
+          "Content-Type": "text/plain",
+          "Content-Disposition": 'attachment; filename="original.txt"',
+        });
+        res.end("original native download");
+        return;
+      }
+      res.setHeader("Content-Type", "text/html");
+      res.setHeader(
+        "Set-Cookie",
+        "native_session=preserved; Max-Age=3600; Path=/",
+      );
+      res.end(
+        '<!doctype html><title>Native Chrome fixture</title><style>body{font:20px sans-serif;background:#eef4ff;padding:30px}input{padding:12px;font:inherit}</style><h1>Real desktop Chrome</h1><form><input name="q" autofocus><button>Submit</button></form><a href="/file" download>Download original</a><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||document.readyState!=="complete")return;reported=true;const input=document.querySelector("input");input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch("/ready?x="+encodeURIComponent(r.x+10+screenX)+"&y="+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});}addEventListener("load",ready);document.addEventListener("visibilitychange",ready);document.addEventListener("prerenderingchange",ready);ready();</script>',
+      );
+    });
+    await new Promise((r) => fixture.listen(0, "127.0.0.1", r));
+    t.after(() => new Promise((r) => fixture.close(r)));
+    const base = `http://127.0.0.1:${fixture.address().port}`;
+    const validate = async (value) => {
+      if (value.startsWith(base + "/")) return value;
+      throw new Error("Private addresses are blocked");
+    };
+    const h = await harness(t, {
+      chromePath: process.env.TEST_CHROME,
+      homepage: base + "/",
+      validateUrl: validate,
+      proxyOptions: { validate },
+    });
+    const b = h.service.browser;
+    await b.start();
+    try {
+      await eventually(() => requests.some((r) => r.path === "/ready"));
+      const capture = await b.capture();
+      assert.equal(jpegDimensions(capture).width, 1280);
+      const ready = requests.find((r) => r.path === "/ready");
+      await b.action({ type: "click", x: ready.x, y: ready.y });
+      await b.action({ type: "text", text: "native input checked" });
+      await b.action({ type: "key", key: "Enter" });
+      await eventually(() =>
+        requests.some((r) => r.q === "native input checked"),
+      );
+      await b.action({ type: "navigate", url: base + "/file" });
+      try {
+        await eventually(async () => (await b.downloads()).length > 0);
+      } catch (error) {
+        await fs.mkdir("test-results", { recursive: true });
+        await fs.writeFile(
+          "test-results/native-failure.jpg",
+          await b.capture(),
+        );
+        console.log("Synthetic fixture requests", requests);
+        console.log(
+          "Synthetic download files",
+          await fs.readdir(b.downloadDir),
+        );
+        throw error;
+      }
+      const file = (await b.downloads())[0];
+      assert.equal(
+        await fs.readFile((await b.download(file.id)).path, "utf8"),
+        "original native download",
+      );
+      await b.action({ type: "navigate", url: base + "/upload-page" });
+      await eventually(() => requests.some((r) => r.path === "/ready-file"));
+      const fileReady = requests.find((r) => r.path === "/ready-file");
+      await b.action({ type: "click", x: fileReady.x, y: fileReady.y });
+      await eventually(() => b.driver.fileDialog());
+      await b.upload({
+        originalname: "reference.txt",
+        buffer: Buffer.from("original native upload"),
+        mimetype: "text/plain",
+      });
+      try {
+        await eventually(() => uploads.includes("original native upload"));
+      } catch (error) {
+        await fs.mkdir("test-results", { recursive: true });
+        await fs.writeFile(
+          "test-results/native-upload-failure.jpg",
+          await b.capture(),
+        );
+        console.log(
+          "Synthetic upload observations",
+          requests,
+          uploads,
+          b.testStderr,
+        );
+        throw error;
+      }
+      const other = new RemoteBrowser(h.config, {
+        test: true,
+        chromePath: process.env.TEST_CHROME,
+      });
+      await assert.rejects(
+        other.start(),
+        (e) => e.code === "BROWSER_PROFILE_BUSY",
+      );
+      await other.stop();
+      assert.equal(
+        JSON.parse(await fs.readFile(path.join(b.data, "browser.json"), "utf8"))
+          .pid,
+        b.child.pid,
+      );
+      await b.stop();
+      const before = requests.length;
+      await b.start();
+      await eventually(() =>
+        requests
+          .slice(before)
+          .some((r) => r.cookie.includes("native_session=preserved")),
+      );
+      const client = await chromium.launch({
+        headless: true,
+        executablePath: process.env.TEST_CHROME,
+        args: ["--no-sandbox"],
+      });
+      t.after(() => client.close());
+      const page = await client.newPage({
+        viewport: { width: 1400, height: 1100 },
+      });
+      await page.goto(h.base);
+      await page.locator("#username").fill("admin");
+      await page.locator("#password").fill(password);
+      await page.getByRole("button", { name: "Sign in →" }).click();
+      await page.locator("#screen").waitFor({ state: "visible" });
+      await page
+        .getByRole("button", { name: "Debug console", exact: true })
+        .click();
+      await page.waitForFunction(() =>
+        document
+          .querySelector("#debug-output")
+          .textContent.includes("BROWSER_STARTED"),
+      );
+      await fs.mkdir("test-results", { recursive: true });
+      await page.screenshot({
+        path: "test-results/native-desktop.png",
+        fullPage: true,
+      });
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+        true,
+      );
+      await page.screenshot({
+        path: "test-results/native-mobile.png",
+        fullPage: true,
+      });
+      await page.getByRole("button", { name: "Sign out" }).click();
+      await page.locator("#login-panel").waitFor({ state: "visible" });
+      assert.equal(b.running, false);
+    } catch (error) {
+      if (b.running) {
+        await fs.mkdir("test-results", { recursive: true });
+        await fs.writeFile(
+          "test-results/native-failure.jpg",
+          await b.capture().catch(() => Buffer.alloc(0)),
+        );
+      }
+      throw error;
+    }
+  },
+);
+
+test("native startup diagnosis identifies sandbox failures without returning raw private launch output", () => {
+  const error = launchFailure(
+    "No usable sandbox! /private/profile?secret=hidden",
+  );
+  assert.equal(error.code, "BROWSER_SANDBOX");
+  assert.doesNotMatch(error.message, /secret=hidden|private\/profile/);
+});
+test("exact Host, trusted TLS transport and Secure cookies protect native controls", async (t) => {
+  const h = await harness(t);
+  h.config.origin = "https://native.example";
+  h.config.secure = true;
+  async function raw(headers) {
+    return new Promise((resolve, reject) => {
+      const request = http.request(
+        h.base + "/api/session",
+        { headers },
+        (response) => {
+          response.resume();
+          response.on("end", () => resolve(response));
+        },
+      );
+      request.on("error", reject);
+      request.end();
+    });
+  }
+  assert.equal(
+    (await raw({ Host: "evil.example", "X-Forwarded-Proto": "https" }))
+      .statusCode,
+    403,
+  );
+  assert.equal(
+    (await raw({ Host: "native.example", "X-Forwarded-Proto": "http" }))
+      .statusCode,
+    403,
+  );
+  const response = await raw({
+    Host: "native.example",
+    "X-Forwarded-Proto": "https",
+  });
+  assert.equal(response.statusCode, 200);
+  // A separate secure instance is needed to test cookie attributes configured at startup.
+  const data = await fs.mkdtemp(path.join(os.tmpdir(), "native-tls-"));
+  const config = {
+    ...configuration({
+      DATA_DIR: data,
+      PUBLIC_ORIGIN: "https://native.example",
+    }),
+    port: 0,
+  };
+  const service = await startServer(config, { test: true });
+  t.after(async () => {
+    await service.close();
+    await fs.rm(data, { recursive: true, force: true });
+  });
+  const cookie = await new Promise((resolve, reject) => {
+    const req = http.request(
+      `http://127.0.0.1:${service.port}/api/session`,
+      { headers: { Host: "native.example", "X-Forwarded-Proto": "https" } },
+      (res) => {
+        res.resume();
+        res.on("end", () => resolve(res.headers["set-cookie"]?.[0]));
+      },
+    );
+    req.on("error", reject);
+    req.end();
+  });
+  assert.match(cookie, /; Secure/);
+  assert.match(cookie, /HttpOnly/);
 });

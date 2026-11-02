@@ -25,6 +25,8 @@ export function configuration(env = process.env) {
     throw new Error("Public access requires HTTPS");
   return {
     port,
+    chromePath: env.CHROME_PATH || "",
+    autoOpen: env.AUTO_OPEN !== "false",
     origin: origin.origin,
     secure: origin.protocol === "https:",
     data: path.resolve(env.DATA_DIR || "./runtime"),

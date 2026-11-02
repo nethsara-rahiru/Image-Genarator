@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DebugLog } from "./debugLog.js";
 import { actionError } from "./actionErrors.js";
-import { BrowserStartupError } from "./browserErrors.js";
+import { NativeError } from "./native/common.js";
 import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -215,6 +215,7 @@ export async function startServer(config, options = {}) {
       "back",
       "forward",
       "reload",
+      "devtools",
       "click",
       "scroll",
       "text",
@@ -247,7 +248,7 @@ export async function startServer(config, options = {}) {
             "info",
             "browser",
             "ACTION_COMPLETED",
-            "Browser action completed.",
+            "Native input command delivered; website load state is shown in Chrome.",
             { action: actionName, actionId, durationMs: Date.now() - queuedAt },
           );
         return result;
@@ -295,7 +296,7 @@ export async function startServer(config, options = {}) {
       res.json(await browser.state());
     } catch (error) {
       const diagnosed = actionError(error);
-      res.status(error instanceof BrowserStartupError ? 503 : 400).json({
+      res.status(error instanceof NativeError ? 503 : 400).json({
         code: diagnosed.code,
         error: diagnosed.message,
         debugId: error.debugId,
@@ -334,11 +335,10 @@ export async function startServer(config, options = {}) {
       await chain;
       await browser.upload(req.file);
       res.json({ ok: true });
-    } catch {
-      res.status(400).json({
-        error:
-          "Click a file picker in the remote page first, then upload within 60 seconds.",
-      });
+    } catch (error) {
+      const diagnosed = actionError(error);
+      log.write("error", "browser", diagnosed.code, diagnosed.message);
+      res.status(400).json({ code: diagnosed.code, error: diagnosed.message });
     }
   });
   app.get("/api/downloads", auth, async (req, res) =>
@@ -363,7 +363,7 @@ export async function startServer(config, options = {}) {
     }
   });
   app.get("/api/health", auth, (req, res) =>
-    res.json({ ok: true, browser: !!browser.context }),
+    res.json({ ok: true, browser: browser.running }),
   );
   app.use(express.static(publicDir, { index: "index.html", maxAge: 0 }));
   app.use((error, req, res, next) => {
@@ -424,58 +424,58 @@ export async function startServer(config, options = {}) {
     const send = (value) => {
       if (ws.readyState === 1) ws.send(JSON.stringify(value));
     };
-    const timer = setInterval(async () => {
-      if (busy || ws.readyState !== 1 || ws.bufferedAmount > 750000) return;
-      busy = true;
-      try {
-        await new Promise((resolve, reject) =>
-          req.session.reload((e) => (e ? reject(e) : resolve())),
-        );
-        if (
-          !(await authenticated(req)) ||
-          new Date(req.session.cookie.expires) <= new Date()
-        ) {
-          ws.close(4001, "Session expired");
-          return;
-        }
-        const history = log.snapshot(
-          logGeneration === log.generation ? logCursor : undefined,
-        );
-        if (history.entries.length || history.storageError) {
-          send({ type: "logs", ...history });
-          logCursor = history.cursor;
-          logGeneration = history.generation;
-        }
-        const state = await browser.state();
-        const json = JSON.stringify(state);
-        if (json !== sentState) {
-          send({ type: "state", ...state });
-          sentState = json;
-        }
-        if (browser.context && browser.pages.size) {
-          const image = await browser
-            .page()
-            .screenshot({ type: "jpeg", quality: 65, timeout: 3000 });
-          if (ws.readyState === 1) ws.send(image, { binary: true });
-        }
-      } catch (error) {
-        if (!sessions.items.has(req.sessionID)) ws.close(4001, "Session ended");
-        else {
-          const diagnosed = actionError(error);
-          log.write(
-            "warn",
-            "viewer",
-            "FRAME_UNAVAILABLE",
-            `Frame temporarily unavailable. ${diagnosed.code}: ${diagnosed.message}`,
-            {},
-            5000,
+    const timer = setInterval(
+      async () => {
+        if (busy || ws.readyState !== 1 || ws.bufferedAmount > 750000) return;
+        busy = true;
+        try {
+          await new Promise((resolve, reject) =>
+            req.session.reload((e) => (e ? reject(e) : resolve())),
           );
+          if (
+            !(await authenticated(req)) ||
+            new Date(req.session.cookie.expires) <= new Date()
+          ) {
+            ws.close(4001, "Session expired");
+            return;
+          }
+          const history = log.snapshot(
+            logGeneration === log.generation ? logCursor : undefined,
+          );
+          if (history.entries.length || history.storageError) {
+            send({ type: "logs", ...history });
+            logCursor = history.cursor;
+            logGeneration = history.generation;
+          }
+          const image = browser.running ? await browser.capture() : null;
+          const state = await browser.state();
+          const json = JSON.stringify(state);
+          if (json !== sentState) {
+            send({ type: "state", ...state });
+            sentState = json;
+          }
+          if (image && ws.readyState === 1) ws.send(image, { binary: true });
+        } catch (error) {
+          if (!sessions.items.has(req.sessionID))
+            ws.close(4001, "Session ended");
+          else {
+            const diagnosed = actionError(error);
+            log.write(
+              "warn",
+              "viewer",
+              "FRAME_UNAVAILABLE",
+              `Frame temporarily unavailable. ${diagnosed.code}: ${diagnosed.message}`,
+              {},
+              5000,
+            );
+          }
+          // Navigation screenshots can fail transiently; retain the browser/stream.
+        } finally {
+          busy = false;
         }
-        // Navigation screenshots can fail transiently; retain the browser/stream.
-      } finally {
-        busy = false;
-      }
-    }, 180);
+      },
+      browser.platform === "darwin" ? 900 : 300,
+    );
     ws.on("message", (buffer, binary) => {
       if (binary || ++inputs > 40) {
         ws.close(4008, "Input rate exceeded");
@@ -505,7 +505,7 @@ export async function startServer(config, options = {}) {
     });
   });
   const idle = setInterval(() => {
-    if (browser.context && Date.now() - browser.lastUsed > config.idleMs)
+    if (browser.running && Date.now() - browser.lastUsed > config.idleMs)
       action({ type: "stop" }).catch(() => {});
   }, 10000);
   idle.unref();
@@ -517,7 +517,7 @@ export async function startServer(config, options = {}) {
     "info",
     "server",
     "SERVICE_STARTED",
-    "VPS browser service started.",
+    "Local native browser service started.",
   );
   return {
     log,
