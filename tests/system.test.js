@@ -264,6 +264,8 @@ test(
         path: url.pathname,
         q: url.searchParams.get("q"),
         cookie: req.headers.cookie || "",
+        x: Number(url.searchParams.get("x")),
+        y: Number(url.searchParams.get("y")),
       });
       if (url.pathname === "/upload-received") {
         const chunks = [];
@@ -277,7 +279,7 @@ test(
       if (url.pathname === "/upload-page") {
         res.setHeader("Content-Type", "text/html");
         res.end(
-          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})">`,
+          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>onload=()=>{const input=document.querySelector('input');input.focus();const r=input.getBoundingClientRect();fetch('/ready-file?x='+encodeURIComponent(r.x+10+screenX)+'&y='+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));};</script>`,
         );
         return;
       }
@@ -295,7 +297,7 @@ test(
         "native_session=preserved; Max-Age=3600; Path=/",
       );
       res.end(
-        '<!doctype html><title>Native Chrome fixture</title><style>body{font:20px sans-serif;background:#eef4ff;padding:30px}input{padding:12px;font:inherit}</style><h1>Real desktop Chrome</h1><form><input name="q" autofocus><button>Submit</button></form><a href="/file" download>Download original</a>',
+        '<!doctype html><title>Native Chrome fixture</title><style>body{font:20px sans-serif;background:#eef4ff;padding:30px}input{padding:12px;font:inherit}</style><h1>Real desktop Chrome</h1><form><input name="q" autofocus><button>Submit</button></form><a href="/file" download>Download original</a><script>onload=()=>{const input=document.querySelector("input");input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch("/ready?x="+encodeURIComponent(r.x+10+screenX)+"&y="+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});};</script>',
       );
     });
     await new Promise((r) => fixture.listen(0, "127.0.0.1", r));
@@ -313,125 +315,137 @@ test(
     });
     const b = h.service.browser;
     await b.start();
-    await eventually(() => requests.some((r) => r.path === "/"));
-    const capture = await b.capture();
-    assert.equal(jpegDimensions(capture).width, 1280);
-    await b.action({ type: "text", text: "native input checked" });
-    await b.action({ type: "key", key: "Enter" });
-    await eventually(() =>
-      requests.some((r) => r.q === "native input checked"),
-    );
-    await b.action({ type: "navigate", url: base + "/file" });
     try {
-      await eventually(async () => (await b.downloads()).length > 0);
-    } catch (error) {
+      await eventually(() => requests.some((r) => r.path === "/ready"));
+      const capture = await b.capture();
+      assert.equal(jpegDimensions(capture).width, 1280);
+      const ready = requests.find((r) => r.path === "/ready");
+      await b.action({ type: "click", x: ready.x, y: ready.y });
+      await b.action({ type: "text", text: "native input checked" });
+      await b.action({ type: "key", key: "Enter" });
+      await eventually(() =>
+        requests.some((r) => r.q === "native input checked"),
+      );
+      await b.action({ type: "navigate", url: base + "/file" });
+      try {
+        await eventually(async () => (await b.downloads()).length > 0);
+      } catch (error) {
+        await fs.mkdir("test-results", { recursive: true });
+        await fs.writeFile(
+          "test-results/native-failure.jpg",
+          await b.capture(),
+        );
+        console.log("Synthetic fixture requests", requests);
+        console.log(
+          "Synthetic download files",
+          await fs.readdir(b.downloadDir),
+        );
+        throw error;
+      }
+      const file = (await b.downloads())[0];
+      assert.equal(
+        await fs.readFile((await b.download(file.id)).path, "utf8"),
+        "original native download",
+      );
+      await b.action({ type: "navigate", url: base + "/upload-page" });
+      await eventually(() => requests.some((r) => r.path === "/ready-file"));
+      const fileReady = requests.find((r) => r.path === "/ready-file");
+      await b.action({ type: "click", x: fileReady.x, y: fileReady.y });
+      await eventually(() => b.driver.fileDialog());
+      await b.upload({
+        originalname: "reference.txt",
+        buffer: Buffer.from("original native upload"),
+        mimetype: "text/plain",
+      });
+      try {
+        await eventually(() => uploads.includes("original native upload"));
+      } catch (error) {
+        await fs.mkdir("test-results", { recursive: true });
+        await fs.writeFile(
+          "test-results/native-upload-failure.jpg",
+          await b.capture(),
+        );
+        console.log(
+          "Synthetic upload observations",
+          requests,
+          uploads,
+          b.testStderr,
+        );
+        throw error;
+      }
+      const other = new RemoteBrowser(h.config, {
+        test: true,
+        chromePath: process.env.TEST_CHROME,
+      });
+      await assert.rejects(
+        other.start(),
+        (e) => e.code === "BROWSER_PROFILE_BUSY",
+      );
+      await other.stop();
+      assert.equal(
+        JSON.parse(await fs.readFile(path.join(b.data, "browser.json"), "utf8"))
+          .pid,
+        b.child.pid,
+      );
+      await b.stop();
+      const before = requests.length;
+      await b.start();
+      await eventually(() =>
+        requests
+          .slice(before)
+          .some((r) => r.cookie.includes("native_session=preserved")),
+      );
+      const client = await chromium.launch({
+        headless: true,
+        executablePath: process.env.TEST_CHROME,
+        args: ["--no-sandbox"],
+      });
+      t.after(() => client.close());
+      const page = await client.newPage({
+        viewport: { width: 1400, height: 1100 },
+      });
+      await page.goto(h.base);
+      await page.locator("#username").fill("admin");
+      await page.locator("#password").fill(password);
+      await page.getByRole("button", { name: "Sign in →" }).click();
+      await page.locator("#screen").waitFor({ state: "visible" });
+      await page
+        .getByRole("button", { name: "Debug console", exact: true })
+        .click();
+      await page.waitForFunction(() =>
+        document
+          .querySelector("#debug-output")
+          .textContent.includes("BROWSER_STARTED"),
+      );
       await fs.mkdir("test-results", { recursive: true });
-      await fs.writeFile("test-results/native-failure.jpg", await b.capture());
-      console.log("Synthetic fixture requests", requests);
-      console.log("Synthetic download files", await fs.readdir(b.downloadDir));
+      await page.screenshot({
+        path: "test-results/native-desktop.png",
+        fullPage: true,
+      });
+      await page.setViewportSize({ width: 390, height: 844 });
+      assert.equal(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+        true,
+      );
+      await page.screenshot({
+        path: "test-results/native-mobile.png",
+        fullPage: true,
+      });
+      await page.getByRole("button", { name: "Sign out" }).click();
+      await page.locator("#login-panel").waitFor({ state: "visible" });
+      assert.equal(b.running, false);
+    } catch (error) {
+      if (b.running) {
+        await fs.mkdir("test-results", { recursive: true });
+        await fs.writeFile(
+          "test-results/native-failure.jpg",
+          await b.capture().catch(() => Buffer.alloc(0)),
+        );
+      }
       throw error;
     }
-    const file = (await b.downloads())[0];
-    assert.equal(
-      await fs.readFile((await b.download(file.id)).path, "utf8"),
-      "original native download",
-    );
-    await b.action({ type: "navigate", url: base + "/upload-page" });
-    await eventually(async () =>
-      (
-        await run("xdotool", ["getactivewindow", "getwindowname"], {
-          env: b.driver.env,
-        })
-      )
-        .toString()
-        .includes("Native upload fixture"),
-    );
-    await b.action({ type: "key", key: "Space" });
-    await eventually(() => b.driver.fileDialog());
-    await b.upload({
-      originalname: "reference.txt",
-      buffer: Buffer.from("original native upload"),
-      mimetype: "text/plain",
-    });
-    try {
-      await eventually(() => uploads.includes("original native upload"));
-    } catch (error) {
-      await fs.mkdir("test-results", { recursive: true });
-      await fs.writeFile(
-        "test-results/native-upload-failure.jpg",
-        await b.capture(),
-      );
-      console.log(
-        "Synthetic upload observations",
-        requests,
-        uploads,
-        b.testStderr,
-      );
-      throw error;
-    }
-    const other = new RemoteBrowser(h.config, {
-      test: true,
-      chromePath: process.env.TEST_CHROME,
-    });
-    await assert.rejects(
-      other.start(),
-      (e) => e.code === "BROWSER_PROFILE_BUSY",
-    );
-    await other.stop();
-    assert.equal(
-      JSON.parse(await fs.readFile(path.join(b.data, "browser.json"), "utf8"))
-        .pid,
-      b.child.pid,
-    );
-    await b.stop();
-    const before = requests.length;
-    await b.start();
-    await eventually(() =>
-      requests
-        .slice(before)
-        .some((r) => r.cookie.includes("native_session=preserved")),
-    );
-    const client = await chromium.launch({
-      headless: true,
-      executablePath: process.env.TEST_CHROME,
-      args: ["--no-sandbox"],
-    });
-    t.after(() => client.close());
-    const page = await client.newPage({
-      viewport: { width: 1400, height: 1100 },
-    });
-    await page.goto(h.base);
-    await page.locator("#username").fill("admin");
-    await page.locator("#password").fill(password);
-    await page.getByRole("button", { name: "Sign in →" }).click();
-    await page.locator("#screen").waitFor({ state: "visible" });
-    await page
-      .getByRole("button", { name: "Debug console", exact: true })
-      .click();
-    await page.waitForFunction(() =>
-      document
-        .querySelector("#debug-output")
-        .textContent.includes("BROWSER_STARTED"),
-    );
-    await fs.mkdir("test-results", { recursive: true });
-    await page.screenshot({
-      path: "test-results/native-desktop.png",
-      fullPage: true,
-    });
-    await page.setViewportSize({ width: 390, height: 844 });
-    assert.equal(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-      true,
-    );
-    await page.screenshot({
-      path: "test-results/native-mobile.png",
-      fullPage: true,
-    });
-    await page.getByRole("button", { name: "Sign out" }).click();
-    await page.locator("#login-panel").waitFor({ state: "visible" });
-    assert.equal(b.running, false);
   },
 );
 
