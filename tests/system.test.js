@@ -279,7 +279,7 @@ test(
       if (url.pathname === "/upload-page") {
         res.setHeader("Content-Type", "text/html");
         res.end(
-          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>onload=()=>{const input=document.querySelector('input');input.focus();const r=input.getBoundingClientRect();fetch('/ready-file?x='+encodeURIComponent(r.x+10+screenX)+'&y='+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));};</script>`,
+          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||document.readyState!=='complete')return;reported=true;const input=document.querySelector('input');input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch('/ready-file?x='+encodeURIComponent(r.x+10+screenX)+'&y='+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});}addEventListener('load',ready);document.addEventListener('visibilitychange',ready);document.addEventListener('prerenderingchange',ready);ready();</script>`,
         );
         return;
       }
@@ -297,7 +297,7 @@ test(
         "native_session=preserved; Max-Age=3600; Path=/",
       );
       res.end(
-        '<!doctype html><title>Native Chrome fixture</title><style>body{font:20px sans-serif;background:#eef4ff;padding:30px}input{padding:12px;font:inherit}</style><h1>Real desktop Chrome</h1><form><input name="q" autofocus><button>Submit</button></form><a href="/file" download>Download original</a><script>onload=()=>{const input=document.querySelector("input");input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch("/ready?x="+encodeURIComponent(r.x+10+screenX)+"&y="+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});};</script>',
+        '<!doctype html><title>Native Chrome fixture</title><style>body{font:20px sans-serif;background:#eef4ff;padding:30px}input{padding:12px;font:inherit}</style><h1>Real desktop Chrome</h1><form><input name="q" autofocus><button>Submit</button></form><a href="/file" download>Download original</a><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||document.readyState!=="complete")return;reported=true;const input=document.querySelector("input");input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch("/ready?x="+encodeURIComponent(r.x+10+screenX)+"&y="+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});}addEventListener("load",ready);document.addEventListener("visibilitychange",ready);document.addEventListener("prerenderingchange",ready);ready();</script>',
       );
     });
     await new Promise((r) => fixture.listen(0, "127.0.0.1", r));
