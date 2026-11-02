@@ -1,45 +1,84 @@
-import { chromium } from "playwright";
-import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import fs from "node:fs/promises";
+import { RemoteBrowser } from "../src/browser.js";
 import { configuration } from "../src/config.js";
-import { browserStartupError } from "../src/browserErrors.js";
-process.umask(0o077);
+import { chromeExecutable, findCommand } from "../src/native/common.js";
+import { readAdmin } from "../src/admin.js";
 const config = configuration();
 console.log(
-  `Node ${process.versions.node}; ${process.platform} ${os.release()}; UID ${process.getuid?.() ?? "unavailable"}`,
+  `OS: ${process.platform}; architecture: ${process.arch}; Node: ${process.versions.node}`,
 );
 console.log(
-  "Checking Chromium without opening any website or using your saved profile.",
+  "Native desktop mode. No headless/browser-automation connection is used.",
 );
-let scratch, context;
+let failed = false;
 try {
-  if (process.getuid?.() === 0)
-    throw new Error("Run as a non-root service user, not sudo/root");
-  await fs.access(chromium.executablePath());
-  console.log("Chromium executable exists.");
-  await fs.mkdir(config.data, { recursive: true, mode: 0o700 });
-  scratch = await fs.mkdtemp(path.join(config.data, "doctor-"));
-  context = await chromium.launchPersistentContext(scratch, {
-    headless: true,
-    chromiumSandbox: true,
-    timeout: 20000,
-  });
-  console.log("PASS: isolated Chromium profile starts with sandbox enabled.");
-  console.log(
-    "If the app still fails, check PM2 runs as this same user, DATA_DIR/profile permissions and duplicate app instances.",
-  );
+  await chromeExecutable(process.platform, config.chromePath);
+  console.log("PASS: installed desktop Chrome/Edge executable found.");
 } catch (error) {
-  const diagnosis = browserStartupError(error);
-  console.error(`${diagnosis.code}: ${diagnosis.message}`);
-  // Fresh-profile startup only: no visited URLs, website credentials, cookies or .env values.
-  if (error.code === "ENOENT")
-    console.error(
-      "Chromium executable is missing. Run npx playwright install --with-deps chromium.",
+  console.error(error.code + ": " + error.message);
+  failed = true;
+}
+if (process.platform === "linux")
+  for (const command of [
+    "Xvfb",
+    "xauth",
+    "xdotool",
+    "openbox",
+    "import",
+    "xprop",
+    "dbus-daemon",
+  ]) {
+    if (await findCommand(command)) console.log("PASS: " + command);
+    else {
+      console.error("MISSING: " + command);
+      failed = true;
+    }
+  }
+if (process.getuid?.() === 0) {
+  console.error("Run as a normal non-root OS user.");
+  failed = true;
+}
+if (process.platform === "win32")
+  console.log(
+    "Check that the PC is unlocked, the managed Chrome window is visible, and PowerShell permits the trusted bundled helper. No desktop screenshot is taken by this diagnostic.",
+  );
+if (process.platform === "darwin")
+  console.log(
+    "Check Screen Recording, Accessibility and Automation permissions for the terminal/Node. Grant permissions locally; the app cannot bypass them. No desktop screenshot is taken by this diagnostic.",
+  );
+console.log(
+  (await readAdmin(config.data))
+    ? "Administrator exists."
+    : "First run: node app.js in an interactive terminal or npm run setup-admin.",
+);
+if (failed) process.exitCode = 1;
+
+if (!failed && process.argv.includes("--launch")) {
+  const data = await fs.mkdtemp(path.join(os.tmpdir(), "native-doctor-"));
+  const browser = new RemoteBrowser(
+    { ...config, data },
+    {
+      homepage: "about:blank",
+      proxyOptions: {
+        validate: async () => {
+          throw new Error("Diagnostic network disabled");
+        },
+      },
+    },
+  );
+  try {
+    await browser.start();
+    await browser.capture();
+    console.log(
+      "PASS: fresh native window starts and window capture succeeds. No website or saved profile was opened.",
     );
-  else console.error(String(error.message).slice(0, 8000));
-  process.exitCode = 1;
-} finally {
-  await context?.close().catch(() => {});
-  if (scratch) await fs.rm(scratch, { recursive: true, force: true });
+  } catch (error) {
+    console.error(error.code || "NATIVE_FAILED", error.message);
+    process.exitCode = 1;
+  } finally {
+    await browser.stop();
+    await fs.rm(data, { recursive: true, force: true });
+  }
 }

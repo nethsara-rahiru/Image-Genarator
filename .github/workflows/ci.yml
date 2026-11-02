@@ -1,4 +1,4 @@
-name: Remote browser CI
+name: Local native browser CI
 on:
   push:
   pull_request:
@@ -6,7 +6,11 @@ permissions:
   contents: read
 jobs:
   test:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -15,14 +19,22 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - run: npm run lint
-      - run: bash -n scripts/install-ubuntu.sh
       - run: npm audit --omit=dev --audit-level=high
-      - run: npm test
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth xdotool openbox imagemagick x11-utils dbus-daemon
+      - if: runner.os == 'Linux'
+        run: bash -n scripts/install-ubuntu.sh
+      - if: runner.os == 'Linux'
+        run: npm test
+        env:
+          RUN_NATIVE_TESTS: "1"
+          TEST_CHROME: /usr/bin/google-chrome
+      - if: runner.os != 'Linux'
+        run: npm test
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: remote-browser-fixture-previews
+          name: native-browser-fixture-previews-${{ matrix.os }}
           path: test-results/
           if-no-files-found: ignore

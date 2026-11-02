@@ -1,3 +1,6 @@
+import { spawn } from "node:child_process";
+import { interactiveAdmin } from "./scripts/admin.js";
+import { readAdmin } from "./src/admin.js";
 import { existsSync } from "node:fs";
 import { configuration } from "./src/config.js";
 import { startServer } from "./src/server.js";
@@ -5,10 +8,34 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 if (Number(process.versions.node.split(".")[0]) < 22)
   throw new Error("Node.js 22+ required");
 process.umask(0o077);
-const service = await startServer(configuration());
-console.log(`Private VPS Browser listening on 127.0.0.1:${service.port}`);
+const config = configuration();
+console.log(
+  `Detected ${process.platform} (${process.arch}); native desktop browser mode.`,
+);
+if (!(await readAdmin(config.data)) && process.stdin.isTTY) {
+  console.log("First run: create your local administrator.");
+  await interactiveAdmin(config);
+  if (!(await readAdmin(config.data))) process.exit(1);
+}
+const service = await startServer(config);
+console.log(`Local Native Browser listening on 127.0.0.1:${service.port}`);
 console.log("Access:", service.config.origin);
 if (!(await service.admin())) console.log("First run: npm run setup-admin");
+if (config.autoOpen) {
+  const command =
+    process.platform === "win32"
+      ? "rundll32.exe"
+      : process.platform === "darwin"
+        ? "open"
+        : "xdg-open";
+  const args =
+    process.platform === "win32"
+      ? ["url.dll,FileProtocolHandler", config.origin]
+      : [config.origin];
+  const opener = spawn(command, args, { stdio: "ignore", windowsHide: true });
+  opener.on("error", () => {});
+  opener.unref();
+}
 let stopping = false;
 for (const signal of ["SIGINT", "SIGTERM"])
   process.on(signal, async () => {

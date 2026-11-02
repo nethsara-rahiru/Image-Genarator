@@ -1,31 +1,44 @@
-# Deployment and operations
+# Local PC setup and remote access
 
-## Replace the old application
+## Local startup
 
-This rebuild removes the previous Gemini platform source. It preserves Git history and does not delete Mongo Atlas data or runtime profiles. It uses a **new** administrator in `DATA_DIR/admin.json`; provision it with `npm run setup-admin`. Existing Atlas credentials are not used. You can retain old runtime data in a private offline backup. Do not publish it.
+Install Node.js 22+ and desktop Google Chrome (Edge fallback supported). Clone/download the reviewed main source. In a terminal in the project directory: npm ci, then node app.js. Startup detects the OS and prompts to create the admin if no identity exists and stdin is interactive. It opens the configured viewer URL. Later only node app.js is needed. Explicit CLI bootstrap/reset remain available. For service/noninteractive startup provision the administrator first.
 
-With the former application idle, stop its services before starting this one:
+Do not reuse the former VPS .env blindly. For local access the defaults need no .env: PORT=3030, PUBLIC_ORIGIN=http://127.0.0.1:3030, DATA_DIR=./runtime. Optional CHROME_PATH selects an installed executable; AUTO_OPEN=false disables opening a viewer. A stable DATA_DIR and project working directory are important for profile/admin continuity.
+
+Windows automatically selects installed Chrome or Edge in common Program Files/LocalAppData paths. Use an unlocked interactive user session. The bundled PowerShell script must be permitted by your local/organization policy; verify the source before approving/unblocking it. Do not run as administrator or bypass an organization policy. Capture can depend on Windows/DWM/GPU behavior and requires target validation.
+
+macOS automatically selects Chrome/Edge under /Applications. For another install set CHROME_PATH. Grant terminal/Node Screen Recording, Accessibility and Automation permissions locally. Keep the window visible/unminimized. These prompts cannot be auto-approved. System Events/Unicode input and GPU/capture compatibility need real-device acceptance.
+
+Debian/Ubuntu: npm run setup-host installs missing Xvfb/xauth/xdotool/Openbox/ImageMagick/xprop prerequisites through your terminal's sudo prompt. Install desktop Chrome separately if missing. Other Linux distributions show the required packages. A convenience scripts/install-ubuntu.sh performs npm ci and package installation. Production must run as non-root with sandbox/user-namespace support. An Ubuntu AppArmor exception may still be needed for an explicitly selected downloaded Chrome build; official packaged Chrome normally provides its supported sandbox integration. Never disable sandboxing globally to make the app run.
+
+## From a second device using SSH
+
+If your PC already has an SSH server configured, run on the viewing device:
 
 ```bash
-cd ~/Image-Genarator
-pm2 stop gemini-api gemini-worker
+ssh -N -L 3030:127.0.0.1:3030 your-user@your-pc
 ```
 
-Fetch and check out the reviewed rebuild branch/commit (or main after the rebuild PR is merged). Do not force-reset a checkout containing local changes. `npm ci`; `npx playwright install --with-deps chromium`. Keep or replace your protected .env with the settings in `.env.example`. Old Atlas/Groq variables are ignored, but should be removed from the new .env after preserving any needed credentials securely. This app doesn't modify Atlas.
+Then browse http://127.0.0.1:3030 on that device. The host must keep PUBLIC_ORIGIN=http://127.0.0.1:3030. This works with Windows OpenSSH, macOS Remote Login or Linux SSH after the OS user deliberately enables it. Do not open Node or native-control ports publicly.
 
-Set `PORT=3030`, `DATA_DIR=./runtime`, and choose PUBLIC_ORIGIN to match the address actually used in your browser. Paths relative to your project directory must remain stable across PM2 updates.
+## Optional: keep the VPS HTTPS address as a gateway
 
-## Secure public IP access using existing Caddy
-
-For this VPS, set:
+Chrome and the Node app run on the local PC; only the encrypted viewer is forwarded through the VPS. On the PC configure:
 
 ```dotenv
 PORT=3030
 PUBLIC_ORIGIN=https://162.35.181.135:3443
-DATA_DIR=./runtime
+AUTO_OPEN=false
 ```
 
-Your existing Caddy configuration can remain:
+Start this reverse tunnel from the PC in a separate terminal:
+
+```bash
+ssh -N -o ExitOnForwardFailure=yes -o ServerAliveInterval=30 -R 127.0.0.1:3031:127.0.0.1:3030 dev@162.35.181.135
+```
+
+On the VPS, stop the previous vps-browser PM2 app to avoid using the old host, and change Caddy's upstream to 127.0.0.1:3031:
 
 ```caddyfile
 {
@@ -33,46 +46,28 @@ Your existing Caddy configuration can remain:
 }
 162.35.181.135:3443 {
     tls internal
-    reverse_proxy 127.0.0.1:3030 {
+    reverse_proxy 127.0.0.1:3031 {
         flush_interval -1
     }
 }
 ```
 
-Caddy supports the viewer's WebSocket upgrade. Node trusts forwarded transport/IP headers only from the loopback proxy. Do not place untrusted proxies directly on loopback or change the binding to a public interface. For multiple proxies, review the trust boundary first. The app checks the Host, Origin and encrypted transport; HTTPS sessions get Secure cookies.
+Validate/reload Caddy after reviewing the change. Start node app.js on the PC and visit the trusted HTTPS VPS address. Both the PC app and SSH tunnel must remain running and the PC awake. Only loopback reverse forwarding is used; don't enable public GatewayPorts. SSH credentials/keys stay in the SSH client and are never collected by this application. A private Caddy CA must be verified/trusted on the viewing device; never copy its private key or disable TLS verification. This gateway workflow has not been exercised against the user's VPS.
 
-A private CA certificate does not automatically become trusted on your PC. Copy only `/var/lib/caddy/.local/share/caddy/pki/authorities/local/root.crt` over authenticated SSH, verify its fingerprint and trust that public root on your device. Never copy the CA private key. Alternatively use a domain and a publicly trusted certificate. Keep TLS verification enabled. Only open 3443/tcp (and your SSH port) in both provider firewall and UFW; do not open 3030 or any browser/VNC/debugging port.
+## Updates and optional background use
 
-Run `sudo caddy validate --config /etc/caddy/Caddyfile`, restart Caddy, and verify it is active. Then `npm run setup-admin` and `node app.js` as dev. Log into the viewer and test a public website. Stop the foreground app with Ctrl+C before starting PM2.
+Close the managed browser and stop the app before updating: fetch main, git pull --ff-only, npm ci, node app.js. Do not force-reset unrelated local changes or overwrite runtime/.env. The default is interactive local use. Optional PM2 configuration remains for a logged-in user, but a background/system service cannot gain Windows/macOS desktop capture permissions or an interactive desktop automatically. Prefer a terminal or per-user login task on those systems. Keep one instance per DATA_DIR.
 
-## PM2 and startup
+## Backup, restore and troubleshooting
 
-```bash
-pm2 start ecosystem.config.cjs
-pm2 save
-pm2 startup
-```
+Stop the app and managed Chrome before privately archiving DATA_DIR and .env. Profiles contain authenticated sessions; encrypt backups and restrict access. Restore ownership/permissions/Windows ACLs before startup. The old Playwright profile remains untouched under runtime/profile; new Chrome uses runtime/native-profile and does not import it. A new PC still needs a Chrome install and its own OS permissions. Backups and real Google session restoration remain unverified.
 
-Run the command printed by `pm2 startup`. Once the replacement is working, optionally remove the stopped old entries with `pm2 delete gemini-api gemini-worker` and `pm2 save`. Keep one `vps-browser` instance. Never start two processes against one persistent profile. No worker or Mongo service is needed.
-
-Updates: with no active transfer, `pm2 stop vps-browser`, back up runtime and .env privately, fetch/check out the reviewed commit, `npm ci`, `npx playwright install --with-deps chromium`, `pm2 restart ecosystem.config.cjs --update-env`, `pm2 save`. Recheck login/browser, WebSocket and a small download. PM2's max-memory restart is a recovery guard, not a guaranteed resource quota for Chromium children. Use host disk/memory quotas for hard limits. Allow at least 2 GB RAM for modest browsing and monitor actual resource use. Large websites and many tabs consume substantially more.
-
-## Backup and restore
-
-Stop `vps-browser` before backing up. Archive `.env` and the entire runtime directory with mode 600 to private storage outside the web root. Browser profiles contain live website sessions; encrypt backups and restrict access. Restore only with the service stopped, owned by the service user; directories mode 700 and files private. Restore a compatible reviewed application and browser version, then restart. Some websites may require fresh authentication. Backups and restoration have not been validated on the user's VPS.
-
-## Troubleshooting
-
-- **Invalid credentials:** this is the new local-file admin, not the former Atlas identity. Run `npm run reset-admin` in the project directory using the same DATA_DIR as PM2. If no admin exists, use setup-admin. Usernames/passwords are case-sensitive.
-- **Login rate limited:** wait 15 minutes. A forgotten password can be reset using the CLI; restarting clears in-memory sessions and rate counters.
-- **Unexpected host / HTTPS required:** correct PUBLIC_ORIGIN and Caddy's forwarded protocol. Keep the original host header through the proxy.
-- **502:** check `pm2 logs vps-browser --lines 50`, `pm2 status`, `ss -ltnp` and the proxy's port. Do not share credentials or page content in logs/screenshots.
-- **Browser cannot start:** first run `npm run doctor` from this directory as the same PM2 service user. This checks an isolated profile without visiting websites or exposing .env values. The viewer now shows a classified startup reason. install Chromium and system dependencies as the service user; verify non-root execution and sandbox/user-namespace support. Do not add `--no-sandbox` to production. Ubuntu 26.04 dependency compatibility must be tested on the target VPS. Ubuntu 24.04 LTS is a conservative deployment target.
-- **Viewer reconnecting:** verify Caddy WebSocket support, session expiry and browser network connection; the viewer reconnects without starting a second Chromium profile.
-- **Website fails / private host:** private, local and cloud-metadata network destinations are intentionally blocked. This viewer is for public web browsing.
-- **Website refuses login:** stop and follow the site's supported security flow. Remote browsers aren't guaranteed to be accepted.
-- **Transfer failure:** check permissions and disk space; uploads are limited to 20 MB, saved downloads to 100 MB and 100 files. Chromium may use temporary disk space before a completed download is inspected; apply OS disk quotas for hard limits.
-
-## Inspecting failures
-
-After deploying this update and restarting vps-browser, refresh the viewer and open Debug console. Reproduce the action once, filter Errors and match the displayed action ID. Export logs if needed; they include safe cause codes and exclude typed text/URLs. Terminal alternative: pm2 logs vps-browser --lines 100. Browser startup errors still need npm run doctor if the cause is not known. The previously reported AppArmor failure is a target VPS configuration issue; diagnostics do not disable sandboxing. Google searches use the VPS network and may fail or be restricted; live Google availability is not claimed.
+- Wrong admin: npm run reset-admin in this project using the same DATA_DIR; sessions are revoked.
+- Missing Chrome: install desktop Chrome/Edge or set CHROME_PATH. No production Playwright browser install is required.
+- Missing Linux tools: npm run setup-host; inspect terminal errors if an administrator is needed.
+- Capture/input failure: npm run doctor, then Debug console. Unlock the PC, restore the Chrome window and grant OS permissions locally. There is no full-screen fallback.
+- Orphan/profile busy: close the previous dedicated Chrome window/process, not your unrelated personal browser. The private native/browser.json identifies the previous managed PID. Do not delete live Chromium/lockfile locks or force-open a profile already in use. A crashed host may require closing that recorded Chrome process before restart.
+- Upload: click the website's native file picker first, then the viewer's Upload file. An unsupported native chooser is rejected rather than typing a path into the website. Try manual interaction with the chooser inside the stream.
+- Download: inspect Chrome's own download UI for security prompts. Hidden/incomplete/>100 MB files are not listed. Use host disk quotas for hard limits.
+- Remote connection: check the configured PUBLIC_ORIGIN, tunnel, TLS trust and WebSocket proxy. The app always binds to localhost.
+- Google restriction: use the site's supported verification flow. Native/local execution improves some signals; it is not a guarantee or a bypass.

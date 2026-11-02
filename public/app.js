@@ -151,6 +151,7 @@ function render(state) {
   $("stop").disabled = !state.running;
   for (const id of [
     "new-tab",
+    "close-tab",
     "address",
     "go",
     "back",
@@ -158,40 +159,24 @@ function render(state) {
     "reload",
     "paste",
     "google",
+    "chrome-console",
   ])
     $(id).disabled = !state.running;
-  $("upload").disabled = !state.uploadReady;
-  $("screen").hidden = !state.running || !state.tabs.length;
-  $("empty").hidden = state.running && !!state.tabs.length;
+  $("upload").disabled = !state.running;
+  const screen = $("screen");
+  if (screen.width !== state.width || screen.height !== state.height) {
+    screen.width = state.width;
+    screen.height = state.height;
+  }
+  screen.hidden = !state.running || !state.frameReady;
+  $("empty").hidden = state.running && state.frameReady;
   $("browser-status").textContent =
     state.message ||
     (state.running
-      ? "Browser running · 1280 × 800"
-      : "Browser stopped · session saved");
-  if (document.activeElement !== $("address"))
-    $("address").value =
-      state.tabs
-        .find((t) => t.id === state.activeId)
-        ?.url.replace(/^about:blank$/, "") || "";
-  $("tabs").replaceChildren();
-  for (const tab of state.tabs) {
-    const item = document.createElement("div");
-    item.className = `tab${tab.id === state.activeId ? " active" : ""}`;
-    const title = document.createElement("button");
-    title.className = "title";
-    title.textContent = tab.title || "New tab";
-    title.title = tab.url;
-    title.setAttribute("role", "tab");
-    title.setAttribute("aria-selected", String(tab.id === state.activeId));
-    title.onclick = () => send({ type: "selectTab", id: tab.id });
-    const close = document.createElement("button");
-    close.textContent = "×";
-    close.className = "close";
-    close.setAttribute("aria-label", `Close ${tab.title || "tab"}`);
-    close.onclick = () => send({ type: "closeTab", id: tab.id });
-    item.append(title, close);
-    $("tabs").append(item);
-  }
+      ? `Desktop Chrome · ${state.width} × ${state.height}`
+      : "Browser stopped · local profile saved");
+  $("tabs").textContent =
+    `Native Chrome · ${state.platform || "OS detected automatically"} · tabs appear inside the display`;
 }
 $("start").onclick = async () => {
   $("start").disabled = true;
@@ -213,6 +198,8 @@ $("stop").onclick = () => {
     send({ type: "stop" });
 };
 $("new-tab").onclick = () => send({ type: "newTab" });
+$("close-tab").onclick = () => send({ type: "closeTab" });
+$("chrome-console").onclick = () => send({ type: "devtools" });
 $("google").onclick = () => {
   report("");
   send({ type: "navigate", url: "https://www.google.com/" });
@@ -233,8 +220,8 @@ canvas.onclick = (e) => {
   canvas.focus();
   send({
     type: "click",
-    x: ((e.clientX - r.left) * 1280) / r.width,
-    y: ((e.clientY - r.top) * 800) / r.height,
+    x: ((e.clientX - r.left) * canvas.width) / r.width,
+    y: ((e.clientY - r.top) * canvas.height) / r.height,
     double: e.detail === 2,
   });
 };
@@ -244,8 +231,8 @@ canvas.oncontextmenu = (e) => {
   send({
     type: "click",
     button: "right",
-    x: ((e.clientX - r.left) * 1280) / r.width,
-    y: ((e.clientY - r.top) * 800) / r.height,
+    x: ((e.clientX - r.left) * canvas.width) / r.width,
+    y: ((e.clientY - r.top) * canvas.height) / r.height,
   });
 };
 let wheelTimer = null,
@@ -301,7 +288,8 @@ canvas.onkeydown = (e) => {
   ) {
     e.preventDefault();
     const mods = [];
-    if (e.ctrlKey || e.metaKey) mods.push("Control");
+    if (e.ctrlKey) mods.push("Control");
+    if (e.metaKey) mods.push("Meta");
     if (e.altKey) mods.push("Alt");
     if (e.shiftKey) mods.push("Shift");
     send({ type: "key", key: [...mods, e.key].join("+") });
@@ -366,7 +354,7 @@ async function downloads() {
       const remove = document.createElement("button");
       remove.textContent = "Delete";
       remove.onclick = async () => {
-        if (confirm(`Delete ${file.name} from the VPS?`)) {
+        if (confirm(`Delete ${file.name} from this PC?`)) {
           try {
             await api(`/api/downloads/${file.id}`, "DELETE");
             await downloads();

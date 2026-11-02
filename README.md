@@ -1,82 +1,57 @@
-# Private VPS Browser
+# Local Native Browser
 
-A private browser running on your VPS, controlled from your own web browser. Includes password-protected access, persistent website sessions, tabs, navigation, mouse/keyboard control, text paste, file uploads and original downloads. Vanilla HTML/CSS/JavaScript viewer; Node.js 22+, Express and Playwright Chromium on the server. No MongoDB, Groq, Redis, Docker or local extension required.
+Run a regular desktop Chrome/Edge window on your own PC and control it through an authenticated browser viewer. Node automatically detects Windows, macOS or Linux. Includes Google search, native browser tabs/DevTools, keyboard/mouse/paste controls, file transfers and private debug logs.
 
-This is a full replacement for the earlier Gemini automation platform. It does not generate images or run background AI jobs. The old source remains in Git history. Existing MongoDB administrator credentials do not carry over; create the new administrator once.
+Production does **not** use Playwright, headless Chromium, CDP or a browser-automation extension. Windows uses a bundled PowerShell/C# window-only helper. macOS uses built-in JXA and window-only screen capture. Linux runs installed Chrome on a private Xvfb desktop with OS input/capture. Google sees the host PC's outbound network connection. This should improve compatibility over a headless VPS browser, but **does not guarantee Google sign-in**. Google may still request verification or reject access. No security-check bypass or cookie import is implemented.
 
-## Install on the VPS
+## First run
 
-Run as a dedicated **non-root** user (your `dev` user is suitable). Use a supported Ubuntu release; CI validates the dependency installer on GitHub Ubuntu, not your actual VPS.
+Install **Node.js 22+** and ordinary desktop **Google Chrome** (Edge is detected as a fallback). Download/clone this repository into a permanent folder, then open a terminal there:
 
 ```bash
-cd ~/Image-Genarator
 npm ci
-npx playwright install --with-deps chromium
-cp .env.example .env
-chmod 600 .env
-npm run setup-admin
 node app.js
 ```
 
-`node app.js` loads `.env` automatically. Chromium needs its one-time installation above. An alternative dependency installer is `bash scripts/install-ubuntu.sh`. Google credentials are entered only into the remote website, never the app's administrator form.
+The app detects your OS, prompts for a local administrator on first interactive startup, and opens `http://127.0.0.1:3030`. Password entry is hidden and confirmed. For subsequent runs: **`node app.js`**. No .env is required for local defaults, and no MongoDB, VPS, Docker or local extension is required.
 
-## Open it securely
+Click **Start browser**. Sign into Google directly in the dedicated Chrome window, including normal verification. Credentials/cookies stay on this PC. A new dedicated profile is used; it does not import your personal Chrome profile or earlier Playwright sessions.
 
-Default: the service binds to `127.0.0.1:3030`. From **your PC**, open an SSH tunnel:
+### OS setup and permissions
 
-```bash
-ssh -N -L 3030:127.0.0.1:3030 dev@162.35.181.135
-```
+- **Windows 10/11:** use an unlocked desktop with the managed Chrome window not minimized. A bundled PowerShell helper captures only that process's window using PrintWindow. Remote input focuses it and can move your mouse; use a separate OS account for uninterrupted work/isolation. PowerShell or enterprise application-control policy may require local approval for the trusted script. Do not disable organizational controls. GPU/window-capture compatibility still needs real-device validation.
+- **macOS:** allow the terminal/Node the requested **Screen Recording, Accessibility and Automation** permissions in System Settings. Keep the managed window unminimized. These are OS consent prompts and cannot be silently granted. Capture is limited to a window owned by the managed Chrome PID; a very short-lived private frame file is deleted after capture. Real-device permission/capture/input validation is required.
+- **Linux:** run `npm run setup-host` once to detect/install Xvfb, xauth, xdotool, Openbox, ImageMagick, xprop and D-Bus on Debian/Ubuntu (sudo may ask in your terminal). Install desktop Chrome if missing. Other distributions show the package names for their package manager. Chrome runs on an authenticated private display, not your working desktop. X11 TCP is disabled; no VNC/debug port is exposed. Run the app as a non-root user with Chromium sandbox support. Host AppArmor restrictions may still require configuration.
 
-Leave the SSH terminal open. On your PC visit **http://127.0.0.1:3030**. The public part of this connection is encrypted by SSH. Keep `PUBLIC_ORIGIN=http://127.0.0.1:3030` in `.env` for this method.
+You don't need to select an OS. If Chrome is installed somewhere unusual, set `CHROME_PATH` in .env. `npm run doctor` checks executable/helper availability without opening your personal profile or taking a screenshot. `npm run doctor -- --launch` additionally tests a fresh blank native window and capture, discards its frame, and removes its temporary profile. `AUTO_OPEN=false` disables opening the viewer automatically.
 
-For public IP access at **https://162.35.181.135:3443**, use your existing Caddy TLS proxy and set `PUBLIC_ORIGIN=https://162.35.181.135:3443`. See [deployment](docs/deployment.md). Never expose the Node port or viewer through public plaintext HTTP. A private Caddy CA must be trusted on your own device; don't enter credentials through a certificate warning.
+## Browser controls
 
-## Use the browser
+The actual Chrome tab strip, address bar, menus and website appear inside the streamed window. Use those directly, or the viewer's Google/search, Back/Forward, Reload, New tab and Close tab controls. The viewer address field opens a URL or search; it is not an extracted live URL from Chrome. **Chrome console** toggles native Chrome DevTools; **Debug console** shows the app's operational logs. Command completion means OS input was delivered, not that a website finished loading.
 
-1. Sign in using the administrator created by `npm run setup-admin`.
-2. Click **Start browser**, enter a public website address or Google search terms and press Go. The **Google** shortcut opens its homepage.
-3. Click the remote screen, then type, scroll or use supported keyboard shortcuts. **Type / paste text** also works on mobile.
-4. Use the tab strip to switch/close tabs; ＋ opens another (maximum eight).
-5. To upload: click the website's file picker in the remote screen, then click the viewer's **Upload file** button (one file, up to 20 MB).
-6. Click a website's download link. Open **Downloads → Save to device** to retrieve the original. Completed files up to 100 MB are retained, newest 100. Delete removes the server copy.
-7. **Stop** or **Sign out** closes tabs and saves the profile. Start again and navigate to the site to reuse sessions where allowed. Viewer disconnection does not immediately close Chromium; inactivity stops it after 30 minutes by default.
+Click inside the stream before typing. **Type / paste text** works with mobile and Unicode; some macOS input methods need live acceptance testing. Remote input can steal focus from other work on Windows/macOS. This product shares a dedicated browser window, not your whole host desktop, but an authenticated operator has the normal browser/file-picker privileges of the host OS account. Use a dedicated account if you need stronger isolation.
 
-Google and other sites may reject a VPS/browser sign-in. This project does not bypass MFA, captchas, security restrictions or account blocks. Audio/video streaming, microphone/camera, drag-and-drop, browser extensions, arbitrary native dialogs and full desktop access are not provided. The viewer streams images, so website accessibility is limited. See [security and limitations](docs/security.md).
+To upload: open a website's native file picker, then click the viewer's **Upload file** and choose one file up to 20 MB. The helper requires a native file dialog; otherwise it rejects the operation. To download: use the website normally, then **Downloads → Save to device**. Files go into this app's private downloads folder, not your general Downloads. Only completed regular files up to 100 MB are listed; temporary/hidden files and symlinks are excluded. The newest 100 listed files are kept. Native dialogs/security warnings may require manual interaction. Larger/temporary downloads can still consume disk; use OS quotas for hard limits.
 
-## Debug console
+Keep the PC awake/unlocked, the app running, and the managed Chrome window available. Stop/Sign out closes the managed browser and retains its profile. An eight-hour app session is the default. Inactivity stops the managed browser after 30 minutes by default; local manual typing isn't tracked by the app's idle clock.
 
-Click **Debug console** in the viewer for live diagnostics, with level/source/text filters, pause/resume, copy, JSON export and confirmed history clearing. Errors show an action ID that matches the log entry, with timing and specific DNS/TLS/connection/timeout/profile/sandbox error codes. Logs include lifecycle events, HTTP failures, failed requests and summarized website JavaScript/console warnings. They omit typed text, keystrokes, credentials, URLs/query strings, page contents and raw website console messages.
+## Remote access from another device
 
-The newest 500 entries are available live and after reconnect/restart. Private files are stored in `DATA_DIR/logs/debug.jsonl` and one rotated file, approximately 1 MB each. The same sanitized JSON records appear in `pm2 logs vps-browser --lines 100`. If files cannot be written, the console flags the storage error and retains in-memory events. Stop/cancel a sensitive task before sharing an exported diagnostic file and review its contents. GET /api/logs, GET /api/logs/export and DELETE /api/logs require the administrator session; deletion also requires CSRF.
+The service binds to **127.0.0.1 only**. This is deliberate: do not expose desktop controls/passwords using public plaintext HTTP. For another device, use an authenticated SSH tunnel or a trusted HTTPS reverse proxy. You can optionally keep your existing VPS as a TLS gateway while Chrome runs on your PC; see [deployment](docs/deployment.md). Native website requests originate on the PC, not on that gateway VPS.
 
-## Forgotten administrator password
-
-In your VPS terminal, from this project directory:
+## Administrator and diagnostics
 
 ```bash
-npm run reset-admin
+npm run setup-admin   # explicit first-run alternative
+npm run reset-admin   # forgotten app password; existing sessions revoked
+npm run doctor
 ```
 
-Enter the existing username or accept the displayed default, then a new password twice. Input is hidden. Existing sessions are invalidated. No database edits and no password pasted into chat are needed.
+Admin files and profiles live under `runtime/` by default. Don't copy the previous VPS .env to your PC; its public origin and secrets are not needed for local defaults. Existing admin hashes can be kept if deliberately reusing the same DATA_DIR; the new browser profile is separate.
 
-## Run continuously
+Debug console includes retained live logs, filters, pause/resume, copy/export and clear. It omits typed text, passwords, URLs/query strings and website page/console contents. Native Chrome DevTools can show website details directly within the authenticated stream; those contents are not copied into server logs. No frame is sent to an AI provider.
 
-After your manual smoke test, install PM2 if needed and run:
-
-```bash
-pm2 start ecosystem.config.cjs
-pm2 save
-pm2 startup
-```
-
-Run the exact privileged startup command PM2 prints. See [deployment](docs/deployment.md) for replacing the former `gemini-api` / `gemini-worker` services without a port conflict, updates and backups.
-
-## Browser startup diagnostics
-
-If Start browser fails, run `npm run doctor` as the **same user** running PM2. It launches an isolated empty profile with sandboxing enabled, never opens a website or reads the saved browsing profile, and reports the actual startup failure. Missing executable/dependencies, root execution, sandbox/AppArmor restrictions, profile locks and permissions now have distinct viewer errors. Never work around a sandbox error by adding `--no-sandbox` or disabling system security globally.
-
-## Verification
+## Tests and limitations
 
 ```bash
 npm run lint
@@ -84,4 +59,6 @@ npm test
 npm audit --omit=dev --audit-level=high
 ```
 
-The suite uses real Chromium and controlled local pages, checks authenticated HTTP/WebSocket access, navigation/input, uploads/downloads, persistent profiles and desktop/mobile layout. Test-only private fixture routing and sandbox relaxation are not enabled in production. No test signs into Google. See [test report](docs/test-report.md).
+Playwright is a **development-only** dependency for testing the viewer, never the production Chrome host. The Linux native acceptance fixture uses OS input, capture, actual uploads/downloads and profile reuse; enable with RUN_NATIVE_TESTS=1 and TEST_CHROME set to installed Chrome. Production launch arguments exclude automation/headless/debugging and sandbox-disable flags. Trusted tests may relax sandboxing inside CI containers.
+
+[Architecture](docs/architecture.md) · [Security](docs/security.md) · [Deployment](docs/deployment.md) · [Test report](docs/test-report.md)

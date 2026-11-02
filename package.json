@@ -1,5 +1,5 @@
 {
-  "name": "private-vps-browser",
+  "name": "local-native-browser",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,8 @@
     "reset-admin": "node --env-file-if-exists=.env scripts/admin.js --reset",
     "test": "node --test --test-concurrency=1 tests/*.test.js",
     "lint": "node scripts/check.js && prettier --check .",
-    "doctor": "node --env-file-if-exists=.env scripts/doctor.js"
+    "doctor": "node --env-file-if-exists=.env scripts/doctor.js",
+    "setup-host": "node --env-file-if-exists=.env scripts/setup-host.js"
   },
   "dependencies": {
     "argon2": "^0.44.0",
@@ -20,10 +21,11 @@
     "express-session": "^1.18.2",
     "helmet": "^8.1.0",
     "multer": "^2.0.2",
-    "playwright": "^1.56.0",
+    "proper-lockfile": "^4.1.2",
     "ws": "^8.18.3"
   },
   "devDependencies": {
-    "prettier": "^3.9.10"
+    "prettier": "^3.9.10",
+    "playwright": "^1.56.0"
   }
 }
