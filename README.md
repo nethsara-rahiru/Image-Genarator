@@ -35,6 +35,8 @@ To upload: open a website's native file picker, then click the viewer's **Upload
 
 Keep the PC awake/unlocked, the app running, and the managed Chrome window available. Stop/Sign out closes the managed browser and retains its profile. An eight-hour app session is the default. Inactivity stops the managed browser after 30 minutes by default; local manual typing isn't tracked by the app's idle clock.
 
+Native OS popup/GPU behavior varies. Some menus/dialogs may need local approval or keyboard interaction. Audio/video streaming, drag-and-drop, continuous pointer dragging and control of unrelated applications are not provided.
+
 ## Remote access from another device
 
 The service binds to **127.0.0.1 only**. This is deliberate: do not expose desktop controls/passwords using public plaintext HTTP. For another device, use an authenticated SSH tunnel or a trusted HTTPS reverse proxy. You can optionally keep your existing VPS as a TLS gateway while Chrome runs on your PC; see [deployment](docs/deployment.md). Native website requests originate on the PC, not on that gateway VPS.

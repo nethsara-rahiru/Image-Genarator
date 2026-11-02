@@ -55,10 +55,20 @@ export class LinuxDriver {
     await run("xauth", ["-f", authority], {
       input: `add ${display} . ${randomBytes(16).toString("hex")}\n`,
     });
+    const desktopEnv = {
+      ...process.env,
+      DISPLAY: display,
+      XAUTHORITY: authority,
+      GSETTINGS_BACKEND: "memory",
+      WAYLAND_DISPLAY: "",
+      XDG_CURRENT_DESKTOP: "OPENBOX",
+      XDG_SESSION_TYPE: "x11",
+      DESKTOP_SESSION: "openbox",
+    };
     const bus = spawn(
       "dbus-daemon",
       ["--session", "--nofork", "--print-address=1"],
-      { stdio: ["ignore", "pipe", "ignore"] },
+      { env: desktopEnv, stdio: ["ignore", "pipe", "ignore"] },
     );
     this.children.push(bus);
     bus.on("error", () => {});
@@ -91,13 +101,7 @@ export class LinuxDriver {
         );
       });
     });
-    this.env = {
-      ...process.env,
-      DISPLAY: display,
-      XAUTHORITY: authority,
-      DBUS_SESSION_BUS_ADDRESS: address,
-      GSETTINGS_BACKEND: "memory",
-    };
+    this.env = { ...desktopEnv, DBUS_SESSION_BUS_ADDRESS: address };
     const x = spawn(
       "Xvfb",
       [

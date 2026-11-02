@@ -139,6 +139,7 @@ export class RemoteBrowser {
     const env = await this.driver.prepare();
     const args = browserArguments(this.profile, this.proxy.port, {
       test: this.options.test,
+      platform: this.platform,
       homepage: this.options.homepage || "https://www.google.com/",
     });
     this.child = spawn(binary, args, {

@@ -196,7 +196,11 @@ export function jpegDimensions(bytes) {
 export function browserArguments(
   profile,
   proxyPort,
-  { test = false, homepage = "https://www.google.com/" } = {},
+  {
+    test = false,
+    homepage = "https://www.google.com/",
+    platform = process.platform,
+  } = {},
 ) {
   const args = [
     `--user-data-dir=${profile}`,
@@ -207,6 +211,7 @@ export function browserArguments(
     "--force-webrtc-ip-handling-policy=disable_non_proxied_udp",
     "--window-size=1280,900",
   ];
+  if (platform === "linux") args.push("--ozone-platform=x11");
   // Trusted test injection only; never enabled by an environment variable or an API request.
   if (test) args.push("--no-sandbox");
   args.push(homepage);
