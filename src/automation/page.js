@@ -31,7 +31,7 @@ export function pageOperation(request) {
   const texts = document.body?.innerText || "";
   const restricted =
     site === "google" &&
-    (/captcha|recaptcha|not a robot|verify you.re human|unusual traffic|security key|passkey|check your phone|tap yes|couldn.t sign you in|browser or app may not be secure|too many attempts|unusual activity/i.test(
+    (/captcha|recaptcha|not a robot|verify you.re human|unusual traffic|security key|passkey|check your phone|tap yes|couldn.t sign you in|browser or app may not be secure|too many attempts|unusual activity|account.{0,40}(?:disabled|suspended|locked)|access blocked|access denied|rate limit|too many requests|try again later/i.test(
       texts,
     ) ||
       !!document.querySelector(

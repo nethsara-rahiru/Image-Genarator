@@ -84,6 +84,7 @@ test("password typing is rejected on wrong origins, wrong fields, hidden fields 
     { inputs: [new Input({ hidden: true })] },
     { url: "https://accounts.google.com/settings" },
     { captcha: true },
+    { body: "Your account has been disabled" },
     { url: "https://accounts.google.com/signin/v2/challenge/recaptcha" },
   ]) {
     const input = new Input();
