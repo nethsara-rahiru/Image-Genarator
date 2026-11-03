@@ -91,3 +91,36 @@ identity, so the interface states that limit and does not auto-submit Next.
 Live Google and target-device validation remain unverified. Regression fixture
 checks delivery of a synthetic secret, masking, clearing and absence from logs
 and flow state; CI checks must pass before the standing-authorized main merge.
+
+## Gemini-first observation and Groq recovery — 2026-11-03
+
+Branch feat/gemini-observed-login implements the requested observed automation:
+open Gemini first; stop on corroborated account/editor controls; only when signed
+out proceed to Google. Recognized email/password/verification steps generate
+short-lived token-bound dashboard inputs, verified against exact origin and
+visible field before fill/one Next submission. Ambiguous results require review;
+security checks require user participation. Check again never replays input.
+
+Manual native mode remains available. Automatic DOM observation requires a
+private stdio CDP pipe (no public debug listener); starting automation can restart
+the existing managed browser with its saved isolated profile. It is not a stealth
+or Google restriction bypass. Google, localized selectors, physical Mac/Windows
+and live Groq/model compatibility remain UNVERIFIED.
+
+Groq is configured in the authenticated dashboard, with its key stored only in
+private server groq.json; native env configuration is also supported. Unknown
+steps use at most two bounded JSON proposals over enum navigation candidates,
+never credentials, account labels, raw DOM or screenshots. Only constrained
+click/wait/ask_user operations are accepted and targets/postconditions rechecked.
+Missing/rejected Groq produces a human handoff; no key is requested in chat.
+
+Local tests pass: 36 total, 35 passed/1 OS helper skip in real native
+Linux, 34 passed/2 skips on the host. Includes the complete signed-out fixture
+flow and already-signed-in restart without credential requests, secret omission,
+blocked/ambiguous/security states, stale input, Groq injection/timeout/schema and
+settings access checks. Native integration also exercises a mocked Groq repair
+on ambiguous chooser controls before credential entry and checks that an already
+signed-in restart makes no Groq call. Updated container smoke verifies the private pipe with
+sandbox enabled. Push the tested branch, open PR, wait for all final checks and
+merge under standing authorization. Continue with target live acceptance after
+merge; no release tag is implied.

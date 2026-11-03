@@ -104,3 +104,20 @@ Do not delete profiles or unrelated containers. The launcher refuses a name or
 profile conflict. Kernel user-namespace restrictions can block sandbox startup;
 inspect `BROWSER_SANDBOX` diagnostics without disabling sandboxing. Physical
 Docker Desktop and live Google sign-in acceptance are still required.
+
+## Gemini-first flow and Groq configuration
+
+Start the app and select Start Gemini automation. It opens Gemini before any
+credential request and stops when signed-in UI is observed. If signed out, enter
+the requested email/username/password/code in the dialog. Inputs are used once
+on verified Google fields, not stored, and never sent to Groq. Complete passkeys,
+CAPTCHA, phone approval and other security steps in the actual live browser, then
+choose Check again. Inspect ambiguous results before any manual retry.
+
+Groq recovery settings accepts a server-side API key and JSON-capable model ID.
+Native mode can use GROQ_API_KEY/GROQ_MODEL; background mode should configure the
+key through the dashboard (host secrets are not automatically forwarded).
+Backups containing groq.json are sensitive. Groq is only used for unknown safe
+navigation steps, never login screenshots or credentials. If unconfigured or
+unavailable, the flow hands control to the user. Observe usage/errors in settings
+and the debug console. Real service acceptance needs target validation.

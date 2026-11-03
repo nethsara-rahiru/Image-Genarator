@@ -11,14 +11,15 @@ const browser = new RemoteBrowser(
 );
 try {
   assert.notEqual(process.getuid(), 0);
-  await browser.start();
+  await browser.start(true);
+  assert.ok((await browser.pipe.send("Browser.getVersion")).product);
   const frame = await browser.capture();
   const state = await browser.state();
   assert.equal(state.backgroundInput, true);
   assert.equal(state.frameReady, true);
   assert.ok(frame.length > 100);
   console.log(
-    "Production non-root Chromium sandbox, private desktop and JPEG capture OK.",
+    "Production non-root Chromium sandbox, private automation pipe, desktop and JPEG capture OK.",
   );
 } finally {
   await browser.stop();

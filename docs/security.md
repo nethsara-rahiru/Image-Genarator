@@ -2,7 +2,7 @@
 
 The app grants its single authenticated administrator normal Chrome privileges under the host OS account. The native Chrome address bar and file picker can access files/protocols available to that account; this is not an isolation boundary against the administrator. Prefer a dedicated local OS account. No personal Chrome profile, passwords or cookies are imported. The dedicated native-profile stays on the PC and uses Chrome's normal credential storage. No stealth patches, captcha/MFA workarounds, cookie transfer or browser security bypass are implemented.
 
-Production uses installed desktop Chrome with its normal sandbox and no automation/headless/debugging connection. Do not run as root or add --no-sandbox. Test-only sandbox relaxation exists only in trusted test constructor arguments; environment variables and API requests cannot enable it. Windows/macOS native permission prompts/policies require local approval; no global security-policy disabling is automated. Google sign-in may still fail; stop and follow the site's supported verification flow.
+Production uses installed desktop Chrome with its normal sandbox. Manual mode uses OS input/capture; automated Gemini uses a private stdio CDP connection, never a network debugging port. No headless or stealth configuration is used. Do not run as root or add --no-sandbox. Test-only sandbox relaxation exists only in trusted test constructor arguments; environment variables and API requests cannot enable it. Windows/macOS native permission prompts/policies require local approval; no global security-policy disabling is automated. Google sign-in may still fail; stop and follow the site's supported verification flow.
 
 Frames are limited to the managed Chrome PID's window on Windows/macOS. Linux captures an isolated virtual display containing the managed Chrome environment, not the host's working desktop. No full-host-screen fallback is used. Windows/macOS input may change foreground focus/move the mouse. Keep the desktop unlocked and the window unminimized. Native dialogs or GPU/OS capture rules can prevent operation. macOS briefly writes a private frame file before deleting it; abrupt crashes can leave a residual private frame. Never share runtime or capture it in user-data test artifacts.
 
@@ -14,7 +14,10 @@ The native browser network proxy validates all public DNS answers and pins the s
 
 Profiles and directories use mode 700 and files mode 600 where supported; enforce Windows ACLs for equivalent privacy. Native Chrome can create its own files subject to OS defaults; protect the whole DATA_DIR. Downloads are authenticated attachments with nosniff, opaque IDs and symlink/path guards. Uploads are memory/size bounded and passed to a native chooser only. Native browser download temporary files can use unbounded disk before enumeration; use OS quotas. Logs are private/rotated and contain only safe event/action codes, IDs, timings and status categories, not query strings, typed text, credentials or page content. Chrome DevTools is visible only in the administrator's stream and is not copied to log storage.
 
-The Google sign-in action opens only the fixed official account-chooser URL using the already-managed Chrome profile's standard URL invocation. It never accepts/stores Google passwords, fills sign-in fields, bypasses Google verification, or claims an authenticated account. Screen/control permission is independent of that navigation; the viewer still requires macOS permission. New macOS diagnostic codes expose only allowlisted stages and messages, not raw Apple-event exceptions (which can contain typed text). Read-only permission/window-count diagnostics do not capture any screen or issue automation events.
+The manual Google sign-in shortcut opens the official account chooser using
+Chrome's normal URL invocation. The automated Gemini flow instead inspects
+visible DOM state through its private pipe. Google can reject controlled browser
+sessions; no bypass, security-policy relaxation or webdriver spoofing is used.
 
 Background workspace: Docker Desktop/engine is a trusted local prerequisite.
 Do not use a remote engine context or publish the container's port publicly.
@@ -28,13 +31,20 @@ the image. Inspect Docker Desktop resource/file-sharing settings if binding this
 private directory fails. Google credentials remain interactive in Google's
 browser pages; logs contain static flow steps and sanitized errors, not inputs.
 
-At the user's request, the authenticated Gemini interface also offers a transient
-sign-in input dialog. Email/password/code/other fields use the existing text-input
-API. Password/code values are masked locally, cleared before the request and on
-close/cancel/logout/disconnection/page exit, and never put in flow state, app
-storage, settings or logs. HTTP requests/process memory necessarily contain the
-value briefly; this is not a credential vault or a guarantee of memory erasure.
-Only use it after checking Google's actual address and focusing the correct field
-in the live browser: native control cannot verify the DOM or destination field.
-No automatic retry or Next submission occurs. Browser/password-manager storage
-is controlled separately by its own settings.
+The automated sign-in dialog collects only the current recognized Google field.
+Its ID/token binds it to the active flow step, and credentials are never saved
+in settings, logs, flow state or API responses. The reader checks exact allowed
+origin and input type/name locally before filling. Next is submitted once;
+ambiguous outcomes pause for review. Security checks require user participation.
+Password/code fields are masked, and values clear before request, on cancel,
+logout, disconnection and page exit. Request/process memory contains the value
+briefly; no claim of secure memory erasure or browser password-manager control is
+made. Google and Chrome may separately retain sessions/passwords as configured.
+
+Groq receives only fresh, allowlisted navigation candidate IDs/categories. Never
+send login screenshots, raw page text, URLs, account labels, credential values,
+cookies or tokens. Model output is schema-checked; only a supplied safe click,
+wait or ask_user is accepted. Fixed local code rechecks the target/site; model
+JavaScript, shell, arbitrary navigation and credential operations are prohibited.
+API settings hide the Groq key and store it with mode 600 in the private data
+directory. Existing CSRF/auth/session/transport checks protect settings and input.

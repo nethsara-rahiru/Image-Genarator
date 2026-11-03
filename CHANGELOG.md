@@ -30,3 +30,13 @@ background-capable; Windows/macOS native control still needs foreground access.
 Viewer state and flow steps remain visible when frame capture fails. Handles a
 Linux chooser-window destruction race during upload. Live Google and physical
 Docker Desktop integrations remain unverified.
+
+## Unreleased — Gemini-first observed login and Groq recovery
+
+Checks Gemini before login, stops on observed signed-in account/editor UI, and
+requests only the current recognized Google input in the dashboard. Uses a
+private automation pipe without network debugging ports, verified origin/field
+filling, single Next submission, stale-token rejection and explicit security/
+ambiguity handoff. Adds server-side Groq configuration and bounded recovery over
+sanitized navigation candidates; credentials and login screenshots are excluded.
+Manual native control remains available. Live integrations remain unverified.
