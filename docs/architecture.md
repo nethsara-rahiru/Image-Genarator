@@ -1,6 +1,6 @@
 # Local native architecture
 
-One Node.js process serves the authenticated vanilla viewer, admin APIs, logs and WebSockets on loopback. NativeBrowser detects process.platform and launches installed desktop Chrome/Edge with a dedicated native-profile. No production Playwright/CDP/browser debugger is used. The existing Argon2id CLI identity, CSRF/session revocation, Host/Origin checks, bounded input queue and JSONL log journal remain.
+One Node.js process serves the authenticated vanilla viewer, admin APIs, logs and WebSockets on loopback. NativeBrowser detects process.platform and launches installed desktop Chrome/Edge with a dedicated native-profile. No production Playwright is used. Manual mode uses OS control; automated Gemini adds a private stdio CDP pipe, never a network debugging listener. The existing Argon2id CLI identity, CSRF/session revocation, Host/Origin checks, bounded input queue and JSONL log journal remain.
 
 Windows uses a persistent PowerShell helper with a compiled C# User32 window-capture/input implementation. Requests are validated fixed JSON commands over stdio; typed text is not placed in command-line arguments. Window selection is restricted to the managed Chrome PID; PrintWindow has no full-desktop fallback. Input focuses only an owned window and verifies foreground ownership. The OS may reject capture/input due to locking, permissions or policy.
 
@@ -16,14 +16,32 @@ Chrome preferences for this dedicated profile point downloads to private app sto
 
 ## Guided Gemini flow and isolated background workspace
 
-`GeminiFlow` performs bounded browser launch and fixed Google/Gemini navigation
-through the existing serialized action queue. Its authenticated API returns
-immediately for launch/navigation; WebSocket messages replay the current step
-history after reconnect. `awaiting_signin` and `awaiting_confirmation` require
-human input; `user_confirmed` explicitly does not assert independent Google
-verification. Flow state is in memory, while sanitized step events and Chrome's
-profile persist. After Node restart start a new flow with the saved profile.
-The flow never reads DOM account identity or stores Google credentials.
+`GeminiFlow` opens Gemini first through a private browser-control pipe. Fixed
+local DOM code classifies signed-in account/editor controls, signed-out controls,
+recognized Google input fields, security checks and unknown states. Only booleans,
+step kinds and allowlisted button IDs/categories leave the reader. The control
+pipe is enabled only for the automated flow; starting it can restart the manual
+browser while retaining its dedicated profile. No debugging TCP port is opened.
+
+Observed signed-in Gemini ends automation immediately. Signed-out Gemini leads
+to Google and a token-bound, one-field-at-a-time credential dialog. A fixed local
+function checks exact origin and visible input kind, fills it and submits a
+verified Next button once. Stale tokens and changed fields are rejected. Ambiguous
+results become needs_review. Security checks require human intervention. Input
+values are never placed in flow snapshots or logs. A fresh Check again observes
+the page; it never replays previous credentials.
+
+GroqRecovery runs only on unknown steps, at most twice per flow. Its payload is
+a fresh projection of enum-valued navigation candidates; page text, screenshots,
+URLs, cookies, account identity and credentials are excluded. Strict JSON
+validation permits click/wait/ask_user only. Click targets are revalidated by the
+local reader and subsequent page state is observed. Model code/URLs/selectors
+are never executed. Settings/key are server-side in private groq.json; API
+responses expose only configured/model/usage, not the key.
+
+Authenticated APIs return promptly for automation/input. WebSocket messages
+replay flow steps after reconnect. Flow state is in memory; sanitized events and
+Chrome profile persist. After restart begin a new observation using that profile.
 
 `node app.js --background` builds the production-only Linux image and publishes
 its dashboard on host loopback. The container runs the same application with

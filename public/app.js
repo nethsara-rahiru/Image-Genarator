@@ -36,6 +36,7 @@ async function api(url, method = "GET", body) {
 }
 function showLogin() {
   clearSignin();
+  $("groq-key").value = "";
   loggedIn = false;
   intentional = true;
   clearTimeout(reconnect);
@@ -154,6 +155,7 @@ function render(state) {
   current = state;
   $("signin-details").disabled = !signinAllowed();
   if (!state.running) clearSignin();
+  if (state.running && geminiFlow.input) renderFlow(geminiFlow);
   $("background-status").textContent = state.backgroundInput
     ? "Background control: private Linux desktop. Keep Node running and the host awake; the browser continues when this dashboard disconnects, until the idle timeout."
     : "Native desktop control requires Chrome visible and can change focus. For background operation, use npm run background with Docker Desktop (see README).";
@@ -480,121 +482,159 @@ $("debug-clear").onclick = async () => {
     }
   }
 };
-let geminiFlow = { state: "idle" };
+let geminiFlow = { state: "idle", active: false };
+let dialogInputToken = null;
+let promptedInputToken = null;
 function renderFlow(value) {
   geminiFlow = value;
   $("gemini-status").textContent =
-    value.message ||
-    "Start a guided sign-in, then use the live browser or Enter sign-in details when Google requests input.";
-  const active = [
-    "cancelling",
-    "starting",
-    "opening_google",
-    "awaiting_signin",
-    "opening_gemini",
-    "awaiting_confirmation",
+    value.message || "Start automation to inspect Gemini before sign-in.";
+  $("gemini-start").disabled = !!value.active;
+  $("gemini-proceed").hidden = ![
+    "awaiting_user",
+    "needs_review",
+    "awaiting_input",
   ].includes(value.state);
-  $("gemini-start").disabled = active;
+  $("gemini-cancel").hidden = !value.active || value.state === "cancelling";
   $("signin-details").disabled = !signinAllowed();
-  $("gemini-proceed").hidden = value.state !== "awaiting_signin";
-  $("gemini-confirm").hidden = value.state !== "awaiting_confirmation";
-  $("gemini-cancel").hidden = !active || value.state === "cancelling";
   const rows = (value.steps || []).map((step) => {
     const row = document.createElement("li");
     row.textContent = `${new Date(step.at).toLocaleTimeString()} — ${step.message}`;
     return row;
   });
   $("gemini-steps").replaceChildren(...rows);
+  if (dialogInputToken && dialogInputToken !== value.input?.token)
+    clearSignin();
+  if (signinAllowed() && promptedInputToken !== value.input.token) {
+    promptedInputToken = value.input.token;
+    openSignin();
+  }
 }
-for (const command of ["start", "proceed", "confirm", "cancel"]) {
+for (const command of ["start", "proceed", "cancel"])
   $("gemini-" + command).onclick = async () => {
     const button = $("gemini-" + command);
     button.disabled = true;
     try {
+      clearSignin();
       renderFlow(
         await api("/api/gemini-flow", "POST", { command, id: geminiFlow.id }),
       );
       report("");
-    } catch (e) {
-      report(e.message);
+    } catch (error) {
+      report(error.message);
     } finally {
-      button.disabled =
-        command === "start" &&
-        [
-          "cancelling",
-          "starting",
-          "opening_google",
-          "awaiting_signin",
-          "opening_gemini",
-          "awaiting_confirmation",
-        ].includes(geminiFlow.state);
+      button.disabled = command === "start" && !!geminiFlow.active;
     }
   };
-}
-
 function signinAllowed() {
   return (
     !signinBusy &&
     loggedIn &&
     ws?.readyState === WebSocket.OPEN &&
     current?.running &&
-    ["awaiting_signin", "awaiting_confirmation"].includes(geminiFlow.state)
+    geminiFlow.state === "awaiting_input" &&
+    !!geminiFlow.input?.token
   );
 }
 function clearSignin() {
   $("signin-value").value = "";
   $("signin-target").checked = false;
+  dialogInputToken = null;
   $("signin-dialog").close();
 }
-$("signin-details").onclick = () => {
+function openSignin() {
   if (!signinAllowed()) return;
   clearSignin();
-  $("signin-result").textContent = "";
+  dialogInputToken = geminiFlow.input.token;
+  $("signin-kind").value = geminiFlow.input.kind;
+  $("signin-kind").disabled = true;
+  $("signin-value").type =
+    geminiFlow.input.kind === "email" ? "text" : "password";
+  $("signin-value-label").textContent = geminiFlow.input.label;
+  $("signin-result").textContent =
+    "This request expires when the Google page step changes.";
   $("signin-dialog").showModal();
   $("signin-value").focus();
-};
-$("signin-kind").onchange = () => {
-  $("signin-value").value = "";
-  $("signin-target").checked = false;
-  $("signin-value").type = ["password", "verification"].includes(
-    $("signin-kind").value,
-  )
-    ? "password"
-    : "text";
-  $("signin-value-label").textContent =
-    $("signin-kind").selectedOptions[0].textContent;
-};
+}
+$("signin-details").onclick = openSignin;
 $("signin-dismiss").onclick = clearSignin;
 $("signin-dialog").addEventListener("cancel", clearSignin);
 $("signin-dialog").addEventListener("close", () => {
   $("signin-value").value = "";
   $("signin-target").checked = false;
 });
-window.addEventListener("pagehide", clearSignin);
+window.addEventListener("pagehide", () => {
+  clearSignin();
+  $("groq-key").value = "";
+});
 $("signin-form").onsubmit = async (event) => {
   event.preventDefault();
   if (
     !signinAllowed() ||
+    dialogInputToken !== geminiFlow.input.token ||
     !$("signin-target").checked ||
     !$("signin-value").value
   )
     return;
-  signinBusy = true;
-  const text = $("signin-value").value;
+  const value = $("signin-value").value,
+    token = dialogInputToken,
+    id = geminiFlow.id;
   clearSignin();
+  signinBusy = true;
   $("signin-send").disabled = true;
   $("signin-details").disabled = true;
   try {
-    await api("/api/action", "POST", { type: "text", text });
+    renderFlow(
+      await api("/api/gemini-flow", "POST", {
+        command: "input",
+        id,
+        token,
+        value,
+      }),
+    );
     report("");
-    $("gemini-status").textContent =
-      "Input delivered. Check the live browser and use Google's Next button; input delivery does not verify sign-in.";
   } catch (error) {
     report(error.message);
   } finally {
     signinBusy = false;
     $("signin-send").disabled = false;
     renderFlow(geminiFlow);
+  }
+};
+$("groq-settings").addEventListener("toggle", async () => {
+  if (!$("groq-settings").open || !loggedIn) {
+    $("groq-key").value = "";
+    return;
+  }
+  $("groq-model").disabled = true;
+  $("groq-save").disabled = true;
+  try {
+    const data = await api("/api/automation/settings");
+    $("groq-model").value = data.model;
+    $("groq-status").textContent =
+      `${data.configured ? "Configured" : "Not configured"} · ${data.usage.requests} requests · ${data.usage.tokens} reported tokens`;
+  } catch (error) {
+    report(error.message);
+  } finally {
+    $("groq-model").disabled = false;
+    $("groq-save").disabled = false;
+  }
+});
+$("groq-form").onsubmit = async (event) => {
+  event.preventDefault();
+  const key = $("groq-key").value,
+    model = $("groq-model").value.trim();
+  $("groq-key").value = "";
+  $("groq-save").disabled = true;
+  try {
+    const data = await api("/api/automation/settings", "POST", { key, model });
+    $("groq-status").textContent = data.configured
+      ? "Groq configured. Live model availability is verified only when a recovery call succeeds."
+      : "No Groq key configured.";
+  } catch (error) {
+    report(error.message);
+  } finally {
+    $("groq-save").disabled = false;
   }
 };
 boot();

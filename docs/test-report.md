@@ -61,3 +61,22 @@ OS typing; checks verify masking, clearing after send/cancel and omission from
 persistent log and flow snapshots. No real Google credentials are used. Existing
 API auth/CSRF and password-reset revocation checks cover the reused input route.
 Live Google and physical-device acceptance remain unverified.
+
+## Gemini-first observed automation
+
+37 tests: real Linux native fixture suite 36 passed/1 OS helper skip; host suite
+35 passed/2 skips. The controlled fixture exercises fresh Gemini signed-out
+observation, Google email/password form detection, token-bound inputs, automatic
+Next once, redirect to signed-in Gemini, and a repeated start that stops before
+asking for credentials. No real Google account is contacted. Groq mocked tests
+check fresh sanitized payloads, strict proposals, missing key, failure/timeout,
+secret-free API responses and usage counters. A mocked Groq call also resolves ambiguous chooser controls in the real native
+browser fixture before credentials; already-signed-in restart makes no AI call.
+No real Groq API call is claimed.
+
+Manual mode remains OS-only; observed automation now intentionally uses a private
+stdio CDP pipe without any debugging network listener. Sandbox is retained; the
+production container smoke verifies pipe access and capture. Live Google,
+physical Mac/Windows/ARM Docker, localization and actual Groq model acceptance
+remain UNVERIFIED. Complete those tests on the user's target before claiming
+live integrations work.

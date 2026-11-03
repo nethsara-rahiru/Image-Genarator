@@ -1,3 +1,5 @@
+import { BrowserPipe } from "./automation/pipe.js";
+import { GeminiAdapter } from "./automation/adapter.js";
 import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -40,14 +42,17 @@ export class RemoteBrowser {
       !!this.child && this.child.exitCode === null && !this.child.signalCode
     );
   }
-  async start() {
+  async start(automation = false) {
+    if (automation && this.running && !this.pipe) await this.stop();
     if (this.running) return;
     if (this.cleaning) await this.cleaning;
     if (this.starting) return this.starting;
+    this.automation = !!automation;
     this.starting = this.launch()
       .catch(async (error) => {
         await terminate(this.child);
         this.child = null;
+        this.automation = false;
         await this.cleanup();
         throw error;
       })
@@ -143,13 +148,22 @@ export class RemoteBrowser {
     const args = browserArguments(this.profile, this.proxy.port, {
       test: this.options.test,
       platform: this.platform,
-      homepage: this.options.homepage || "https://www.google.com/",
+      homepage: this.automation
+        ? "about:blank"
+        : this.options.homepage || "https://www.google.com/",
     });
+    if (this.automation) args.push("--remote-debugging-pipe");
     this.child = spawn(binary, args, {
       env,
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: this.automation
+        ? ["ignore", "ignore", "pipe", "pipe", "pipe"]
+        : ["ignore", "ignore", "pipe"],
       windowsHide: false,
     });
+    if (this.automation) {
+      this.pipe = new BrowserPipe(this.child);
+      this.gemini = new GeminiAdapter(this);
+    }
     let startupOutput = "";
     this.child.stderr.on("data", (chunk) => {
       if (this.starting)
@@ -187,7 +201,9 @@ export class RemoteBrowser {
       "info",
       "browser",
       "BROWSER_STARTED",
-      "Desktop Chrome started. Viewer uses native capture and OS input, without a browser debugging connection.",
+      this.automation
+        ? "Managed Chrome started with a private automation pipe. No debugging port is exposed."
+        : "Desktop Chrome started with native capture and OS input.",
     );
   }
   async capture() {
@@ -214,6 +230,7 @@ export class RemoteBrowser {
       running: this.running,
       platform: this.platform,
       mode: "native",
+      automation: !!this.pipe,
       backgroundInput: this.platform === "linux",
       width: this.width,
       height: this.height,
@@ -225,10 +242,22 @@ export class RemoteBrowser {
   async action(d) {
     this.lastUsed = Date.now();
     this.message = "";
-    if (d.type === "start") return this.start();
+    if (d.type === "start") return this.start(!!d.automation);
     if (d.type === "stop") return this.stop();
     if (!this.running)
       throw nativeError("BROWSER_CLOSED", "Start the browser first.");
+    if (d.type === "automation") {
+      if (!this.gemini)
+        throw nativeError(
+          "AUTOMATION_NOT_READY",
+          "Start Gemini automation first.",
+        );
+      if (d.command === "open") return this.gemini.open(d.site);
+      if (d.command === "observe") return this.gemini.observe(d.options);
+      if (d.command === "click") return this.gemini.click(d.candidate, d.kind);
+      if (d.command === "fill") return this.gemini.fill(d.kind, d.value);
+      throw nativeError("INVALID_INPUT", "Unknown automation command.");
+    }
     const command = this.platform === "darwin" ? "Meta" : "Control";
     const key = (value) => this.driver.command({ type: "key", key: value });
     if (d.type === "googleSignIn") {
@@ -389,6 +418,9 @@ export class RemoteBrowser {
     };
   }
   async cleanup() {
+    this.pipe?.close();
+    this.pipe = null;
+    this.gemini = null;
     if (this.cleaning) return this.cleaning;
     this.cleaning = (async () => {
       await this.driver?.close().catch(() => {});
@@ -413,6 +445,7 @@ export class RemoteBrowser {
       ]);
     await terminate(child);
     this.child = null;
+    this.automation = false;
     this.hasFrame = false;
     await this.cleanup();
     if (child?.pid) {

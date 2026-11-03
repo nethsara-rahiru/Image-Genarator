@@ -100,6 +100,7 @@ test("authentication, CSRF, password revocation and private log export remain en
   const h = await harness(t);
   assert.equal((await h.request("/api/state")).status, 401);
   assert.equal((await h.request("/api/gemini-flow")).status, 401);
+  assert.equal((await h.request("/api/automation/settings")).status, 401);
   assert.equal((await h.request("/api/logs/export")).status, 401);
   await h.login();
   assert.equal(
@@ -114,6 +115,31 @@ test("authentication, CSRF, password revocation and private log export remain en
     403,
   );
   assert.equal((await h.request("/api/state")).status, 200);
+  const settings = await h.request("/api/automation/settings", "POST", {
+    key: "synthetic-api-key",
+    model: "test-model",
+  });
+  assert.equal(settings.status, 200);
+  assert.ok(!(await settings.text()).includes("synthetic-api-key"));
+  assert.equal(
+    (
+      await h.request("/api/automation/settings", "POST", {
+        model: "invalid model",
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await h.request(
+        "/api/automation/settings",
+        "POST",
+        { key: "key", model: "valid" },
+        { "X-CSRF-Token": "bad" },
+      )
+    ).status,
+    403,
+  );
   assert.equal((await h.request("/api/gemini-flow")).status, 200);
   assert.equal(
     (
@@ -129,8 +155,10 @@ test("authentication, CSRF, password revocation and private log export remain en
   assert.equal(
     (
       await h.request("/api/gemini-flow", "POST", {
-        command: "confirm",
+        command: "input",
         id: "stale",
+        token: "stale",
+        value: "do-not-log",
       })
     ).status,
     409,
@@ -148,6 +176,7 @@ test("authentication, CSRF, password revocation and private log export remain en
   await writeAdmin(h.data, "admin", "new native revoked password", true);
   assert.equal((await h.request("/api/state")).status, 401);
   assert.equal((await h.request("/api/gemini-flow")).status, 401);
+  assert.equal((await h.request("/api/automation/settings")).status, 401);
 });
 test("live logs and viewer require an authenticated same-origin socket and revoke on password reset", async (t) => {
   const h = await harness(t);
@@ -298,6 +327,10 @@ test(
   { skip: !nativeEnabled, timeout: 90000 },
   async (t) => {
     const requests = [];
+    let fixtureSignedIn = false;
+    let providerBase = "";
+    const loginInputs = [];
+    const recoveryBodies = [];
     const uploads = [];
     const fixture = http.createServer((req, res) => {
       const url = new URL(req.url, "http://fixture");
@@ -308,6 +341,17 @@ test(
         x: Number(url.searchParams.get("x")),
         y: Number(url.searchParams.get("y")),
       });
+      if (url.pathname === "/app") {
+        res.setHeader("Content-Type", "text/html");
+        const html = fixtureSignedIn
+          ? '<!doctype html><button aria-label="Google Account: Synthetic test">Account</button><div contenteditable="true" role="textbox">Ask Gemini</div>'
+          : '<!doctype html><a role="button" href="' +
+            providerBase +
+            '/signin">Sign in</a>';
+        // Delay commitment so observation cannot accidentally classify the preceding page.
+        setTimeout(() => res.end(html), 300);
+        return;
+      }
       if (url.pathname === "/upload-received") {
         const chunks = [];
         req.on("data", (chunk) => chunks.push(chunk));
@@ -320,7 +364,7 @@ test(
       if (url.pathname === "/upload-page") {
         res.setHeader("Content-Type", "text/html");
         res.end(
-          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||!document.hasFocus()||document.readyState!=='complete')return;reported=true;const input=document.querySelector('input');input.focus();requestAnimationFrame(()=>fetch('/ready-file'));}addEventListener('load',ready);addEventListener('focus',ready,true);document.addEventListener('visibilitychange',ready);document.addEventListener('prerenderingchange',ready);ready();</script>`,
+          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||!document.hasFocus()||document.readyState!=='complete')return;reported=true;const input=document.querySelector('input');input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch('/ready-file?x='+encodeURIComponent(r.x+10+screenX)+'&y='+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});}addEventListener('load',ready);addEventListener('focus',ready,true);document.addEventListener('visibilitychange',ready);document.addEventListener('prerenderingchange',ready);ready();</script>`,
         );
         return;
       }
@@ -344,8 +388,31 @@ test(
     await new Promise((r) => fixture.listen(0, "127.0.0.1", r));
     t.after(() => new Promise((r) => fixture.close(r)));
     const base = `http://127.0.0.1:${fixture.address().port}`;
+    const provider = http.createServer((req, res) => {
+      if (req.method === "POST") {
+        const chunks = [];
+        req.on("data", (c) => chunks.push(c));
+        req.on("end", () => {
+          loginInputs.push({
+            kind: req.url,
+            value: Buffer.concat(chunks).toString(),
+          });
+          if (req.url === "/password") fixtureSignedIn = true;
+          res.end("ok");
+        });
+        return;
+      }
+      res.setHeader("Content-Type", "text/html");
+      res.end(
+        `<!doctype html><script>function draw(kind){document.body.innerHTML=kind==='email'?'<input type="email" id="identifierId" name="identifier"><button>Next</button>':'<input type="password" name="Passwd"><button>Next</button>';document.querySelector('button').onclick=async()=>{await fetch('/'+kind,{method:'POST',body:document.querySelector('input').value});if(kind==='email')draw('password');else location.href=${JSON.stringify(base + "/app")};};}addEventListener('load',()=>{document.body.innerHTML='<button>Use another account</button><button>Use another account</button>';for(const b of document.querySelectorAll('button'))b.onclick=()=>draw('email');});</script>`,
+      );
+    });
+    await new Promise((r) => provider.listen(0, "127.0.0.1", r));
+    providerBase = `http://127.0.0.1:${provider.address().port}`;
+    t.after(() => new Promise((r) => provider.close(r)));
     const validate = async (value) => {
-      if (value.startsWith(base + "/")) return value;
+      if (value.startsWith(base + "/") || value.startsWith(providerBase + "/"))
+        return value;
       throw new Error("Private addresses are blocked");
     };
     const h = await harness(t, {
@@ -353,6 +420,27 @@ test(
       homepage: base + "/",
       validateUrl: validate,
       proxyOptions: { validate },
+      groqOptions: {
+        env: {},
+        fetchImpl: async (url, options) => {
+          recoveryBodies.push(options.body);
+          return new Response(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    content: JSON.stringify({
+                      operation: "click",
+                      candidateId: "c0",
+                    }),
+                  },
+                },
+              ],
+              usage: { total_tokens: 10 },
+            }),
+          );
+        },
+      },
     });
     const b = h.service.browser;
     await b.start();
@@ -390,8 +478,15 @@ test(
       );
       await b.action({ type: "navigate", url: base + "/upload-page" });
       await eventually(() => requests.some((r) => r.path === "/ready-file"));
-      await b.action({ type: "key", key: "Space" });
-      await eventually(() => b.driver.fileDialog());
+      const fileButton = requests.find((r) => r.path === "/ready-file");
+      await b.action({ type: "click", x: fileButton.x, y: fileButton.y });
+      try {
+        await eventually(() => b.driver.fileDialog(), 2500);
+      } catch {
+        // A window-manager activation click can be consumed when the tab first receives focus.
+        await b.action({ type: "click", x: fileButton.x, y: fileButton.y });
+        await eventually(() => b.driver.fileDialog());
+      }
       await b.upload({
         originalname: "reference.txt",
         buffer: Buffer.from("original native upload"),
@@ -478,55 +573,73 @@ test(
           .querySelector("#debug-output")
           .textContent.includes("BROWSER_STARTED"),
       );
-      b.options.validateUrl = async (value) => {
-        if (value === GOOGLE_LOGIN) return base + "/guided-google-fixture";
-        if (value === GEMINI_URL) return base + "/guided-gemini-fixture";
-        return originalValidate(value);
-      };
-      await page.locator("#gemini-start").click();
-      await page.locator("#gemini-proceed").waitFor({ state: "visible" });
-      await eventually(() =>
-        requests.some((r) => r.path === "/guided-google-fixture"),
+      b.options.validateUrl = async (value) =>
+        value === GEMINI_URL
+          ? base + "/app"
+          : value === GOOGLE_LOGIN
+            ? providerBase + "/signin"
+            : originalValidate(value);
+      b.options.automationOrigins = { gemini: base, google: providerBase };
+      await page.locator("#groq-settings > summary").click();
+      await page.locator("#groq-key").fill("synthetic-groq-key");
+      await page.locator("#groq-model").fill("mock-model");
+      await page.locator("#groq-save").click();
+      await page.waitForFunction(() =>
+        document
+          .querySelector("#groq-status")
+          .textContent.startsWith("Groq configured"),
       );
+      assert.equal(await page.locator("#groq-key").inputValue(), "");
+      await page.locator("#gemini-start").click();
+      await page.locator("#signin-dialog").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#signin-kind").inputValue(), "email");
+      await page.locator("#signin-value").fill("cancelled-secret");
+      await page.locator("#signin-dismiss").click();
+      assert.equal(await page.locator("#signin-value").inputValue(), "");
       await page.locator("#signin-details").click();
-      await page.locator("#signin-kind").selectOption("password");
-      const temporarySecret = "synthetic-only-signin-secret";
-      await page.locator("#signin-value").fill(temporarySecret);
+      await page.locator("#signin-value").fill("fixture@example.test");
+      await page.locator("#signin-target").check();
+      await page.locator("#signin-send").click();
+      await page.waitForFunction(
+        () =>
+          document.querySelector("#signin-dialog").open &&
+          document.querySelector("#signin-kind").value === "password",
+      );
       assert.equal(
         await page.locator("#signin-value").getAttribute("type"),
         "password",
       );
+      const temporarySecret = "synthetic-only-signin-secret";
+      await page.locator("#signin-value").fill(temporarySecret);
       await page.locator("#signin-target").check();
       await page.locator("#signin-send").click();
-      await page.locator("#signin-dialog").waitFor({ state: "hidden" });
+      await eventually(() => h.service.flow.snapshot().state === "signed_in");
       assert.equal(await page.locator("#signin-value").inputValue(), "");
-      await eventually(
-        async () => !(await page.locator("#signin-send").isDisabled()),
+      assert.equal(
+        loginInputs.find((r) => r.kind === "/password").value,
+        temporarySecret,
       );
-      await b.action({ type: "key", key: "Enter" });
-      await eventually(() => requests.some((r) => r.q === temporarySecret));
       assert.ok(
         !JSON.stringify(h.service.log.snapshot()).includes(temporarySecret),
       );
       assert.ok(
         !JSON.stringify(h.service.flow.snapshot()).includes(temporarySecret),
       );
-      await page.locator("#signin-details").click();
-      await page.locator("#signin-value").fill("cancelled-secret");
-      await page.locator("#signin-dismiss").click();
-      assert.equal(await page.locator("#signin-value").inputValue(), "");
-      await page.locator("#gemini-proceed").click();
-      await page.locator("#gemini-confirm").waitFor({ state: "visible" });
-      await eventually(() =>
-        requests.some((r) => r.path === "/guided-gemini-fixture"),
+      assert.equal(recoveryBodies.length, 1);
+      assert.ok(!recoveryBodies[0].includes(temporarySecret));
+      assert.ok(!recoveryBodies[0].includes("fixture@example.test"));
+      assert.ok(b.child.spawnargs.includes("about:blank"));
+      const targetId = b.gemini.target;
+      const automationPid = b.child.pid,
+        count = loginInputs.length;
+      await page.locator("#gemini-start").click();
+      await eventually(
+        () => h.service.flow.snapshot().state === "already_signed_in",
       );
-      await page.locator("#gemini-confirm").click();
-      await page.waitForFunction(() =>
-        document
-          .querySelector("#gemini-status")
-          .textContent.includes("not been independently verified"),
-      );
-      assert.equal(b.child.pid, managedPid);
+      assert.equal(loginInputs.length, count);
+      assert.equal(b.child.pid, automationPid);
+      assert.equal(b.gemini.target, targetId);
+      assert.equal(recoveryBodies.length, 1);
       assert.equal((await b.state()).backgroundInput, true);
       await fs.mkdir("test-results", { recursive: true });
       await page.screenshot({

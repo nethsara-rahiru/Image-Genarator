@@ -15,6 +15,7 @@ import argon2 from "argon2";
 import { WebSocketServer } from "ws";
 import { token, equal } from "./security.js";
 import { readAdmin } from "./admin.js";
+import { GroqRecovery } from "./automation/groq.js";
 import { GeminiFlow } from "./geminiFlow.js";
 import { RemoteBrowser } from "./browser.js";
 const publicDir = fileURLToPath(new URL("../public", import.meta.url));
@@ -209,6 +210,7 @@ export async function startServer(config, options = {}) {
     const queuedAt = Date.now();
     const known = [
       "start",
+      "automation",
       "stop",
       "newTab",
       "selectTab",
@@ -225,7 +227,9 @@ export async function startServer(config, options = {}) {
       "key",
     ];
     const actionName = known.includes(d.type) ? d.type : "unknown";
-    const noisy = ["click", "scroll", "text", "key"].includes(actionName);
+    const noisy =
+      ["click", "scroll", "text", "key"].includes(actionName) ||
+      (d.type === "automation" && d.command === "fill");
     const result = chain.then(async () => {
       if (!noisy)
         log.write(
@@ -274,19 +278,36 @@ export async function startServer(config, options = {}) {
       });
     return result;
   };
-  const flow = new GeminiFlow((d) => action(d), log);
+  const recovery = new GroqRecovery(config.data, {
+    log,
+    ...(options.groqOptions || {}),
+  });
+  const flow = new GeminiFlow((d) => action(d), log, recovery);
+  app.get("/api/automation/settings", auth, async (req, res) =>
+    res.json(await recovery.status()),
+  );
+  app.post("/api/automation/settings", auth, async (req, res) => {
+    try {
+      res.json(await recovery.save(req.body || {}));
+    } catch {
+      res.status(400).json({
+        error:
+          "Could not save Groq settings. Check the model/key format and private data directory permissions.",
+      });
+    }
+  });
   app.get("/api/gemini-flow", auth, (req, res) => res.json(flow.snapshot()));
   app.post("/api/gemini-flow", auth, async (req, res) => {
     try {
-      const { command, id } = req.body || {};
+      const { command, id, token, value } = req.body || {};
       let state;
       if (command === "start") state = flow.start();
       else if (command === "proceed") state = flow.proceed(id);
-      else if (command === "confirm") state = flow.confirm(id);
+      else if (command === "input") state = flow.submit(id, token, value);
       else if (command === "cancel") state = await flow.cancel(id);
       else return res.status(400).json({ error: "Unknown flow command" });
       res
-        .status(command === "start" || command === "proceed" ? 202 : 200)
+        .status(["start", "proceed", "input"].includes(command) ? 202 : 200)
         .json(state);
     } catch {
       res.status(409).json({
@@ -295,6 +316,7 @@ export async function startServer(config, options = {}) {
     }
   });
   app.post("/api/logout", auth, async (req, res) => {
+    flow.interrupted();
     await new Promise((resolve, reject) =>
       req.session.destroy((e) => (e ? reject(e) : resolve())),
     );
@@ -475,7 +497,7 @@ export async function startServer(config, options = {}) {
           if (
             !browser.running &&
             !browser.starting &&
-            ["awaiting_signin", "awaiting_confirmation"].includes(
+            ["awaiting_input", "awaiting_user", "needs_review"].includes(
               flow.value.state,
             )
           )
@@ -585,6 +607,7 @@ export async function startServer(config, options = {}) {
     port: server.address().port,
     async close() {
       shuttingDown = true;
+      flow.interrupted();
       clearInterval(idle);
       for (const ws of wss.clients) ws.terminate();
       wss.close();

@@ -2,7 +2,7 @@
 
 Run a regular desktop Chrome/Edge window on your own PC and control it through an authenticated browser viewer. Node automatically detects Windows, macOS or Linux. Includes Google search, native browser tabs/DevTools, keyboard/mouse/paste controls, file transfers and private debug logs.
 
-Production does **not** use Playwright, headless Chromium, CDP or a browser-automation extension. Windows uses a bundled PowerShell/C# window-only helper. macOS uses built-in JXA and window-only screen capture. Linux runs installed Chrome on a private Xvfb desktop with OS input/capture. Google sees the host PC's outbound network connection. This should improve compatibility over a headless VPS browser, but **does not guarantee Google sign-in**. Google may still request verification or reject access. No security-check bypass or cookie import is implemented.
+Production uses no Playwright, headless browser or automation extension. Manual mode has no CDP connection; the automated Gemini flow uses a private Chrome control pipe (no debugging port) for page observation and verified input. Windows uses a bundled PowerShell/C# window-only helper. macOS uses built-in JXA and window-only screen capture. Linux runs installed Chrome on a private Xvfb desktop with OS input/capture. Google sees the host PC's outbound network connection. This should improve compatibility over a headless VPS browser, but **does not guarantee Google sign-in**. Google may still request verification or reject access. No security-check bypass or cookie import is implemented.
 
 ## First run
 
@@ -27,7 +27,7 @@ You don't need to select an OS. If Chrome is installed somewhere unusual, set `C
 
 ## Google account sign-in
 
-Click **Google sign-in** after starting Chrome. It requests Google's official account chooser in the existing dedicated Chrome profile using the browser's normal URL-opening mechanism. This action doesn't require screen capture, Accessibility or a simulated key sequence, so you can continue directly in the opened Chrome window while resolving viewer permissions.
+For automatic detection and requested input, use **Start Gemini automation** (see below). For manual navigation, click **Google sign-in** after starting Chrome. It requests Google's official account chooser in the existing dedicated Chrome profile using the browser's normal URL-opening mechanism. This action doesn't require screen capture, Accessibility or a simulated key sequence, so you can continue directly in the opened Chrome window while resolving viewer permissions.
 
 Enter your Google email/password and complete MFA or security checks **directly in Chrome**. The app doesn't collect Google credentials or silently complete verification. For another account, use Google's account chooser/Add another account. The local native-profile retains sessions where Google permits; closing/restarting the app doesn't intentionally sign out Google. Google can expire/reject sessions or require reauthentication. No live Google login has been validated in automated tests.
 
@@ -71,17 +71,7 @@ Playwright is a **development-only** dependency for testing the viewer, never th
 
 [Architecture](docs/architecture.md) · [Security](docs/security.md) · [Deployment](docs/deployment.md) · [Test report](docs/test-report.md)
 
-## Guided Gemini sign-in and background mode
-
-Update with `git pull --ff-only` and `npm ci`. For the existing native desktop
-mode, run `node app.js`, sign in to the dashboard, and choose **Start Gemini
-sign-in**. The dashboard records actual launch/navigation steps and shows the
-live browser. Enter your Google email/password and complete MFA directly in
-Google's page in that stream. Then choose **Open Gemini after sign-in**, inspect
-the page, and choose **I can see Gemini signed in**. This final state is your
-confirmation; the app does not independently verify Google authentication.
-This flow is for existing Google accounts. Account creation and security checks
-remain interactive on Google's official pages.
+## Background mode
 
 For background control without focusing your macOS/Windows desktop, install and
 start **Docker Desktop**, select Linux containers, and run:
@@ -119,19 +109,46 @@ attention: see [container notes](container/README.md). Google can still reject
 sign-in; there are no stealth settings or security-check bypasses. Physical
 Docker Desktop and live Google login are **UNVERIFIED** until tested on your PC.
 
-### Temporary sign-in input dialog
+## Gemini-first automation and Groq recovery
 
-During the Gemini sign-in flow, **Enter sign-in details** accepts email,
-password, a verification code, or another requested value one field at a time.
-First focus the corresponding field on Google's actual page in the live browser
-and check its address. The app cannot independently verify the focused website
-or field, so it asks you to confirm this before sending. Passwords and codes are
-masked in the dialog. Each value is sent through the authenticated input API and
-cleared from the dialog immediately; it is not saved to app settings or logs.
-The app does not keep a Google credential vault. Google/your browser may offer
-its own password-saving options, which you control separately.
+Update main, run `npm ci`, then start `node app.js` (native desktop) or
+`node app.js --background` (Docker Desktop/local engine). Choose **Start Gemini
+automation**. The app opens Gemini first. If it observes both signed-in Google
+account controls and the Gemini editor, with no sign-in control, it stops
+without requesting credentials. This is UI-based detection; real Google
+acceptance remains unverified until tested on your account/device.
 
-Use Google's Next button in the stream after checking delivery. If the request
-fails, inspect the browser before sending again: delivery may have occurred.
-Cancel, sign-out, closing the dialog, and leaving the page clear the input.
-Verification/security checks remain interactive. The dialog does not provide unattended authentication or bypass Google's security checks.
+If Gemini shows signed-out controls, the app opens Google sign-in. A dialog asks
+for the email/username, password, or recognized verification code **only when
+Google requests that field**. Values are masked where appropriate, cleared on
+send/cancel/disconnection, and never saved in settings, logs or flow snapshots.
+The app checks the exact Google origin and recognized visible input, fills it,
+and submits Next once. Stale requests are rejected. An ambiguous result pauses
+for review without automatically retyping or resubmitting credentials.
+
+CAPTCHA, passkeys, phone approval, account blocks, unsupported forms and other
+security checks require direct interaction in the live browser. Use **Check
+again** afterwards. Unsupported/localized UI is treated as unknown, never
+assumed signed in. Stop/cancel retains the isolated Chrome profile.
+
+Open **Groq recovery settings** in the dashboard and enter your Groq API key
+there (never in chat), plus a JSON-capable model identifier. It is saved in the
+private server `DATA_DIR/groq.json` (background mode: `DATA_DIR/background/groq.json`),
+with restrictive file permissions; the key is never returned by the API.
+Native mode may also use `GROQ_API_KEY`/`GROQ_MODEL` environment variables.
+For background mode use dashboard settings rather than assuming host environment
+secrets are forwarded into Docker.
+
+Deterministic recognition/actions always run first. Unknown steps may use at
+most two Groq requests per flow, with bounded tokens/time and strict local JSON
+validation. Groq sees only allowlisted navigation candidate IDs/categories;
+never raw DOM text, screenshots, cookies, account names, passwords or codes.
+It may choose a supplied safe navigation candidate, wait, or ask for human help.
+Model-produced JavaScript, selectors, arbitrary URLs and credential operations
+are never executed. When Groq is unconfigured/unavailable or has no safe target,
+the app asks you to complete the step manually.
+
+Automation may restart an existing manual browser to enable its private control
+pipe, retaining the profile. No CDP network port is exposed. Google may still
+reject browser automation; this is not a restriction bypass. Real Google,
+physical Mac/Windows automation and live Groq/model compatibility are **UNVERIFIED**.
