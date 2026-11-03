@@ -118,3 +118,20 @@ If startup reports `BROWSER_SANDBOX`, the engine's kernel restrictions need
 attention: see [container notes](container/README.md). Google can still reject
 sign-in; there are no stealth settings or security-check bypasses. Physical
 Docker Desktop and live Google login are **UNVERIFIED** until tested on your PC.
+
+### Temporary sign-in input dialog
+
+During the Gemini sign-in flow, **Enter sign-in details** accepts email,
+password, a verification code, or another requested value one field at a time.
+First focus the corresponding field on Google's actual page in the live browser
+and check its address. The app cannot independently verify the focused website
+or field, so it asks you to confirm this before sending. Passwords and codes are
+masked in the dialog. Each value is sent through the authenticated input API and
+cleared from the dialog immediately; it is not saved to app settings or logs.
+The app does not keep a Google credential vault. Google/your browser may offer
+its own password-saving options, which you control separately.
+
+Use Google's Next button in the stream after checking delivery. If the request
+fails, inspect the browser before sending again: delivery may have occurred.
+Cancel, sign-out, closing the dialog, and leaving the page clear the input.
+Verification/security checks remain interactive. The dialog does not provide unattended authentication or bypass Google's security checks.

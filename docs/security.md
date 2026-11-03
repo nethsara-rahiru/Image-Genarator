@@ -27,3 +27,14 @@ migrate from native mode. Never add .env, runtime data or personal profiles to
 the image. Inspect Docker Desktop resource/file-sharing settings if binding this
 private directory fails. Google credentials remain interactive in Google's
 browser pages; logs contain static flow steps and sanitized errors, not inputs.
+
+At the user's request, the authenticated Gemini interface also offers a transient
+sign-in input dialog. Email/password/code/other fields use the existing text-input
+API. Password/code values are masked locally, cleared before the request and on
+close/cancel/logout/disconnection/page exit, and never put in flow state, app
+storage, settings or logs. HTTP requests/process memory necessarily contain the
+value briefly; this is not a credential vault or a guarantee of memory erasure.
+Only use it after checking Google's actual address and focusing the correct field
+in the live browser: native control cannot verify the DOM or destination field.
+No automatic retry or Next submission occurs. Browser/password-manager storage
+is controlled separately by its own settings.

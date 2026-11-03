@@ -82,14 +82,15 @@
           <h2 id="gemini-heading">Gemini sign-in assistant</h2>
           <p id="background-status" class="muted"></p>
           <p id="gemini-status" role="status">
-            Start a guided sign-in. Enter credentials only on Google’s page in
-            the live browser.
+            Start a guided sign-in, then use the live browser or Enter sign-in
+            details when Google requests input.
           </p>
           <ol id="gemini-steps"></ol>
           <div class="actions">
             <button id="gemini-start" class="primary">
               Start Gemini sign-in
             </button>
+            <button id="signin-details" disabled>Enter sign-in details</button>
             <button id="gemini-proceed" hidden>
               Open Gemini after sign-in
             </button>
@@ -259,6 +260,50 @@ No events yet.</pre>
       </section>
       <p id="error" class="error" role="alert" hidden></p>
     </main>
+    <dialog id="signin-dialog" aria-labelledby="signin-title">
+      <form id="signin-form" autocomplete="off">
+        <h2 id="signin-title">Enter sign-in details</h2>
+        <p>
+          First click the field Google is asking for in the live browser. Check
+          that its address is accounts.google.com. This app cannot verify the
+          focused website or field.
+        </p>
+        <label for="signin-kind">Requested detail</label>
+        <select id="signin-kind">
+          <option value="email">Email address</option>
+          <option value="password">Password</option>
+          <option value="verification">Verification code</option>
+          <option value="other">Other requested information</option>
+        </select>
+        <label id="signin-value-label" for="signin-value">Email address</label>
+        <input
+          id="signin-value"
+          type="text"
+          autocomplete="off"
+          autocapitalize="none"
+          spellcheck="false"
+          maxlength="1000"
+          required
+        />
+        <p class="muted">
+          Sent once to the focused browser field. Not saved in app settings or
+          logs. A failed request may still have typed the value: inspect the
+          browser before trying again. Never share recovery codes unless
+          Google's official page requires them.
+        </p>
+        <label
+          ><input id="signin-target" type="checkbox" required /> I checked
+          Google’s address and focused the requested field.</label
+        >
+        <p id="signin-result" role="status"></p>
+        <div class="actions">
+          <button id="signin-dismiss" type="button">Cancel</button>
+          <button id="signin-send" class="primary">
+            Send to focused Google field
+          </button>
+        </div>
+      </form>
+    </dialog>
     <dialog id="text-dialog">
       <form id="text-form">
         <h2>Type into the remote page</h2>
