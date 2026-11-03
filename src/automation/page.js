@@ -31,12 +31,21 @@ export function pageOperation(request) {
   const texts = document.body?.innerText || "";
   const restricted =
     site === "google" &&
-    (/captcha|recaptcha|security key|passkey|check your phone|tap yes|couldn.t sign you in|browser or app may not be secure|too many attempts|unusual activity/i.test(
+    (/captcha|recaptcha|not a robot|verify you.re human|unusual traffic|security key|passkey|check your phone|tap yes|couldn.t sign you in|browser or app may not be secure|too many attempts|unusual activity/i.test(
       texts,
     ) ||
       !!document.querySelector(
         'iframe[src*="recaptcha"],iframe[src*="captcha"]',
       ) ||
+      (/\/challenge\//.test(url.pathname) &&
+        !/\/challenge\/(?:pwd|totp|ipp)(?:\/|$)/.test(url.pathname)) ||
+      (/\/challenge\//.test(url.pathname) &&
+        !all("input").some(
+          (e) =>
+            (e.type === "password" && e.name === "Passwd") ||
+            e.autocomplete === "one-time-code" ||
+            ["totpPin", "idvPin"].includes(e.name),
+        )) ||
       !/^\/(?:v3\/signin|signin|ServiceLogin|AccountChooser|InteractiveLogin)(?:[/?]|$)/.test(
         url.pathname,
       ));
