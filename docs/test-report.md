@@ -25,3 +25,30 @@ Acceptance: install Node + normal Chrome, npm ci, node app.js, confirm OS detect
 ## macOS/sign-in follow-up — 2026-11-03
 
 Node 22 native Linux container: **21 passed, 0 failed, 1 platform helper-load check skipped**. The sign-in navigation test maps the fixed Google URL to a controlled local fixture, disables native keyboard commands and confirms Chrome opens the target using the same managed PID/profile. It never contacts real Google. Added mocked JXA tests for CF bridging, missing windows, specific Automation/Accessibility errors, unknown errors, read-only permission diagnostics and secret omission. macOS CI now requires successful read-only window-query diagnostics and the exact WINDOW_NOT_READY result for a nonexistent target, rather than accepting any generic failure. Real target-Mac capture and Google authentication remain unverified.
+
+## Guided Gemini/background follow-up — 2026-11-03
+
+- Node 22/Linux full native suite: **26 passed, 0 failed, 1 platform helper check
+  skipped** (27 total). Controlled fixture Google/Gemini navigation, live step UI,
+  responsive view, native upload/download bytes, profile reuse and logout pass.
+- Host suite: **25 passed, 0 failed, 2 OS/native checks skipped**. New flow cases
+  cover human pauses, stale IDs, concurrent start/cancel, interruption of an old
+  startup, sanitized failures and preventing confirmation after navigation error.
+- Lint/syntax/format and production dependency audit pass; zero vulnerabilities.
+- Production image: non-root Chromium with sandbox enabled, private X desktop
+  and JPEG capture passed in the managed Linux Docker engine. No Playwright
+  production dependency or browser debugging interface is used.
+- Launcher smoke: image build, separate admin session, authenticated health,
+  loopback publication and clean Ctrl+C shutdown passed on Linux.
+- Actual Google authentication, Gemini session acceptance, account creation and
+  Docker Desktop on physical macOS/Windows: **UNVERIFIED**. The app reports
+  `user_confirmed`, never claims independent authentication verification.
+
+Both push and PR workflows for `5dbad00` passed all four jobs (three OS tests
+and production sandbox smoke). Private /tmp tmpfs hardening was then smoke-tested
+locally after managed-overlay storage exhaustion; check the final PR revision
+for its corresponding CI result.
+
+CI now builds the production image and runs `scripts/container-smoke.js` without
+no-sandbox flags, in addition to the existing three-OS test matrix. Its current
+check results must pass before merge. Existing target acceptance still applies.

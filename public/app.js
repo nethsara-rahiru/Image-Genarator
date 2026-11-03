@@ -119,6 +119,7 @@ function connect() {
     } else {
       const d = JSON.parse(event.data);
       if (d.type === "state") render(d);
+      if (d.type === "gemini-flow") renderFlow(d);
       if (d.type === "logs") receiveLogs(d);
       if (d.type === "error")
         report(
@@ -147,6 +148,9 @@ function send(action) {
 }
 function render(state) {
   current = state;
+  $("background-status").textContent = state.backgroundInput
+    ? "Background control: private Linux desktop. Keep Node running and the host awake; the browser continues when this dashboard disconnects, until the idle timeout."
+    : "Native desktop control requires Chrome visible and can change focus. For background operation, use npm run background with Docker Desktop (see README).";
   $("start").disabled = state.running;
   $("stop").disabled = !state.running;
   for (const id of [
@@ -470,4 +474,54 @@ $("debug-clear").onclick = async () => {
     }
   }
 };
+let geminiFlow = { state: "idle" };
+function renderFlow(value) {
+  geminiFlow = value;
+  $("gemini-status").textContent =
+    value.message ||
+    "Start a guided sign-in. Enter credentials only on Google's page in the live browser.";
+  const active = [
+    "cancelling",
+    "starting",
+    "opening_google",
+    "awaiting_signin",
+    "opening_gemini",
+    "awaiting_confirmation",
+  ].includes(value.state);
+  $("gemini-start").disabled = active;
+  $("gemini-proceed").hidden = value.state !== "awaiting_signin";
+  $("gemini-confirm").hidden = value.state !== "awaiting_confirmation";
+  $("gemini-cancel").hidden = !active || value.state === "cancelling";
+  const rows = (value.steps || []).map((step) => {
+    const row = document.createElement("li");
+    row.textContent = `${new Date(step.at).toLocaleTimeString()} — ${step.message}`;
+    return row;
+  });
+  $("gemini-steps").replaceChildren(...rows);
+}
+for (const command of ["start", "proceed", "confirm", "cancel"]) {
+  $("gemini-" + command).onclick = async () => {
+    const button = $("gemini-" + command);
+    button.disabled = true;
+    try {
+      renderFlow(
+        await api("/api/gemini-flow", "POST", { command, id: geminiFlow.id }),
+      );
+      report("");
+    } catch (e) {
+      report(e.message);
+    } finally {
+      button.disabled =
+        command === "start" &&
+        [
+          "cancelling",
+          "starting",
+          "opening_google",
+          "awaiting_signin",
+          "opening_gemini",
+          "awaiting_confirmation",
+        ].includes(geminiFlow.state);
+    }
+  };
+}
 boot();

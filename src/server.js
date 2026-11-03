@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { DebugLog } from "./debugLog.js";
 import { actionError } from "./actionErrors.js";
@@ -14,6 +15,7 @@ import argon2 from "argon2";
 import { WebSocketServer } from "ws";
 import { token, equal } from "./security.js";
 import { readAdmin } from "./admin.js";
+import { GeminiFlow } from "./geminiFlow.js";
 import { RemoteBrowser } from "./browser.js";
 const publicDir = fileURLToPath(new URL("../public", import.meta.url));
 class SessionStore extends session.Store {
@@ -272,11 +274,32 @@ export async function startServer(config, options = {}) {
       });
     return result;
   };
+  const flow = new GeminiFlow((d) => action(d), log);
+  app.get("/api/gemini-flow", auth, (req, res) => res.json(flow.snapshot()));
+  app.post("/api/gemini-flow", auth, async (req, res) => {
+    try {
+      const { command, id } = req.body || {};
+      let state;
+      if (command === "start") state = flow.start();
+      else if (command === "proceed") state = flow.proceed(id);
+      else if (command === "confirm") state = flow.confirm(id);
+      else if (command === "cancel") state = await flow.cancel(id);
+      else return res.status(400).json({ error: "Unknown flow command" });
+      res
+        .status(command === "start" || command === "proceed" ? 202 : 200)
+        .json(state);
+    } catch {
+      res.status(409).json({
+        error: "Flow changed or is already active. Refresh its status.",
+      });
+    }
+  });
   app.post("/api/logout", auth, async (req, res) => {
     await new Promise((resolve, reject) =>
       req.session.destroy((e) => (e ? reject(e) : resolve())),
     );
     await action({ type: "stop" });
+    flow.interrupted();
     res
       .clearCookie("vps-browser.sid", {
         path: "/",
@@ -294,6 +317,7 @@ export async function startServer(config, options = {}) {
       return res.status(400).json({ error: "Invalid action" });
     try {
       await action(d, req);
+      if (d.type === "stop") flow.interrupted();
       res.json(await browser.state());
     } catch (error) {
       const diagnosed = actionError(error);
@@ -448,7 +472,31 @@ export async function startServer(config, options = {}) {
             logCursor = history.cursor;
             logGeneration = history.generation;
           }
-          const image = browser.running ? await browser.capture() : null;
+          if (
+            !browser.running &&
+            !browser.starting &&
+            ["awaiting_signin", "awaiting_confirmation"].includes(
+              flow.value.state,
+            )
+          )
+            flow.interrupted();
+          send({ type: "gemini-flow", ...flow.snapshot() });
+          let image = null;
+          if (browser.running) {
+            try {
+              image = await browser.capture();
+            } catch (error) {
+              const diagnosed = actionError(error);
+              log.write(
+                "warn",
+                "viewer",
+                "FRAME_UNAVAILABLE",
+                `Frame temporarily unavailable. ${diagnosed.code}: ${diagnosed.message}`,
+                {},
+                5000,
+              );
+            }
+          }
           const state = await browser.state();
           const json = JSON.stringify(state);
           if (json !== sentState) {
@@ -512,7 +560,13 @@ export async function startServer(config, options = {}) {
   idle.unref();
   await new Promise((resolve, reject) => {
     server.once("error", reject);
-    server.listen(config.port, "127.0.0.1", resolve);
+    server.listen(
+      config.port,
+      process.env.BROWSER_CONTAINER === "1" && existsSync("/.dockerenv")
+        ? "0.0.0.0"
+        : "127.0.0.1",
+      resolve,
+    );
   });
   log.write(
     "info",
@@ -525,6 +579,7 @@ export async function startServer(config, options = {}) {
     server,
     app,
     browser,
+    flow,
     config,
     admin,
     port: server.address().port,

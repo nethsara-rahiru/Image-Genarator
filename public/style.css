@@ -505,3 +505,17 @@ select:focus-visible {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
+
+.gemini-panel {
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+#gemini-steps {
+  max-height: 16rem;
+  overflow-y: auto;
+  padding-left: 1.5rem;
+}
+#gemini-steps li {
+  margin-bottom: 0.65rem;
+  overflow-wrap: anywhere;
+}

@@ -19,3 +19,14 @@ Replaces production headless/Playwright control with OS-detected installed Chrom
 ## Unreleased — Google sign-in navigation and macOS diagnostics
 
 Adds official account-chooser navigation in the existing Chrome profile without requiring native capture/keyboard permission; credentials and verification remain interactive. Replaces blanket macOS permission errors with specific safe causes and read-only doctor checks. Fixes repeated socket-close listener registration on HTTP keepalive.
+
+## Unreleased — guided Gemini and background workspace
+
+Adds real launch/navigation progress, interactive Google sign-in pauses and
+explicit user confirmation in the dashboard. Adds `node app.js --background`
+using a non-root sandboxed Linux desktop container, separate private profile and
+admin, loopback publication and owned-container shutdown. Native Linux remains
+background-capable; Windows/macOS native control still needs foreground access.
+Viewer state and flow steps remain visible when frame capture fails. Handles a
+Linux chooser-window destruction race during upload. Live Google and physical
+Docker Desktop integrations remain unverified.

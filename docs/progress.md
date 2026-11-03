@@ -29,3 +29,50 @@ User's Chrome opens but viewer reports the same blanket permission error; they a
 Local validation: Node 22 native Linux container suite 21 passed, 0 failed, 1 non-Linux helper-load check skipped. Sign-in URL opening was routed to a local fixture, succeeded with native key control deliberately disabled, and preserved the existing managed PID/profile. Mocked JXA regressions cover CF conversion, missing windows, permission/error classification, secret omission and read-only diagnostics. Real macOS permission/capture and real Google login remain UNVERIFIED; three-OS CI must pass before the standing-authorized merge.
 
 CI passed the macOS read-only helper diagnostics. One native Linux duplicate run exposed a pre-existing focus race in omnibox typing (truncated URL in the fixture artifact). Viewer navigation/search now uses the same standard URL-opening mechanism as Google sign-in, opening a new tab and avoiding keyboard/capture permission dependencies. Native Chrome's own address bar remains available for same-tab navigation. GTK chooser location focus receives a short native-input settling interval. Re-run all three OS checks before merge.
+
+## Guided Gemini and background desktop — 2026-11-03
+
+Branch `feat/gemini-background-flow` adds an authenticated guided sign-in flow
+with real step timestamps, bounded launch/navigation, cancellation, stale-ID
+checks and explicit human authentication/confirmation. All interaction remains
+inside Google's official browser page; no password forms, cookie import,
+CAPTCHA/MFA bypass or programmatic authentication claim was added. Flow state
+is replayed on WebSocket reconnect and its sanitized events persist in the log.
+Capture failures no longer suppress status updates or the Stop control.
+
+`node app.js --background` / `npm run background` launches the same application
+and a headed, sandboxed Chromium on an isolated Linux desktop through a local
+Docker engine. macOS/Windows require Docker Desktop with Linux containers once.
+It uses a separate administrator/profile under DATA_DIR/background, private
+loopback publication, a source-only image context, non-root user, resource limits,
+namespace seccomp policy and graceful shutdown of its own created container ID.
+Native Linux is already background capable; native Mac/Windows focus limitations
+remain explicit. Linux chooser-window destruction is handled while verifying
+that its private X display remains alive.
+
+Local evidence: 27 tests, **26 passed, 0 failed, 1 OS helper check skipped** in
+Node 22/Linux with real Chromium. Includes guided flow UI/API, original uploads
+and downloads, persistent profile reuse, responsive authenticated stream and
+local fixture-only Google/Gemini navigation. Host tests: 25 passed, 2 native/OS
+checks skipped. Lint and production dependency audit pass (0 vulnerabilities).
+Production-only Docker image successfully launched Chromium with the sandbox
+**enabled** as a non-root user and captured its private desktop. Full launcher
+smoke built the image, authenticated its separate admin, checked protected health
+and shut down cleanly on SIGINT with exit 0. No real Google credentials or pages
+were used for these acceptance fixtures. Physical Docker Desktop on Mac/Windows,
+Google sign-in, MFA and Gemini availability remain **UNVERIFIED**.
+
+PR [#11](https://github.com/nethsara-rahiru/Image-Genarator/pull/11) contains
+commit `5dbad00`; all three OS jobs and the production-container smoke passed
+on both push and pull-request workflows for that revision. Final hardening uses
+a private 1 GB /tmp tmpfs for ephemeral browser/display files (the repeated local
+image builds exhausted the managed overlay; the tmpfs production smoke passed).
+On Unix hosts the container uses the host UID/GID so private bind-mounted data
+remains accessible without relaxing its permissions; image sources are readable
+by arbitrary non-root UIDs and HOME is private-container /tmp. CI tests UID 1001.
+That check caught a D-Bus requirement for a real passwd entry; the image now
+creates the corresponding account during build using host UID/GID build args.
+Merge under the user's standing authorization only after the final revision
+checks/reviews pass; GitHub PR state is authoritative. After merge the user runs npm ci,
+starts Docker Desktop, runs node app.js --background, and completes Google
+sign-in in the live browser. No release tag is authorized or implied.

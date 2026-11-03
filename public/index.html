@@ -78,6 +78,32 @@
           capture is limited to that window. Linux uses a private virtual
           desktop.
         </p>
+        <section class="panel gemini-panel" aria-labelledby="gemini-heading">
+          <h2 id="gemini-heading">Gemini sign-in assistant</h2>
+          <p id="background-status" class="muted"></p>
+          <p id="gemini-status" role="status">
+            Start a guided sign-in. Enter credentials only on Google’s page in
+            the live browser.
+          </p>
+          <ol id="gemini-steps"></ol>
+          <div class="actions">
+            <button id="gemini-start" class="primary">
+              Start Gemini sign-in
+            </button>
+            <button id="gemini-proceed" hidden>
+              Open Gemini after sign-in
+            </button>
+            <button id="gemini-confirm" hidden>
+              I can see Gemini signed in
+            </button>
+            <button id="gemini-cancel" hidden>Cancel and stop browser</button>
+          </div>
+          <p class="muted">
+            The app opens Google and Gemini; you complete sign-in and any
+            verification. Google may restrict access. Typed credentials are
+            never added to the step log.
+          </p>
+        </section>
         <section class="browser panel" aria-label="Remote browser">
           <div class="tabbar">
             <div id="tabs" aria-label="Native browser status">

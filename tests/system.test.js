@@ -6,6 +6,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { setTimeout as pause } from "node:timers/promises";
+import { GOOGLE_LOGIN, GEMINI_URL } from "../src/geminiFlow.js";
 import { startServer } from "../src/server.js";
 import { configuration } from "../src/config.js";
 import { writeAdmin } from "../src/admin.js";
@@ -98,6 +99,7 @@ test("OS detection supports normal installed executables and rejects missing/uns
 test("authentication, CSRF, password revocation and private log export remain enforced", async (t) => {
   const h = await harness(t);
   assert.equal((await h.request("/api/state")).status, 401);
+  assert.equal((await h.request("/api/gemini-flow")).status, 401);
   assert.equal((await h.request("/api/logs/export")).status, 401);
   await h.login();
   assert.equal(
@@ -112,6 +114,27 @@ test("authentication, CSRF, password revocation and private log export remain en
     403,
   );
   assert.equal((await h.request("/api/state")).status, 200);
+  assert.equal((await h.request("/api/gemini-flow")).status, 200);
+  assert.equal(
+    (
+      await h.request(
+        "/api/gemini-flow",
+        "POST",
+        { command: "start" },
+        { "X-CSRF-Token": "bad" },
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await h.request("/api/gemini-flow", "POST", {
+        command: "confirm",
+        id: "stale",
+      })
+    ).status,
+    409,
+  );
   const result = await (
     await h.request("/api/action", "POST", {
       type: "navigate",
@@ -124,6 +147,7 @@ test("authentication, CSRF, password revocation and private log export remain en
   assert.doesNotMatch(await exported.text(), /private search text/);
   await writeAdmin(h.data, "admin", "new native revoked password", true);
   assert.equal((await h.request("/api/state")).status, 401);
+  assert.equal((await h.request("/api/gemini-flow")).status, 401);
 });
 test("live logs and viewer require an authenticated same-origin socket and revoke on password reset", async (t) => {
   const h = await harness(t);
@@ -454,6 +478,29 @@ test(
           .querySelector("#debug-output")
           .textContent.includes("BROWSER_STARTED"),
       );
+      b.options.validateUrl = async (value) => {
+        if (value === GOOGLE_LOGIN) return base + "/guided-google-fixture";
+        if (value === GEMINI_URL) return base + "/guided-gemini-fixture";
+        return originalValidate(value);
+      };
+      await page.locator("#gemini-start").click();
+      await page.locator("#gemini-proceed").waitFor({ state: "visible" });
+      await eventually(() =>
+        requests.some((r) => r.path === "/guided-google-fixture"),
+      );
+      await page.locator("#gemini-proceed").click();
+      await page.locator("#gemini-confirm").waitFor({ state: "visible" });
+      await eventually(() =>
+        requests.some((r) => r.path === "/guided-gemini-fixture"),
+      );
+      await page.locator("#gemini-confirm").click();
+      await page.waitForFunction(() =>
+        document
+          .querySelector("#gemini-status")
+          .textContent.includes("not been independently verified"),
+      );
+      assert.equal(b.child.pid, managedPid);
+      assert.equal((await b.state()).backgroundInput, true);
       await fs.mkdir("test-results", { recursive: true });
       await page.screenshot({
         path: "test-results/native-desktop.png",
@@ -472,7 +519,7 @@ test(
       });
       await page.getByRole("button", { name: "Sign out" }).click();
       await page.locator("#login-panel").waitFor({ state: "visible" });
-      assert.equal(b.running, false);
+      await eventually(() => !b.running);
     } catch (error) {
       if (b.running) {
         await fs.mkdir("test-results", { recursive: true });
