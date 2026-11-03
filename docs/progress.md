@@ -70,6 +70,8 @@ image builds exhausted the managed overlay; the tmpfs production smoke passed).
 On Unix hosts the container uses the host UID/GID so private bind-mounted data
 remains accessible without relaxing its permissions; image sources are readable
 by arbitrary non-root UIDs and HOME is private-container /tmp. CI tests UID 1001.
+That check caught a D-Bus requirement for a real passwd entry; the image now
+creates the corresponding account during build using host UID/GID build args.
 Merge under the user's standing authorization only after the final revision
 checks/reviews pass; GitHub PR state is authoritative. After merge the user runs npm ci,
 starts Docker Desktop, runs node app.js --background, and completes Google

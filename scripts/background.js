@@ -74,6 +74,13 @@ try {
   const build = ["build", "-f", "container/Dockerfile", "-t", image];
   if (process.env.CODEX_PROXY_CERT)
     build.push("--secret", `id=proxy_ca,src=${process.env.CODEX_PROXY_CERT}`);
+  if (typeof process.getuid === "function")
+    build.push(
+      "--build-arg",
+      `BROWSER_UID=${process.getuid()}`,
+      "--build-arg",
+      `BROWSER_GID=${process.getgid()}`,
+    );
   await docker([...build, "."]);
   console.log(
     `Open ${config.origin} after SERVICE_STARTED. Keep this terminal and Docker running. Ctrl+C stops the workspace; its profile stays saved.`,

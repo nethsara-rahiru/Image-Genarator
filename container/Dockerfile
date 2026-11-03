@@ -11,6 +11,9 @@ COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node public ./public
 RUN chmod -R a+rX /app
 ENV HOME=/tmp BROWSER_CONTAINER=1 AUTO_OPEN=false CHROME_PATH=/usr/bin/chromium DATA_DIR=/data
+ARG BROWSER_UID=1000
+ARG BROWSER_GID=1000
+RUN if ! getent group "$BROWSER_GID" >/dev/null; then groupadd -g "$BROWSER_GID" browser-host; fi && usermod -o -u "$BROWSER_UID" -g "$BROWSER_GID" node
 USER node
 EXPOSE 3030
 CMD ["node", "app.js"]
