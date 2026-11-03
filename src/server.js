@@ -212,6 +212,7 @@ export async function startServer(config, options = {}) {
       "selectTab",
       "closeTab",
       "navigate",
+      "googleSignIn",
       "back",
       "forward",
       "reload",

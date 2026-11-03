@@ -1,3 +1,4 @@
+import { macHelperError } from "./macosErrors.js";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import fs from "node:fs/promises";
@@ -103,16 +104,7 @@ export class DesktopDriver {
           "The macOS helper returned an invalid response.",
         );
       }
-      if (!parsed.ok && parsed.code === "FILE_DIALOG_REQUIRED")
-        throw nativeError(
-          "FILE_DIALOG_REQUIRED",
-          "Click a website file picker before uploading.",
-        );
-      if (!parsed.ok)
-        throw nativeError(
-          "DESKTOP_PERMISSION_REQUIRED",
-          "Grant Screen Recording, Accessibility and Automation access to your terminal/Node in macOS System Settings, then retry.",
-        );
+      if (!parsed.ok) throw macHelperError(parsed);
       return parsed.result;
     }
     return new Promise((resolve, reject) => {
@@ -164,6 +156,13 @@ export class DesktopDriver {
           { timeout: 5000 },
         );
         image = await fs.readFile(temp);
+      } catch (error) {
+        throw macHelperError({
+          code:
+            result.permissions?.screenRecording === false
+              ? "MAC_SCREEN_RECORDING_REQUIRED"
+              : "MAC_CAPTURE_FAILED",
+        });
       } finally {
         await fs.rm(temp, { force: true });
       }
@@ -172,6 +171,9 @@ export class DesktopDriver {
     this.frameWidth = dimensions.width;
     this.frameHeight = dimensions.height;
     return { image, ...dimensions };
+  }
+  async diagnostics() {
+    return this.call({ type: "diagnostics" });
   }
   async command(request) {
     await this.call(request);

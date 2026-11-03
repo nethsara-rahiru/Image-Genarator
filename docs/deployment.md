@@ -71,3 +71,15 @@ Stop the app and managed Chrome before privately archiving DATA_DIR and .env. Pr
 - Download: inspect Chrome's own download UI for security prompts. Hidden/incomplete/>100 MB files are not listed. Use host disk quotas for hard limits.
 - Remote connection: check the configured PUBLIC_ORIGIN, tunnel, TLS trust and WebSocket proxy. The app always binds to localhost.
 - Google restriction: use the site's supported verification flow. Native/local execution improves some signals; it is not a guarantee or a bypass.
+
+## macOS diagnostic details
+
+A Chrome window can open while viewing/control remains unavailable. Run npm run doctor from the same terminal and project directory while the managed Chrome window is open. It reports read-only Screen Recording/Accessibility preflight status, CoreGraphics window-query status and the count of visible windows belonging to the recorded managed process. It never prints window titles, Google credentials or page contents. Automation denial is identified when an actual System Events control request is attempted; the read-only check does not trigger it.
+
+- MAC_AUTOMATION_REQUIRED: Privacy & Security → Automation, allow the launching terminal/app to control System Events.
+- MAC_ACCESSIBILITY_REQUIRED: enable the launching terminal/app under Accessibility.
+- MAC_SCREEN_RECORDING_REQUIRED: enable Screen Recording or Screen & System Audio Recording; restart the terminal if macOS requests it.
+- WINDOW_NOT_READY: restore the managed Chrome window and put it on the current desktop/Space. This code is not a permission diagnosis.
+- MAC_WINDOW_QUERY_FAILED / MAC_NATIVE_FAILED: a bridge/helper operation failed. Share doctor output and the safe helper stage; repeatedly toggling permissions may not solve this.
+
+Stop Node with Ctrl+C before restarting the terminal. Do not delete the native profile or reset macOS TCC permissions globally. Google sign-in can be opened from its new button without desktop-control permission, or manually at https://accounts.google.com/ in the already opened Chrome. Complete password/MFA there; retain the profile for session reuse.

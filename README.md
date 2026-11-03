@@ -25,9 +25,15 @@ Click **Start browser**. Sign into Google directly in the dedicated Chrome windo
 
 You don't need to select an OS. If Chrome is installed somewhere unusual, set `CHROME_PATH` in .env. `npm run doctor` checks executable/helper availability without opening your personal profile or taking a screenshot. `npm run doctor -- --launch` additionally tests a fresh blank native window and capture, discards its frame, and removes its temporary profile. `AUTO_OPEN=false` disables opening the viewer automatically.
 
+## Google account sign-in
+
+Click **Google sign-in** after starting Chrome. It requests Google's official account chooser in the existing dedicated Chrome profile using the browser's normal URL-opening mechanism. This action doesn't require screen capture, Accessibility or a simulated key sequence, so you can continue directly in the opened Chrome window while resolving viewer permissions.
+
+Enter your Google email/password and complete MFA or security checks **directly in Chrome**. The app doesn't collect Google credentials or silently complete verification. For another account, use Google's account chooser/Add another account. The local native-profile retains sessions where Google permits; closing/restarting the app doesn't intentionally sign out Google. Google can expire/reject sessions or require reauthentication. No live Google login has been validated in automated tests.
+
 ## Browser controls
 
-The actual Chrome tab strip, address bar, menus and website appear inside the streamed window. Use those directly, or the viewer's Google/search, Back/Forward, Reload, New tab and Close tab controls. The viewer address field opens a URL or search; it is not an extracted live URL from Chrome. **Chrome console** toggles native Chrome DevTools; **Debug console** shows the app's operational logs. Command completion means OS input was delivered, not that a website finished loading.
+The actual Chrome tab strip, address bar, menus and website appear inside the streamed window. Use those directly, or the viewer's Google/search, Back/Forward, Reload, New tab and Close tab controls. The viewer address field opens a URL/search in a new tab through Chrome's normal URL-opening mechanism; it is not an extracted live URL. Use Chrome's address bar inside the display to navigate in the current tab. **Chrome console** toggles native Chrome DevTools; **Debug console** shows the app's operational logs. Command completion means OS input was delivered, not that a website finished loading.
 
 Click inside the stream before typing. **Type / paste text** works with mobile and Unicode; some macOS input methods need live acceptance testing. Remote input can steal focus from other work on Windows/macOS. This product shares a dedicated browser window, not your whole host desktop, but an authenticated operator has the normal browser/file-picker privileges of the host OS account. Use a dedicated account if you need stronger isolation.
 

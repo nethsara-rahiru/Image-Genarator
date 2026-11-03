@@ -247,6 +247,23 @@ test(
         { input: JSON.stringify({ type: "capture", pid: 0 }) },
       );
       assert.equal(JSON.parse(output).ok, false);
+      assert.equal(JSON.parse(output).code, "WINDOW_NOT_READY");
+      const diagnostic = await run(
+        "/usr/bin/osascript",
+        [
+          "-l",
+          "JavaScript",
+          fileURLToPath(new URL("../src/native/macos.js", import.meta.url)),
+        ],
+        { input: JSON.stringify({ type: "diagnostics", pid: 0 }) },
+      );
+      const parsed = JSON.parse(diagnostic);
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.result.windowQuery, "ok");
+      for (const field of ["screenRecording", "accessibility"])
+        assert.ok(
+          [true, false, null].includes(parsed.result.permissions[field]),
+        );
     }
   },
 );
@@ -279,7 +296,7 @@ test(
       if (url.pathname === "/upload-page") {
         res.setHeader("Content-Type", "text/html");
         res.end(
-          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||document.readyState!=='complete')return;reported=true;const input=document.querySelector('input');input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch('/ready-file?x='+encodeURIComponent(r.x+10+screenX)+'&y='+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});}addEventListener('load',ready);document.addEventListener('visibilitychange',ready);document.addEventListener('prerenderingchange',ready);ready();</script>`,
+          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||!document.hasFocus()||document.readyState!=='complete')return;reported=true;const input=document.querySelector('input');input.focus();requestAnimationFrame(()=>fetch('/ready-file'));}addEventListener('load',ready);addEventListener('focus',ready,true);document.addEventListener('visibilitychange',ready);document.addEventListener('prerenderingchange',ready);ready();</script>`,
         );
         return;
       }
@@ -349,8 +366,7 @@ test(
       );
       await b.action({ type: "navigate", url: base + "/upload-page" });
       await eventually(() => requests.some((r) => r.path === "/ready-file"));
-      const fileReady = requests.find((r) => r.path === "/ready-file");
-      await b.action({ type: "click", x: fileReady.x, y: fileReady.y });
+      await b.action({ type: "key", key: "Space" });
       await eventually(() => b.driver.fileDialog());
       await b.upload({
         originalname: "reference.txt",
@@ -395,6 +411,27 @@ test(
           .slice(before)
           .some((r) => r.cookie.includes("native_session=preserved")),
       );
+      const managedPid = b.child.pid;
+      const originalValidate = b.options.validateUrl;
+      const originalCommand = b.driver.command;
+      b.options.validateUrl = async (value) =>
+        value === "https://accounts.google.com/AccountChooser"
+          ? base + "/google-signin-fixture"
+          : originalValidate(value);
+      b.driver.command = async () => {
+        throw new Error("Native keyboard permission unavailable in this test");
+      };
+      try {
+        await b.action({ type: "googleSignIn" });
+        await eventually(() =>
+          requests.some((r) => r.path === "/google-signin-fixture"),
+        );
+        assert.equal(b.child.pid, managedPid);
+        assert.ok(b.running);
+      } finally {
+        b.options.validateUrl = originalValidate;
+        b.driver.command = originalCommand;
+      }
       const client = await chromium.launch({
         headless: true,
         executablePath: process.env.TEST_CHROME,
