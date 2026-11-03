@@ -67,6 +67,9 @@ commit `5dbad00`; all three OS jobs and the production-container smoke passed
 on both push and pull-request workflows for that revision. Final hardening uses
 a private 1 GB /tmp tmpfs for ephemeral browser/display files (the repeated local
 image builds exhausted the managed overlay; the tmpfs production smoke passed).
+On Unix hosts the container uses the host UID/GID so private bind-mounted data
+remains accessible without relaxing its permissions; image sources are readable
+by arbitrary non-root UIDs and HOME is private-container /tmp. CI tests UID 1001.
 Merge under the user's standing authorization only after the final revision
 checks/reviews pass; GitHub PR state is authoritative. After merge the user runs npm ci,
 starts Docker Desktop, runs node app.js --background, and completes Google

@@ -9,7 +9,8 @@ COPY --chown=node:node app.js ./
 COPY --chown=node:node src ./src
 COPY --chown=node:node scripts ./scripts
 COPY --chown=node:node public ./public
-ENV BROWSER_CONTAINER=1 AUTO_OPEN=false CHROME_PATH=/usr/bin/chromium DATA_DIR=/data
+RUN chmod -R a+rX /app
+ENV HOME=/tmp BROWSER_CONTAINER=1 AUTO_OPEN=false CHROME_PATH=/usr/bin/chromium DATA_DIR=/data
 USER node
 EXPOSE 3030
 CMD ["node", "app.js"]

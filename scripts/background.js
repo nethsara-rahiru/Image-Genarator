@@ -107,7 +107,7 @@ try {
     "--env",
     `BROWSER_IDLE_MINUTES=${config.idleMs / 60000}`,
   ];
-  if (process.platform === "linux")
+  if (typeof process.getuid === "function")
     args.push("--user", `${process.getuid()}:${process.getgid()}`);
   if (process.env.CODEX_PROXY_CERT)
     args.push(

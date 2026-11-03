@@ -49,4 +49,4 @@ jobs:
       - name: Build production background workspace
         run: docker build -f container/Dockerfile -t local-browser-ci .
       - name: Verify non-root sandboxed Chromium and private capture
-        run: docker run --rm --init --shm-size=1g --tmpfs /tmp:rw,nosuid,mode=1777,size=1g --security-opt seccomp=container/seccomp.json local-browser-ci node scripts/container-smoke.js
+        run: docker run --rm --init --user 1001:1001 --shm-size=1g --tmpfs /tmp:rw,nosuid,mode=1777,size=1g --security-opt seccomp=container/seccomp.json local-browser-ci node scripts/container-smoke.js
