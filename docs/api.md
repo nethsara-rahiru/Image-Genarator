@@ -46,11 +46,12 @@ job to the queue tail. Restart marks potentially submitted work needs_review.
 Manual browser input and upload are blocked while a generation job owns Chrome.
 
 `GET/POST /api/gemini-flow` controls observed sign-in; commands start, proceed,
-input and cancel. Input includes the current flow ID, input token and value.
+and cancel. The legacy input command is rejected with HTTP 400; enter all Google
+credentials directly in Chrome.
 `GET/POST /api/automation/settings` reads/saves Groq configuration; keys are never
 returned. These endpoints retain origin/session/CSRF safeguards without requiring
 a local administrator password.
 
-The same-origin `/stream` WebSocket sends real browser frames, state, sanitized
+The same-origin `/stream` WebSocket sends browser state, sanitized
 logs, sign-in steps and versioned `generation` snapshots. The client refreshes
 state after reconnect and uses HTTP refresh if the stream is unavailable.

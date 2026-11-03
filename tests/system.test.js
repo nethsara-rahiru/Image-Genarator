@@ -165,7 +165,7 @@ test("authentication, CSRF, password revocation and private log export remain en
         value: "do-not-log",
       })
     ).status,
-    409,
+    400,
   );
   const result = await (
     await h.request("/api/action", "POST", {
@@ -568,7 +568,7 @@ test(
       await page.locator("#username").fill("admin");
       await page.locator("#password").fill(password);
       await page.getByRole("button", { name: "Sign in →" }).click();
-      await page.locator("#screen").waitFor({ state: "visible" });
+      assert.equal(await page.locator("#screen").count(), 0);
       await page
         .getByRole("button", { name: "Debug console", exact: true })
         .click();
@@ -595,43 +595,17 @@ test(
       );
       assert.equal(await page.locator("#groq-key").inputValue(), "");
       await page.locator("#gemini-start").click();
-      await page.locator("#signin-dialog").waitFor({ state: "visible" });
-      assert.equal(await page.locator("#signin-kind").inputValue(), "email");
-      await page.locator("#signin-value").fill("cancelled-secret");
-      await page.locator("#signin-dismiss").click();
-      assert.equal(await page.locator("#signin-value").inputValue(), "");
-      await page.locator("#signin-details").click();
-      await page.locator("#signin-value").fill("fixture@example.test");
-      await page.locator("#signin-target").check();
-      await page.locator("#signin-send").click();
-      await page.waitForFunction(
-        () =>
-          document.querySelector("#signin-dialog").open &&
-          document.querySelector("#signin-kind").value === "password",
+      await eventually(
+        () => h.service.flow.snapshot().state === "awaiting_user",
       );
-      assert.equal(
-        await page.locator("#signin-value").getAttribute("type"),
-        "password",
-      );
-      const temporarySecret = "synthetic-only-signin-secret";
-      await page.locator("#signin-value").fill(temporarySecret);
-      await page.locator("#signin-target").check();
-      await page.locator("#signin-send").click();
+      assert.equal(await page.locator("#signin-dialog").count(), 0);
+      assert.equal(loginInputs.length, 0);
+      assert.equal(recoveryBodies.length, 0);
+      // Simulate the user completing login externally, then verify Gemini UI.
+      fixtureSignedIn = true;
+      await b.gemini.open("gemini");
+      await page.locator("#gemini-proceed").click();
       await eventually(() => h.service.flow.snapshot().state === "signed_in");
-      assert.equal(await page.locator("#signin-value").inputValue(), "");
-      assert.equal(
-        loginInputs.find((r) => r.kind === "/password").value,
-        temporarySecret,
-      );
-      assert.ok(
-        !JSON.stringify(h.service.log.snapshot()).includes(temporarySecret),
-      );
-      assert.ok(
-        !JSON.stringify(h.service.flow.snapshot()).includes(temporarySecret),
-      );
-      assert.equal(recoveryBodies.length, 1);
-      assert.ok(!recoveryBodies[0].includes(temporarySecret));
-      assert.ok(!recoveryBodies[0].includes("fixture@example.test"));
       assert.ok(b.child.spawnargs.includes("about:blank"));
       const targetId = b.gemini.target;
       const automationPid = b.child.pid,
@@ -643,7 +617,7 @@ test(
       assert.equal(loginInputs.length, count);
       assert.equal(b.child.pid, automationPid);
       assert.equal(b.gemini.target, targetId);
-      assert.equal(recoveryBodies.length, 1);
+      assert.equal(recoveryBodies.length, 0);
       assert.equal((await b.state()).backgroundInput, true);
       await fs.mkdir("test-results", { recursive: true });
       await page.screenshot({

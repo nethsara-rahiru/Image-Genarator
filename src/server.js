@@ -210,6 +210,10 @@ export async function startServer(config, options = {}) {
   let pending = 0;
   let shuttingDown = false;
   const action = (d, request = null) => {
+    if (d.type === "automation" && d.command === "fill")
+      return Promise.reject(
+        nativeError("MANUAL_LOGIN_REQUIRED", "Sign in manually in Chrome."),
+      );
     if (request && generation?.busy)
       return Promise.reject(
         nativeError(
@@ -320,11 +324,14 @@ export async function startServer(config, options = {}) {
           error:
             "Finish or cancel the generation job before changing sign-in state.",
         });
-      const { command, id, token, value } = req.body || {};
+      const { command, id } = req.body || {};
       let state;
       if (command === "start") state = flow.start();
       else if (command === "proceed") state = flow.proceed(id);
-      else if (command === "input") state = flow.submit(id, token, value);
+      else if (command === "input")
+        return res
+          .status(400)
+          .json({ error: "Sign in manually in the opened Chrome window." });
       else if (command === "cancel") state = await flow.cancel(id);
       else return res.status(400).json({ error: "Unknown flow command" });
       res
@@ -619,29 +626,12 @@ export async function startServer(config, options = {}) {
             send({ type: "generation", ...generation.snapshot() });
             generationVersion = generation.version;
           }
-          let image = null;
-          if (browser.running) {
-            try {
-              image = await browser.capture();
-            } catch (error) {
-              const diagnosed = actionError(error);
-              log.write(
-                "warn",
-                "viewer",
-                "FRAME_UNAVAILABLE",
-                `Frame temporarily unavailable. ${diagnosed.code}: ${diagnosed.message}`,
-                {},
-                5000,
-              );
-            }
-          }
           const state = await browser.state();
           const json = JSON.stringify(state);
           if (json !== sentState) {
             send({ type: "state", ...state });
             sentState = json;
           }
-          if (image && ws.readyState === 1) ws.send(image, { binary: true });
         } catch (error) {
           if (!sessions.items.has(req.sessionID))
             ws.close(4001, "Session ended");

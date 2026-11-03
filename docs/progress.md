@@ -299,3 +299,18 @@ implied. Real Google sign-in, Gemini image-generation/download selectors, actual
 Groq/model availability and physical Mac/Windows/ARM acceptance remain UNVERIFIED.
 Google's insecure-browser rejection still requires its supported sign-in flow;
 this app does not bypass it or guarantee that Gemini will return an image.
+
+## Manual sign-in and image download follow-up
+
+- Google sign-in is manual in the opened Chrome window. The flow observes Gemini
+  and asks the user to sign in; credential collection/submission and Groq sign-in
+  recovery are disabled. Check again verifies actual signed-in UI.
+- Removed the browser preview canvas, input handlers and screenshot streaming.
+  Generated image previews remain enabled.
+- Image download scrolls/hovers the selected current-response image, waits for
+  its toolbar, supports full-size labels and child-frame download events, and
+  retains original-file verification and duplicate-submission protection.
+- Browser fixture uses hover-only download controls and verifies exact image
+  bytes and a loaded image in the dashboard. Real Google/Gemini remains unverified.
+- Host tests: 46 passed, 3 environment skips. Full native Linux suite: 48 passed, 1 OS helper skip. CI results are
+  recorded in the follow-up pull request. No Google security bypass is added.

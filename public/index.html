@@ -124,29 +124,25 @@
           desktop.
         </p>
         <section class="panel gemini-panel" aria-labelledby="gemini-heading">
-          <h2 id="gemini-heading">Gemini sign-in assistant</h2>
+          <h2 id="gemini-heading">Manual Gemini sign-in</h2>
           <p id="background-status" class="muted"></p>
           <p id="gemini-status" role="status">
-            Start automation to check Gemini first, then provide only the data
-            Google requests.
+            Open Gemini and sign in directly in the new Chrome window.
           </p>
           <ol id="gemini-steps"></ol>
           <div class="actions">
             <button id="gemini-start" class="primary">
-              Start Gemini automation
+              Open Gemini / sign in
             </button>
-            <button id="signin-details" disabled>Enter sign-in details</button>
+
             <button id="gemini-proceed" hidden>Check again</button>
 
             <button id="gemini-cancel" hidden>Cancel and stop browser</button>
           </div>
           <p class="muted">
-            Gemini is checked first. A verified visible signed-in state stops
-            automation. Otherwise the app requests the data Google needs.
-            Passwords and codes are never sent to Groq. Security challenges
-            remain interactive. Starting automation may restart the managed
-            browser to enable a private control pipe; Google may restrict
-            access.
+            Sign in manually in Chrome, including any verification steps. Return
+            here and choose Check again. The app does not collect Google
+            passwords.
           </p>
           <details id="groq-settings">
             <summary>Groq recovery settings</summary>
@@ -222,26 +218,6 @@
               Open
             </button>
           </form>
-          <div class="screen">
-            <div id="empty">
-              <span class="empty-icon">◈</span>
-              <h2>Your regular desktop browser</h2>
-              <p>
-                Start Chrome on this PC to open a website.<br />Your dedicated
-                profile is saved when you stop it. Grant any required desktop
-                permissions locally.
-              </p>
-            </div>
-            <canvas
-              id="screen"
-              width="1280"
-              height="800"
-              tabindex="0"
-              role="application"
-              aria-label="Remote browser display. Click to interact; use keyboard to type. Website accessibility is limited in streamed mode."
-              hidden
-            ></canvas>
-          </div>
           <div class="footer">
             <span id="browser-status" role="status">Browser stopped</span>
             <div class="actions">
@@ -254,10 +230,8 @@
           </div>
         </section>
         <p class="muted tip">
-          Click the remote screen before typing. Ctrl/Cmd+A, Enter, Tab, arrows
-          and scrolling are supported. To upload, open the website’s native file
-          picker first, then choose Upload file. Uploads: 20 MB; saved
-          downloads: 100 MB each.
+          Interact directly with the opened Chrome window. Browser preview is
+          disabled.
         </p>
         <section id="downloads-panel" class="panel downloads" hidden>
           <div class="workspace-heading">
@@ -334,49 +308,6 @@ No events yet.</pre>
       </section>
       <p id="error" class="error" role="alert" hidden></p>
     </main>
-    <dialog id="signin-dialog" aria-labelledby="signin-title">
-      <form id="signin-form" autocomplete="off">
-        <h2 id="signin-title">Enter sign-in details</h2>
-        <p>
-          Enter only the detail requested below. The app checks Google's origin
-          and the expected input field before typing, then submits Next once.
-        </p>
-        <label for="signin-kind">Requested detail</label>
-        <select id="signin-kind">
-          <option value="email">Email address</option>
-          <option value="password">Password</option>
-          <option value="verification">Verification code</option>
-          <option value="other">Other requested information</option>
-        </select>
-        <label id="signin-value-label" for="signin-value">Email address</label>
-        <input
-          id="signin-value"
-          type="text"
-          autocomplete="off"
-          autocapitalize="none"
-          spellcheck="false"
-          maxlength="1000"
-          required
-        />
-        <p class="muted">
-          Sent once to the recognized Google field. Not saved in settings or
-          logs. If a request fails, inspect the browser before trying again;
-          input may already have been entered.
-        </p>
-        <label
-          ><input id="signin-target" type="checkbox" required /> I want to
-          submit this detail to the Google sign-in step shown in the
-          browser.</label
-        >
-        <p id="signin-result" role="status"></p>
-        <div class="actions">
-          <button id="signin-dismiss" type="button">Cancel</button>
-          <button id="signin-send" class="primary">
-            Submit requested detail
-          </button>
-        </div>
-      </form>
-    </dialog>
     <dialog id="text-dialog">
       <form id="text-form">
         <h2>Type into the remote page</h2>

@@ -31,7 +31,7 @@ export class GenerationRunner {
     if (value.kind === "needs_login")
       throw nativeError(
         "GENERATION_LOGIN_REQUIRED",
-        "Sign in to Gemini using the browser controls, then retry this job. Google may reject automation.",
+        "Sign in manually in the opened Chrome window, then retry this job.",
       );
     if (value.kind === "account_changed")
       throw nativeError(
@@ -54,7 +54,7 @@ export class GenerationRunner {
     if (login.kind !== "signed_in")
       throw nativeError(
         "GENERATION_LOGIN_REQUIRED",
-        "Connect a signed-in Gemini session in the browser, then retry the job. No prompt was submitted.",
+        "Sign in manually in the opened Chrome window, then retry this job. No prompt was submitted.",
       );
     let before = await this.evaluate(
       { operation: "inspect", accountKey: job.accountKey },
@@ -190,11 +190,63 @@ export class GenerationRunner {
     const pipe = this.browser.pipe,
       adapter = this.browser.gemini;
     await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+    const hover = await this.evaluate(
+      {
+        operation: "hover_image",
+        selection,
+        accountKey,
+        baseline,
+        baselineImages,
+      },
+      signal,
+    );
+    if (!hover.ok)
+      throw nativeError(
+        "GENERATION_DOWNLOAD_CHANGED",
+        "The current image changed before download.",
+      );
+    await pipe.send(
+      "Input.dispatchMouseEvent",
+      {
+        type: "mouseMoved",
+        x: hover.x,
+        y: hover.y,
+      },
+      adapter.session,
+    );
+    // Gemini reveals its image toolbar on hover. Reobserve the same image only.
+    for (let n = 0; n < 20; n++) {
+      const state = await this.evaluate(
+        { operation: "inspect", accountKey, baseline, baselineImages },
+        signal,
+      );
+      if (state.selection?.imageId !== selection.imageId)
+        throw nativeError(
+          "GENERATION_DOWNLOAD_CHANGED",
+          "The current image changed before download.",
+        );
+      if (state.selection.buttonId) {
+        selection = state.selection;
+        break;
+      }
+      await pause(150, undefined, { signal });
+    }
+    if (!selection.buttonId)
+      throw nativeError(
+        "GENERATION_DOWNLOAD_UNAVAILABLE",
+        "The generated image is visible but its original-image download control was not found. Open the saved chat to download it manually; the prompt will not be resubmitted.",
+      );
     const { frameTree } = await pipe.send(
       "Page.getFrameTree",
       {},
       adapter.session,
     );
+    const frames = new Set();
+    const collect = (node) => {
+      frames.add(node.frame.id);
+      for (const child of node.childFrames || []) collect(child);
+    };
+    collect(frameTree);
     let guid, timer, resolve, reject;
     let completed = false;
     const completion = new Promise((yes, no) => {
@@ -204,7 +256,7 @@ export class GenerationRunner {
     completion.catch(() => {});
     const begin = (event) => {
       if (
-        event.frameId === frameTree.frame.id &&
+        frames.has(event.frameId) &&
         !guid &&
         /^[a-f0-9-]{16,80}$/i.test(event.guid)
       )

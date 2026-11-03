@@ -3,7 +3,7 @@
 Run `npm ci` then `node app.js`; use `node app.js --background` with Docker for an
 isolated Linux desktop. The default local dashboard requires no app password.
 Google authentication is separate. Configure an ordinary signed-in profile using
-the existing browser/sign-in assistant. Stop on Google security/account/limit
+**Open Gemini / sign in**, completing sign-in directly in Chrome, then **Check again**. Stop on Google security/account/limit
 rejection; do not change accounts or browser security to work around restrictions.
 
 ## Jobs and recovery
@@ -58,3 +58,11 @@ For diagnostics use Debug console or `npm run doctor`. Logs exclude prompts,
 credential values and page text; job metadata intentionally contains user prompts.
 Google/Gemini/Groq and physical-device integrations need live acceptance as listed
 in docs/test-report.md; fixture results do not establish those services work.
+
+## Interactive sign-in availability
+
+Use the native desktop mode on Windows/macOS for manual sign-in in the visible
+Chrome window. The existing Linux driver and Docker background mode use a private
+virtual display. With preview streaming removed, those modes require separate
+trusted desktop access to complete a new sign-in; the dashboard no longer provides
+that access. An existing saved signed-in profile can still be used for generation.

@@ -31,23 +31,15 @@ the image. Inspect Docker Desktop resource/file-sharing settings if binding this
 private directory fails. Google credentials remain interactive in Google's
 browser pages; logs contain static flow steps and sanitized errors, not inputs.
 
-The automated sign-in dialog collects only the current recognized Google field.
-Its ID/token binds it to the active flow step, and credentials are never saved
-in settings, logs, flow state or API responses. The reader checks exact allowed
-origin and input type/name locally before filling. Next is submitted once;
-ambiguous outcomes pause for review. Security checks require user participation.
-Password/code fields are masked, and values clear before request, on cancel,
-logout, disconnection and page exit. Request/process memory contains the value
-briefly; no claim of secure memory erasure or browser password-manager control is
-made. Google and Chrome may separately retain sessions/passwords as configured.
+Google sign-in happens directly in Chrome. The dashboard has no Google credential
+form; the flow rejects credential submissions and never invokes Groq for sign-in.
+Only observed Gemini account/editor controls establish signed-in status. Browser
+frames are not captured or streamed by the dashboard. Native capture helpers
+remain available for diagnostics/tests but are not used by the viewer connection.
 
-Groq receives only fresh, allowlisted navigation candidate IDs/categories. Never
-send login screenshots, raw page text, URLs, account labels, credential values,
-cookies or tokens. Model output is schema-checked; only a supplied safe click,
-wait or ask_user is accepted. Fixed local code rechecks the target/site; model
-JavaScript, shell, arbitrary navigation and credential operations are prohibited.
-API settings hide the Groq key and store it with mode 600 in the private data
-directory. Existing CSRF/auth/session/transport checks protect settings and input.
+Legacy Groq settings remain server-side and are not used for manual sign-in.
+Keys are never returned by settings APIs. No login screenshots, cookies, tokens
+or credentials are sent to Groq.
 
 Generation uses a process lease and serialized mutations. Browser/profile locks
 still apply. A job owns the browser until it completes, fails or is cancelled;
