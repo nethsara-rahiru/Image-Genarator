@@ -126,3 +126,15 @@ signed-in restart makes no Groq call. Updated container smoke verifies the priva
 sandbox enabled. Push the tested branch, open PR, wait for all final checks and
 merge under standing authorization. Continue with target live acceptance after
 merge; no release tag is implied.
+
+PR [#13](https://github.com/nethsara-rahiru/Image-Genarator/pull/13) contains the
+Gemini-first flow and follow-up navigation/security guards. Complete push
+workflows passed on earlier revisions. Repeated PR-only Ubuntu timeouts occurred
+in the existing native upload fixture before Gemini automation started; its saved
+screenshot showed the file chooser had not opened. The fixture now uses measured
+native pointer coordinates and checks chooser visibility, with one bounded
+activation-click retry. It still supplies the original file through the actual
+native chooser and verifies exact uploaded bytes. Final local native suite:
+36 passed/1 OS helper skip. Require the final revision's three OS checks and
+production sandbox/pipe smoke to pass before the authorized merge. Live Google,
+Groq and physical desktop acceptance remain unverified as above.

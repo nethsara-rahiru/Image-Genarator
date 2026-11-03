@@ -364,7 +364,7 @@ test(
       if (url.pathname === "/upload-page") {
         res.setHeader("Content-Type", "text/html");
         res.end(
-          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||!document.hasFocus()||document.readyState!=='complete')return;reported=true;const input=document.querySelector('input');input.focus();requestAnimationFrame(()=>fetch('/ready-file'));}addEventListener('load',ready);addEventListener('focus',ready,true);document.addEventListener('visibilitychange',ready);document.addEventListener('prerenderingchange',ready);ready();</script>`,
+          `<!doctype html><title>Native upload fixture</title><h1>Upload test</h1><input type="file" autofocus oncancel="fetch('/upload-cancel')" onchange="fetch('/upload-received',{method:'POST',body:this.files[0]})"><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||!document.hasFocus()||document.readyState!=='complete')return;reported=true;const input=document.querySelector('input');input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch('/ready-file?x='+encodeURIComponent(r.x+10+screenX)+'&y='+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});}addEventListener('load',ready);addEventListener('focus',ready,true);document.addEventListener('visibilitychange',ready);document.addEventListener('prerenderingchange',ready);ready();</script>`,
         );
         return;
       }
@@ -478,8 +478,15 @@ test(
       );
       await b.action({ type: "navigate", url: base + "/upload-page" });
       await eventually(() => requests.some((r) => r.path === "/ready-file"));
-      await b.action({ type: "key", key: "Space" });
-      await eventually(() => b.driver.fileDialog());
+      const fileButton = requests.find((r) => r.path === "/ready-file");
+      await b.action({ type: "click", x: fileButton.x, y: fileButton.y });
+      try {
+        await eventually(() => b.driver.fileDialog(), 2500);
+      } catch {
+        // A window-manager activation click can be consumed when the tab first receives focus.
+        await b.action({ type: "click", x: fileButton.x, y: fileButton.y });
+        await eventually(() => b.driver.fileDialog());
+      }
       await b.upload({
         originalname: "reference.txt",
         buffer: Buffer.from("original native upload"),
