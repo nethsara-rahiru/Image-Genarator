@@ -44,6 +44,11 @@ Node 22 native Linux container: **21 passed, 0 failed, 1 platform helper-load ch
   Docker Desktop on physical macOS/Windows: **UNVERIFIED**. The app reports
   `user_confirmed`, never claims independent authentication verification.
 
+Both push and PR workflows for `5dbad00` passed all four jobs (three OS tests
+and production sandbox smoke). Private /tmp tmpfs hardening was then smoke-tested
+locally after managed-overlay storage exhaustion; check the final PR revision
+for its corresponding CI result.
+
 CI now builds the production image and runs `scripts/container-smoke.js` without
 no-sandbox flags, in addition to the existing three-OS test matrix. Its current
 check results must pass before merge. Existing target acceptance still applies.

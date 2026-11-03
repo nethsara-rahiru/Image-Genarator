@@ -89,6 +89,8 @@ try {
     "--label",
     "local-native-browser.background=true",
     "--shm-size=1g",
+    "--tmpfs",
+    "/tmp:rw,nosuid,mode=1777,size=1g",
     "--pids-limit=512",
     "--memory=4g",
     "--cpus=2",

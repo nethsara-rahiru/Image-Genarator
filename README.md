@@ -113,7 +113,7 @@ mode and run `node --env-file-if-exists=.env scripts/background-admin.js`.
 
 Docker runs as a non-root user, publishes only `127.0.0.1:3030`, and keeps the
 Chromium sandbox enabled. Use a **local** Docker engine; remote engine contexts
-are unsupported. Reserve about 4 GB RAM and disk space for the first image build.
+are unsupported. Reserve 2 CPUs, about 4 GB RAM, and disk space for the first image build.
 If startup reports `BROWSER_SANDBOX`, the engine's kernel restrictions need
 attention: see [container notes](container/README.md). Google can still reject
 sign-in; there are no stealth settings or security-check bypasses. Physical

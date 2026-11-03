@@ -62,8 +62,12 @@ and shut down cleanly on SIGINT with exit 0. No real Google credentials or pages
 were used for these acceptance fixtures. Physical Docker Desktop on Mac/Windows,
 Google sign-in, MFA and Gemini availability remain **UNVERIFIED**.
 
-Next: push/open the PR, wait for Ubuntu/Windows/macOS checks and the new Linux
-production-container smoke job, and merge using the user's standing authorization
-only after all required checks/reviews pass. After merge the user runs npm ci,
+PR [#11](https://github.com/nethsara-rahiru/Image-Genarator/pull/11) contains
+commit `5dbad00`; all three OS jobs and the production-container smoke passed
+on both push and pull-request workflows for that revision. Final hardening uses
+a private 1 GB /tmp tmpfs for ephemeral browser/display files (the repeated local
+image builds exhausted the managed overlay; the tmpfs production smoke passed).
+Merge under the user's standing authorization only after the final revision
+checks/reviews pass; GitHub PR state is authoritative. After merge the user runs npm ci,
 starts Docker Desktop, runs node app.js --background, and completes Google
 sign-in in the live browser. No release tag is authorized or implied.
