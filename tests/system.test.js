@@ -343,13 +343,13 @@ test(
       });
       if (url.pathname === "/app") {
         res.setHeader("Content-Type", "text/html");
-        res.end(
-          fixtureSignedIn
-            ? '<!doctype html><button aria-label="Google Account: Synthetic test">Account</button><div contenteditable="true" role="textbox">Ask Gemini</div>'
-            : '<!doctype html><a role="button" href="' +
-                providerBase +
-                '/signin">Sign in</a>',
-        );
+        const html = fixtureSignedIn
+          ? '<!doctype html><button aria-label="Google Account: Synthetic test">Account</button><div contenteditable="true" role="textbox">Ask Gemini</div>'
+          : '<!doctype html><a role="button" href="' +
+            providerBase +
+            '/signin">Sign in</a>';
+        // Delay commitment so observation cannot accidentally classify the preceding page.
+        setTimeout(() => res.end(html), 300);
         return;
       }
       if (url.pathname === "/upload-received") {

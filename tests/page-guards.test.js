@@ -57,7 +57,7 @@ function execute(
     querySelectorAll: (selector) =>
       selector === "input"
         ? inputs
-        : selector === "button,[role=button],a"
+        : selector === "button,[role=button],[role=link],a"
           ? buttons
           : selector.includes("contenteditable") && editor
             ? [{ getClientRects: () => [{}] }]
@@ -149,4 +149,18 @@ test("unknown or duplicated Next targets never cause an automatic credential ret
     (e) => e.code === "INPUT_NEEDS_REVIEW",
   );
   assert.equal(calls, 2);
+});
+
+test("a safe-looking sign-in label cannot authorize an outside navigation URL", () => {
+  const link = button("Sign in");
+  link.tagName = "A";
+  link.href = "https://evil.example/collect";
+  const original = link.getAttribute;
+  link.getAttribute = (name) => (name === "href" ? link.href : original(name));
+  const result = execute(
+    { operation: "click", id: "c0", action: "signin" },
+    { url: "https://gemini.google.com/app", buttons: [link] },
+  );
+  assert.equal(result.ok, false);
+  assert.ok(!link.clicked);
 });

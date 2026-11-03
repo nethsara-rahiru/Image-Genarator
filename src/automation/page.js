@@ -27,7 +27,7 @@ export function pageOperation(request) {
     )
       .trim()
       .replace(/\s+/g, " ");
-  const buttons = all("button,[role=button],a");
+  const buttons = all("button,[role=button],[role=link],a");
   const texts = document.body?.innerText || "";
   const restricted =
     site === "google" &&
@@ -131,6 +131,25 @@ export function pageOperation(request) {
     if (site === "gemini" && candidate.action !== "signin")
       return { ok: false };
     if (site === "google" && candidate.action === "signin")
+      return { ok: false };
+    if (
+      candidate.element.tagName === "A" &&
+      candidate.element.getAttribute("href")
+    ) {
+      const destination = new URL(candidate.element.href, location.href);
+      if (destination.username || destination.password) return { ok: false };
+      if (
+        destination.origin !== allowed.google &&
+        destination.origin !== allowed.gemini
+      )
+        return { ok: false };
+      if (!/^https?:$/.test(destination.protocol)) return { ok: false };
+    }
+    if (
+      candidate.action === "next" &&
+      input?.form?.action &&
+      new URL(input.form.action, location.href).origin !== allowed.google
+    )
       return { ok: false };
     candidate.element.click();
     return { ok: true };

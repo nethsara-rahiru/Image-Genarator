@@ -44,10 +44,10 @@ export class RemoteBrowser {
   }
   async start(automation = false) {
     if (automation && this.running && !this.pipe) await this.stop();
-    if (automation) this.automation = true;
     if (this.running) return;
     if (this.cleaning) await this.cleaning;
     if (this.starting) return this.starting;
+    this.automation = !!automation;
     this.starting = this.launch()
       .catch(async (error) => {
         await terminate(this.child);

@@ -114,11 +114,13 @@ never credentials, account labels, raw DOM or screenshots. Only constrained
 click/wait/ask_user operations are accepted and targets/postconditions rechecked.
 Missing/rejected Groq produces a human handoff; no key is requested in chat.
 
-Local tests pass: 36 total, 35 passed/1 OS helper skip in real native
-Linux, 34 passed/2 skips on the host. Includes the complete signed-out fixture
+Local tests pass: 37 total, 36 passed/1 OS helper skip in real native
+Linux, 35 passed/2 skips on the host. Includes the complete signed-out fixture
 flow and already-signed-in restart without credential requests, secret omission,
 blocked/ambiguous/security states, stale input, Groq injection/timeout/schema and
-settings access checks. Native integration also exercises a mocked Groq repair
+settings access checks. Navigation waits for the new document loader and stable
+UI observations, avoiding classification of a previous tab document while a new
+page loads; delayed fixture responses cover this case. Native integration also exercises a mocked Groq repair
 on ambiguous chooser controls before credential entry and checks that an already
 signed-in restart makes no Groq call. Updated container smoke verifies the private pipe with
 sandbox enabled. Push the tested branch, open PR, wait for all final checks and

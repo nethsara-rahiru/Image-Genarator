@@ -64,8 +64,8 @@ Live Google and physical-device acceptance remain unverified.
 
 ## Gemini-first observed automation
 
-36 tests: real Linux native fixture suite 35 passed/1 OS helper skip; host suite
-34 passed/2 skips. The controlled fixture exercises fresh Gemini signed-out
+37 tests: real Linux native fixture suite 36 passed/1 OS helper skip; host suite
+35 passed/2 skips. The controlled fixture exercises fresh Gemini signed-out
 observation, Google email/password form detection, token-bound inputs, automatic
 Next once, redirect to signed-in Gemini, and a repeated start that stops before
 asking for credentials. No real Google account is contacted. Groq mocked tests

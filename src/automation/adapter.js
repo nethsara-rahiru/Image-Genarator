@@ -35,19 +35,9 @@ export class GeminiAdapter {
       this.browser.options.validateUrl ||
       (await import("../security.js")).publicUrl
     )(original);
-    if (this.target && this.session) {
-      try {
-        await this.browser.pipe.send("Page.navigate", { url }, this.session);
-        await this.browser.pipe.send("Page.bringToFront", {}, this.session);
-        return;
-      } catch {
-        this.target = null;
-        this.session = null;
-      }
-    }
     if (!this.target) {
       const { targetId } = await this.browser.pipe.send("Target.createTarget", {
-        url,
+        url: "about:blank",
       });
       this.target = targetId;
       const { sessionId } = await this.browser.pipe.send(
@@ -56,11 +46,25 @@ export class GeminiAdapter {
       );
       this.session = sessionId;
     }
+    const navigation = await this.browser.pipe.send(
+      "Page.navigate",
+      { url },
+      this.session,
+    );
+    if (navigation.errorText)
+      throw nativeError(
+        "AUTOMATION_NAVIGATION",
+        "The sign-in page could not load. Check the live browser and network before retrying.",
+      );
+    this.loaderId = navigation.loaderId;
+    this.waitingForNavigation = !!navigation.loaderId;
     await this.browser.pipe.send("Page.bringToFront", {}, this.session);
   }
   async observe({ previous, timeout = 8000, signal } = {}) {
     const until = Date.now() + timeout;
-    let latest = { kind: "unknown", site: "blocked", candidates: [] };
+    let latest = { kind: "unknown", site: "loading", candidates: [] };
+    let stableKey = "",
+      stableCount = 0;
     do {
       if (signal?.aborted)
         throw nativeError(
@@ -68,14 +72,32 @@ export class GeminiAdapter {
           "Automation was interrupted.",
         );
       try {
+        if (this.waitingForNavigation) {
+          const { frameTree } = await this.browser.pipe.send(
+            "Page.getFrameTree",
+            {},
+            this.session,
+          );
+          if (frameTree.frame.loaderId !== this.loaderId) {
+            await pause(200);
+            continue;
+          }
+          this.waitingForNavigation = false;
+        }
         latest = await this.evaluate({ operation: "observe" });
       } catch (error) {
         if (!this.browser.running) throw error;
       }
+      const key = [latest.site, latest.kind, latest.error].join(":");
+      stableCount = key === stableKey ? stableCount + 1 : 1;
+      stableKey = key;
       if (
+        stableCount >= 3 &&
         latest.kind !== "loading" &&
         latest.kind !== "unknown" &&
-        (!previous || latest.kind !== previous.kind || latest.error)
+        (!previous ||
+          latest.kind !== previous.kind ||
+          (latest.error && !previous.error))
       )
         return latest;
       await pause(200);
