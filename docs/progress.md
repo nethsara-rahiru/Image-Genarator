@@ -195,3 +195,70 @@ Implementation continuation:
 Needed external action: reconnect/restart the coding environment. Live Gemini
 image generation and the target PC still need authorized user validation after
 implementation; never request Google passwords or API secrets in chat.
+
+### Resume attempt and second environment outage — 2026-11-03
+
+The environment returned connected and shell commands worked. The local
+feat/open-image-generator branch was checked out from origin and implementation
+began. The environment then disconnected again while creating new tests; status
+is offline and exec-server recovery failed. Available environment tools can
+inspect status but do not offer a restart/connect action.
+
+IMPORTANT: application changes are currently in the workspace working tree,
+not committed/pushed. The GitHub feature branch contains continuation notes only.
+Do not overwrite the workspace or claim the feature is merged/validated.
+
+Confirmed working-tree changes before the second outage:
+
+- app.js: removed interactive administrator bootstrap; default opens directly.
+- src/config.js: AUTH_REQUIRED defaults false, rejects public no-login origins,
+  adds GENERATION_TIMEOUT_SECONDS. Explicit protected legacy mode remains.
+- scripts/background.js: removed password bootstrap and forwards AUTH_REQUIRED.
+- src/server.js: anonymous local session bootstrap retaining CSRF/Host/Origin;
+  optional protected mode preserved; generation API, worker lifecycle, busy
+  browser ownership and WebSocket progress integrated.
+- src/automation/pipe.js: emits browser download events over the private pipe.
+- src/automation/adapter.js: supports validated real Gemini conversation IDs.
+- src/generation/page.js: fixed local Gemini composer/response/image operations,
+  hashed account binding, response baselines and scoped first-image selection.
+- src/generation/imageInfo.js: original PNG/JPEG/WebP dimensions/signature/bytes.
+- src/generation/runner.js: one prompt submission, current-response observation,
+  actual chat IDs, frame-associated download events and original-byte download.
+- src/generation/queue.js: leased local durable FIFO, idempotency, recovery,
+  cancellation, chat catalog and original image/metadata output.
+- public index/app/style: prompt form, saved chats, job progress/cancel/retry,
+  gallery, chat IDs, image/JSON downloads; hides login/logout in local mode.
+- Existing tests/security.test.js and tests/system.test.js were adapted to
+  explicitly exercise the preserved protected mode.
+
+Last confirmed check: existing baseline suite 37 tests, 35 passed/2 OS/native
+skips after integration; syntax/Prettier were run during edits. This does NOT
+validate new image generation or no-login/browser E2E.
+
+The failing final command attempted to create tests/fixtures/png.js and
+tests/generation.test.js, patch premature text-only detection in generation/page.js,
+format them, and run the suite. Its execution was not confirmed. Inspect these
+paths before recreating anything. If the patch is missing, textOnly must NOT be
+reported while a generated image is still loading or lacks a recognized download
+control; wait/pause instead of reporting a false no-image failure.
+
+Next actions after reconnection:
+
+1. Run git status/diff first; preserve all uncommitted implementation above.
+   Fetch origin and incorporate this notes-only branch commit without discarding
+   local changes. Inspect the final attempted test files before writing them.
+2. Add/run queue and no-login API tests (no administrator, CSRF/Host preserved),
+   image signature/dimension tests, lease/idempotency/recovery/cancel tests.
+3. Extend real native local fixtures for generation: new and resumed real-style
+   chat URLs, historical-image exclusion, multiple-image first selection,
+   text-only failure, delayed/failed downloads, account change and restart.
+   Real Gemini remains unverified; do not work around Google's sign-in rejection.
+4. Review queue mutation races/durability and output path/symlink checks; ensure
+   shutdown cancels current waiting/download operations and releases ownership.
+   Forward the generation timeout into Docker if configured on the host.
+5. Update README/.env/API/security/operations/test/progress docs, test the
+   production container, commit/push tested changes, open the feature PR and
+   merge only after final CI/reviews pass under standing authorization.
+
+No new app behavior is available on main yet. Restore the coding environment to
+finish; do not ask the user for Google passwords or API secrets in chat.
