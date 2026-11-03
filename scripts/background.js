@@ -97,6 +97,8 @@ try {
     "--env",
     `AUTH_REQUIRED=${config.authRequired}`,
     "--env",
+    `GENERATION_TIMEOUT_SECONDS=${config.generationTimeoutMs / 1000}`,
+    "--env",
     `SESSION_HOURS=${config.sessionMs / 3600000}`,
     "--env",
     `BROWSER_IDLE_MINUTES=${config.idleMs / 60000}`,

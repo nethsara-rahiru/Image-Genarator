@@ -316,12 +316,10 @@ export async function startServer(config, options = {}) {
   app.post("/api/gemini-flow", auth, async (req, res) => {
     try {
       if (generation?.busy)
-        return res
-          .status(409)
-          .json({
-            error:
-              "Finish or cancel the generation job before changing sign-in state.",
-          });
+        return res.status(409).json({
+          error:
+            "Finish or cancel the generation job before changing sign-in state.",
+        });
       const { command, id, token, value } = req.body || {};
       let state;
       if (command === "start") state = flow.start();
@@ -355,12 +353,10 @@ export async function startServer(config, options = {}) {
   );
   app.post("/api/generation/jobs", auth, async (req, res) => {
     if (flow.snapshot().active)
-      return res
-        .status(409)
-        .json({
-          error:
-            "Finish or cancel the sign-in assistant before starting generation.",
-        });
+      return res.status(409).json({
+        error:
+          "Finish or cancel the sign-in assistant before starting generation.",
+      });
     try {
       res.status(202).json(await generation.create(req.body));
     } catch (error) {

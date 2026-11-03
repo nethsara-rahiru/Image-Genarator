@@ -22,6 +22,7 @@ export class GenerationQueue {
     this.outputs = path.join(this.dir, "outputs");
     this.data = { jobs: [], chats: [] };
     this.writes = Promise.resolve();
+    this.mutations = Promise.resolve();
     this.version = 0;
   }
   get busy() {
@@ -122,7 +123,27 @@ export class GenerationQueue {
       throw nativeError("GENERATION_NOT_FOUND", "Generation job not found.");
     return job;
   }
-  async create({ prompt, chatId = null, idempotencyKey } = {}) {
+  mutate(operation) {
+    const result = this.mutations.then(operation);
+    this.mutations = result.catch(() => {});
+    return result;
+  }
+  create(input) {
+    return this.mutate(() => this.createJob(input));
+  }
+  cancel(id) {
+    return this.mutate(() => this.cancelJob(id));
+  }
+  retry(id) {
+    return this.mutate(() => this.retryJob(id));
+  }
+  remove(id) {
+    return this.mutate(() => this.removeJob(id));
+  }
+  renameChat(id, title) {
+    return this.mutate(() => this.renameSavedChat(id, title));
+  }
+  async createJob({ prompt, chatId = null, idempotencyKey } = {}) {
     if (
       typeof prompt !== "string" ||
       !prompt.trim() ||
@@ -347,7 +368,7 @@ export class GenerationQueue {
       }
     }
   }
-  async cancel(id) {
+  async cancelJob(id) {
     const job = this.get(id);
     if (job.state === "queued") {
       job.state = "cancelled";
@@ -361,7 +382,7 @@ export class GenerationQueue {
       );
     return this.publicJob(job);
   }
-  async retry(id) {
+  async retryJob(id) {
     const job = this.get(id);
     if (
       !finalStates.has(job.state) ||
@@ -380,7 +401,7 @@ export class GenerationQueue {
     this.start();
     return this.publicJob(job);
   }
-  async remove(id) {
+  async removeJob(id) {
     const job = this.get(id);
     if (!finalStates.has(job.state) || this.active?.id === id)
       throw nativeError(
@@ -394,7 +415,7 @@ export class GenerationQueue {
     this.data.jobs.splice(this.data.jobs.indexOf(job), 1);
     await this.persist();
   }
-  async renameChat(id, title) {
+  async renameSavedChat(id, title) {
     const chat = this.data.chats.find((c) => c.id === id);
     if (
       !chat ||
@@ -417,15 +438,23 @@ export class GenerationQueue {
       !uuid.test(id)
     )
       throw nativeError("GENERATION_NOT_FOUND", "Completed image not found.");
-    return {
-      path: path.join(
-        this.outputs,
-        id,
-        metadata ? "metadata.json" : job.output.filename,
-      ),
-      job: this.publicJob(job),
-    };
+    const file = path.join(
+      this.outputs,
+      id,
+      metadata ? "metadata.json" : job.output.filename,
+    );
+    const stat = await fs.lstat(file),
+      resolved = await fs.realpath(file),
+      root = await fs.realpath(this.outputs);
+    if (
+      !stat.isFile() ||
+      stat.isSymbolicLink() ||
+      !resolved.startsWith(root + path.sep)
+    )
+      throw nativeError("GENERATION_NOT_FOUND", "Completed image not found.");
+    return { path: file, job: this.publicJob(job) };
   }
+
   async close() {
     this.stopping = true;
     this.controller?.abort(
@@ -434,6 +463,7 @@ export class GenerationQueue {
         "The app is stopping. Inspect any submitted prompt before retrying.",
       ),
     );
+    await this.mutations;
     await this.task?.catch(() => {});
     await this.writes;
     await this.release?.().catch(() => {});

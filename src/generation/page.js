@@ -197,6 +197,13 @@ export async function generationPage(request) {
     button.click();
     return { ok: true };
   }
+  const pendingImage =
+    !!response &&
+    [...response.querySelectorAll("img")].some(
+      (e) =>
+        !/avatar|profile|logo/i.test(e.alt || "") &&
+        (e.naturalWidth === 0 || e.naturalWidth >= 64),
+    );
   const complete =
     !!response &&
     [...response.querySelectorAll('button,[role="button"]')].some(
@@ -209,7 +216,7 @@ export async function generationPage(request) {
     busy,
     selection: selected || null,
     hasResponse: !!response,
-    textOnly: complete && !busy && !selected,
+    textOnly: complete && !busy && !pendingImage,
     canSend: send.length === 1,
     editorReady: !!editor,
   };
