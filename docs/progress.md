@@ -76,3 +76,18 @@ Merge under the user's standing authorization only after the final revision
 checks/reviews pass; GitHub PR state is authoritative. After merge the user runs npm ci,
 starts Docker Desktop, runs node app.js --background, and completes Google
 sign-in in the live browser. No release tag is authorized or implied.
+
+## Temporary sign-in inputs — 2026-11-03
+
+User explicitly requests collecting email/password/other requested data in the
+system interface, superseding their original no-app-password-form constraint.
+Branch feat/transient-signin-inputs adds a one-value-at-a-time dialog to the
+active guided flow. It masks password/code fields, requires the user to verify
+Google's address and focus the correct native field, clears values on send or
+cancel/close/logout/page exit, and uses the existing authenticated CSRF-protected
+text-input API without storing values in settings, logs or flow state. No Google
+credentials are requested in chat. Native OS control cannot verify DOM field
+identity, so the interface states that limit and does not auto-submit Next.
+Live Google and target-device validation remain unverified. Regression fixture
+checks delivery of a synthetic secret, masking, clearing and absence from logs
+and flow state; CI checks must pass before the standing-authorized main merge.

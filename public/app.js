@@ -6,6 +6,7 @@ let csrf = "",
   delay = 1000,
   current;
 let intentional = false;
+let signinBusy = false;
 const report = (message) => {
   $("error").textContent = message;
   $("error").hidden = !message;
@@ -34,6 +35,7 @@ async function api(url, method = "GET", body) {
   return data;
 }
 function showLogin() {
+  clearSignin();
   loggedIn = false;
   intentional = true;
   clearTimeout(reconnect);
@@ -128,6 +130,8 @@ function connect() {
     }
   };
   ws.onclose = (event) => {
+    clearSignin();
+    $("signin-details").disabled = true;
     if (intentional || !loggedIn) return;
     if (event.code === 4001) {
       showLogin();
@@ -148,6 +152,8 @@ function send(action) {
 }
 function render(state) {
   current = state;
+  $("signin-details").disabled = !signinAllowed();
+  if (!state.running) clearSignin();
   $("background-status").textContent = state.backgroundInput
     ? "Background control: private Linux desktop. Keep Node running and the host awake; the browser continues when this dashboard disconnects, until the idle timeout."
     : "Native desktop control requires Chrome visible and can change focus. For background operation, use npm run background with Docker Desktop (see README).";
@@ -479,7 +485,7 @@ function renderFlow(value) {
   geminiFlow = value;
   $("gemini-status").textContent =
     value.message ||
-    "Start a guided sign-in. Enter credentials only on Google's page in the live browser.";
+    "Start a guided sign-in, then use the live browser or Enter sign-in details when Google requests input.";
   const active = [
     "cancelling",
     "starting",
@@ -489,6 +495,7 @@ function renderFlow(value) {
     "awaiting_confirmation",
   ].includes(value.state);
   $("gemini-start").disabled = active;
+  $("signin-details").disabled = !signinAllowed();
   $("gemini-proceed").hidden = value.state !== "awaiting_signin";
   $("gemini-confirm").hidden = value.state !== "awaiting_confirmation";
   $("gemini-cancel").hidden = !active || value.state === "cancelling";
@@ -524,4 +531,70 @@ for (const command of ["start", "proceed", "confirm", "cancel"]) {
     }
   };
 }
+
+function signinAllowed() {
+  return (
+    !signinBusy &&
+    loggedIn &&
+    ws?.readyState === WebSocket.OPEN &&
+    current?.running &&
+    ["awaiting_signin", "awaiting_confirmation"].includes(geminiFlow.state)
+  );
+}
+function clearSignin() {
+  $("signin-value").value = "";
+  $("signin-target").checked = false;
+  $("signin-dialog").close();
+}
+$("signin-details").onclick = () => {
+  if (!signinAllowed()) return;
+  clearSignin();
+  $("signin-result").textContent = "";
+  $("signin-dialog").showModal();
+  $("signin-value").focus();
+};
+$("signin-kind").onchange = () => {
+  $("signin-value").value = "";
+  $("signin-target").checked = false;
+  $("signin-value").type = ["password", "verification"].includes(
+    $("signin-kind").value,
+  )
+    ? "password"
+    : "text";
+  $("signin-value-label").textContent =
+    $("signin-kind").selectedOptions[0].textContent;
+};
+$("signin-dismiss").onclick = clearSignin;
+$("signin-dialog").addEventListener("cancel", clearSignin);
+$("signin-dialog").addEventListener("close", () => {
+  $("signin-value").value = "";
+  $("signin-target").checked = false;
+});
+window.addEventListener("pagehide", clearSignin);
+$("signin-form").onsubmit = async (event) => {
+  event.preventDefault();
+  if (
+    !signinAllowed() ||
+    !$("signin-target").checked ||
+    !$("signin-value").value
+  )
+    return;
+  signinBusy = true;
+  const text = $("signin-value").value;
+  clearSignin();
+  $("signin-send").disabled = true;
+  $("signin-details").disabled = true;
+  try {
+    await api("/api/action", "POST", { type: "text", text });
+    report("");
+    $("gemini-status").textContent =
+      "Input delivered. Check the live browser and use Google's Next button; input delivery does not verify sign-in.";
+  } catch (error) {
+    report(error.message);
+  } finally {
+    signinBusy = false;
+    $("signin-send").disabled = false;
+    renderFlow(geminiFlow);
+  }
+};
 boot();

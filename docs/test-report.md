@@ -52,3 +52,12 @@ for its corresponding CI result.
 CI now builds the production image and runs `scripts/container-smoke.js` without
 no-sandbox flags, in addition to the existing three-OS test matrix. Its current
 check results must pass before merge. Existing target acceptance still applies.
+
+## Transient sign-in dialog
+
+Native Linux regression suite: 26 passed, 0 failed, 1 OS helper skip. The controlled
+local fixture receives a synthetic password through the real dialog and native
+OS typing; checks verify masking, clearing after send/cancel and omission from
+persistent log and flow snapshots. No real Google credentials are used. Existing
+API auth/CSRF and password-reset revocation checks cover the reused input route.
+Live Google and physical-device acceptance remain unverified.

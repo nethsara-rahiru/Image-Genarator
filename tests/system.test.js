@@ -488,6 +488,33 @@ test(
       await eventually(() =>
         requests.some((r) => r.path === "/guided-google-fixture"),
       );
+      await page.locator("#signin-details").click();
+      await page.locator("#signin-kind").selectOption("password");
+      const temporarySecret = "synthetic-only-signin-secret";
+      await page.locator("#signin-value").fill(temporarySecret);
+      assert.equal(
+        await page.locator("#signin-value").getAttribute("type"),
+        "password",
+      );
+      await page.locator("#signin-target").check();
+      await page.locator("#signin-send").click();
+      await page.locator("#signin-dialog").waitFor({ state: "hidden" });
+      assert.equal(await page.locator("#signin-value").inputValue(), "");
+      await eventually(
+        async () => !(await page.locator("#signin-send").isDisabled()),
+      );
+      await b.action({ type: "key", key: "Enter" });
+      await eventually(() => requests.some((r) => r.q === temporarySecret));
+      assert.ok(
+        !JSON.stringify(h.service.log.snapshot()).includes(temporarySecret),
+      );
+      assert.ok(
+        !JSON.stringify(h.service.flow.snapshot()).includes(temporarySecret),
+      );
+      await page.locator("#signin-details").click();
+      await page.locator("#signin-value").fill("cancelled-secret");
+      await page.locator("#signin-dismiss").click();
+      assert.equal(await page.locator("#signin-value").inputValue(), "");
       await page.locator("#gemini-proceed").click();
       await page.locator("#gemini-confirm").waitFor({ state: "visible" });
       await eventually(() =>
