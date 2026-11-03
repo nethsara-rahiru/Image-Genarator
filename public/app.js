@@ -657,7 +657,7 @@ function renderGeneration(data) {
       data.jobs.filter((j) => j.state === "queued").length +
       " queued · " +
       data.jobs.filter((j) => j.state === "completed").length +
-      " completed in retained history";
+      " completed in recent history";
   const selected = $("generation-chat").value;
   $("generation-chat").replaceChildren(
     new Option("New chat (created by this job)", ""),
@@ -673,7 +673,7 @@ function renderGeneration(data) {
     card.className = "generation-job";
     card.dataset.jobId = job.id;
     const heading = document.createElement("h3");
-    heading.textContent = job.state + " · " + job.id;
+    heading.textContent = job.state.replaceAll("_", " ") + " · " + job.id;
     const prompt = document.createElement("p");
     prompt.textContent = job.promptPreview;
     const progress = document.createElement("progress");

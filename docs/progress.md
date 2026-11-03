@@ -262,3 +262,40 @@ Next actions after reconnection:
 
 No new app behavior is available on main yet. Restore the coding environment to
 finish; do not ask the user for Google passwords or API secrets in chat.
+
+## Local generator implementation complete for review — 2026-11-03
+
+The offline blockers above are historical. The workspace reconnected, the
+existing changes were preserved, and source checkpoints were pushed as 696d6fc
+and f85068a on feat/open-image-generator. The user's confirmed scope remains
+local no-login access with browser controls; public anonymous access is not added.
+
+Implemented: no administrator prompt/login by default (native and Docker), local
+origin guard/CSRF retained, optional protected legacy mode, prompt-driven image
+jobs, durable leased FIFO with serialized mutations, idempotency, safe retry/cancel
+and restart recovery, actual Gemini chat IDs/catalog/local rename, hashed account
+binding, current-response image association, original frame-bound downloads,
+metadata/header/dimension/checksum checks, gallery and original image/JSON links.
+History/source fingerprints exclude older images even when old nodes rerender.
+Pending images are not misreported as text-only replies. Retry goes to the FIFO
+tail; concurrent duplicates execute once; repeated deletion cannot remove another
+job. Failed/oversized/incomplete downloads are cancelled. Potentially submitted
+prompts never auto-resubmit. Existing admin files/profiles are preserved.
+
+Validation evidence: full Linux native suite 48 tests, 47 passed, 0 failed,
+1 OS helper check skipped; host suite 45 passed/3 native/OS checks skipped.
+Fixtures cover new/resumed chats, actual returned conversation URLs, multiple
+images/first current image, original bytes/metadata, old DOM replacement,
+text-only/login/account mismatch, interrupted download/cancel, no-login UI,
+queue lease/idempotency/FIFO retry/shutdown/corrupt journal/symlink/concurrent
+mutation regressions. Desktop/mobile generator screenshots are synthetic only.
+Production smoke passed with the real Chromium sandbox/private pipe, capture,
+no-admin session bootstrap and generator API. Lint and production audit pass;
+0 vulnerabilities reported. Updated docs include api.md and operations.md.
+
+Finish: push the final tested revision, open the feature PR, wait for all final
+CI/reviews and merge using the user's standing authorization. No release tag is
+implied. Real Google sign-in, Gemini image-generation/download selectors, actual
+Groq/model availability and physical Mac/Windows/ARM acceptance remain UNVERIFIED.
+Google's insecure-browser rejection still requires its supported sign-in flow;
+this app does not bypass it or guarantee that Gemini will return an image.

@@ -1,154 +1,160 @@
-# Local Native Browser
+# Local Gemini Image Generator
 
-Run a regular desktop Chrome/Edge window on your own PC and control it through an authenticated browser viewer. Node automatically detects Windows, macOS or Linux. Includes Google search, native browser tabs/DevTools, keyboard/mouse/paste controls, file transfers and private debug logs.
+Run a local image-generation dashboard and a dedicated Chrome/Edge browser on
+your PC. Enter a description, create or resume a Gemini chat, and download one
+original generated image with its actual chat ID and metadata. The local app
+opens without an administrator login. Google sign-in is separate and still
+required; Google may reject automated browsers or decline to generate an image.
 
-Production uses no Playwright, headless browser or automation extension. Manual mode has no CDP connection; the automated Gemini flow uses a private Chrome control pipe (no debugging port) for page observation and verified input. Windows uses a bundled PowerShell/C# window-only helper. macOS uses built-in JXA and window-only screen capture. Linux runs installed Chrome on a private Xvfb desktop with OS input/capture. Google sees the host PC's outbound network connection. This should improve compatibility over a headless VPS browser, but **does not guarantee Google sign-in**. Google may still request verification or reject access. No security-check bypass or cookie import is implemented.
+## Run locally
 
-## First run
+Install Node.js 22+ and ordinary Google Chrome (Edge is detected as a fallback),
+then run from this repository:
 
-Install **Node.js 22+** and ordinary desktop **Google Chrome** (Edge is detected as a fallback). Download/clone this repository into a permanent folder, then open a terminal there:
-
-```bash
+```sh
 npm ci
 node app.js
 ```
 
-The app detects your OS, prompts for a local administrator on first interactive startup, and opens `http://127.0.0.1:3030`. Password entry is hidden and confirmed. For subsequent runs: **`node app.js`**. No .env is required for local defaults, and no MongoDB, VPS, Docker or local extension is required.
+Open **http://127.0.0.1:3030**. There is no first-run username/password prompt and
+no database setup. Existing administrator files are preserved but ignored in the
+default local mode. No `.env` is necessary for defaults. If reusing an older
+`.env`, set `AUTH_REQUIRED=false` and
+`PUBLIC_ORIGIN=http://127.0.0.1:3030`; public origins are rejected in no-login mode.
 
-Click **Start browser**. Sign into Google directly in the dedicated Chrome window, including normal verification. Credentials/cookies stay on this PC. A new dedicated profile is used; it does not import your personal Chrome profile or earlier Playwright sessions.
+The OS is detected automatically. Native Windows/macOS control can require the
+managed window to remain visible and can change desktop focus:
 
-### OS setup and permissions
+- **Windows:** use an unlocked desktop with Chrome unminimized. The bundled
+  PowerShell helper captures only the managed window. Enterprise policy may
+  require approval for the trusted helper; do not disable organizational controls.
+- **macOS:** grant Screen Recording, Accessibility and Automation permissions to
+  the terminal/Node when needed. `npm run doctor` provides read-only diagnostics;
+  `npm run doctor -- --launch` additionally tests an isolated blank window.
+- **Linux:** run `npm run setup-host` to detect/install Xvfb, xauth, xdotool,
+  Openbox, ImageMagick, xprop and D-Bus on supported Debian/Ubuntu systems. Install
+  Chrome if missing. The private virtual display does not control your host desktop.
 
-- **Windows 10/11:** use an unlocked desktop with the managed Chrome window not minimized. A bundled PowerShell helper captures only that process's window using PrintWindow. Remote input focuses it and can move your mouse; use a separate OS account for uninterrupted work/isolation. PowerShell or enterprise application-control policy may require local approval for the trusted script. Do not disable organizational controls. GPU/window-capture compatibility still needs real-device validation.
-- **macOS:** allow the terminal/Node the requested **Screen Recording, Accessibility and Automation** permissions in System Settings. Keep the managed window unminimized. These are OS consent prompts and cannot be silently granted. Capture is limited to a window owned by the managed Chrome PID; a very short-lived private frame file is deleted after capture. Real-device permission/capture/input validation is required.
-- **Linux:** run `npm run setup-host` once to detect/install Xvfb, xauth, xdotool, Openbox, ImageMagick, xprop and D-Bus on Debian/Ubuntu (sudo may ask in your terminal). Install desktop Chrome if missing. Other distributions show the package names for their package manager. Chrome runs on an authenticated private display, not your working desktop. X11 TCP is disabled; no VNC/debug port is exposed. Run the app as a non-root user with Chromium sandbox support. Host AppArmor restrictions may still require configuration.
+Set `CHROME_PATH` only for a nonstandard install. Never run the app/browser as
+root or disable Chromium's sandbox for production.
 
-You don't need to select an OS. If Chrome is installed somewhere unusual, set `CHROME_PATH` in .env. `npm run doctor` checks executable/helper availability without opening your personal profile or taking a screenshot. `npm run doctor -- --launch` additionally tests a fresh blank native window and capture, discards its frame, and removes its temporary profile. `AUTO_OPEN=false` disables opening the viewer automatically.
+## Generate an image and get the chat ID
 
-## Google account sign-in
+1. Connect a Google account in the browser section. **Start Gemini automation**
+   checks Gemini first and stops if signed-in account/editor controls are visible.
+   If required, enter only the requested Google detail in the dialog. Security
+   challenges remain interactive. If Google rejects the controlled browser, stop
+   it, use **Start browser → Google sign-in** manually, then check the saved
+   profile again; acceptance is not guaranteed.
+2. In **Image generator**, choose **New chat** or a saved conversation and enter
+   the image description. **Generate image** returns a job immediately. The app
+   submits `Create an image based on this description:` followed by your prompt.
+3. Watch the real job stages. Jobs run in FIFO order, one at a time. Manual
+   controls are blocked while a generation job owns the browser.
+4. When Gemini creates its conversation URL, the dashboard shows the actual
+   **Chat ID** and link. No local placeholder is returned as a Gemini chat ID.
+5. On success, preview/download the original image and metadata JSON. The first
+   valid image in the latest new model response is selected; older chat images
+   are excluded. PNG/JPEG/WebP signatures, actual dimensions, size and checksum
+   are checked. No image-content analysis or bounding boxes are produced.
 
-For automatic detection and requested input, use **Start Gemini automation** (see below). For manual navigation, click **Google sign-in** after starting Chrome. It requests Google's official account chooser in the existing dedicated Chrome profile using the browser's normal URL-opening mechanism. This action doesn't require screen capture, Accessibility or a simulated key sequence, so you can continue directly in the opened Chrome window while resolving viewer permissions.
+Saved chats can be resumed and renamed locally. A chat is bound to the Google
+account observed when it was tracked; switching accounts does not silently
+submit to another account's conversation. Conversation deletion is not automated.
+Removing a local job/output leaves the Google conversation intact.
 
-Enter your Google email/password and complete MFA or security checks **directly in Chrome**. The app doesn't collect Google credentials or silently complete verification. For another account, use Google's account chooser/Add another account. The local native-profile retains sessions where Google permits; closing/restarting the app doesn't intentionally sign out Google. Google can expire/reject sessions or require reauthentication. No live Google login has been validated in automated tests.
+Gemini may return text only, fail to generate, impose limits, or change its UI.
+These are explicit job failures or review states, not screenshots or fake images.
+After ambiguous submission, interruption or restart, the app never automatically
+replays the prompt. Inspect its saved chat. **Retry before submission** is offered
+only when no prompt submission could have occurred. Cancel stops waiting/downloads;
+it cannot undo a prompt already submitted to Gemini.
 
-## Browser controls
+## Background browser
 
-The actual Chrome tab strip, address bar, menus and website appear inside the streamed window. Use those directly, or the viewer's Google/search, Back/Forward, Reload, New tab and Close tab controls. The viewer address field opens a URL/search in a new tab through Chrome's normal URL-opening mechanism; it is not an extracted live URL. Use Chrome's address bar inside the display to navigate in the current tab. **Chrome console** toggles native Chrome DevTools; **Debug console** shows the app's operational logs. Command completion means OS input was delivered, not that a website finished loading.
-
-Click inside the stream before typing. **Type / paste text** works with mobile and Unicode; some macOS input methods need live acceptance testing. Remote input can steal focus from other work on Windows/macOS. This product shares a dedicated browser window, not your whole host desktop, but an authenticated operator has the normal browser/file-picker privileges of the host OS account. Use a dedicated account if you need stronger isolation.
-
-To upload: open a website's native file picker, then click the viewer's **Upload file** and choose one file up to 20 MB. The helper requires a native file dialog; otherwise it rejects the operation. To download: use the website normally, then **Downloads → Save to device**. Files go into this app's private downloads folder, not your general Downloads. Only completed regular files up to 100 MB are listed; temporary/hidden files and symlinks are excluded. The newest 100 listed files are kept. Native dialogs/security warnings may require manual interaction. Larger/temporary downloads can still consume disk; use OS quotas for hard limits.
-
-Keep the PC awake/unlocked, the app running, and the managed Chrome window available. Stop/Sign out closes the managed browser and retains its profile. An eight-hour app session is the default. Inactivity stops the managed browser after 30 minutes by default; local manual typing isn't tracked by the app's idle clock.
-
-Native OS popup/GPU behavior varies. Some menus/dialogs may need local approval or keyboard interaction. Audio/video streaming, drag-and-drop, continuous pointer dragging and control of unrelated applications are not provided.
-
-## Remote access from another device
-
-The service binds to **127.0.0.1 only**. This is deliberate: do not expose desktop controls/passwords using public plaintext HTTP. For another device, use an authenticated SSH tunnel or a trusted HTTPS reverse proxy. You can optionally keep your existing VPS as a TLS gateway while Chrome runs on your PC; see [deployment](docs/deployment.md). Native website requests originate on the PC, not on that gateway VPS.
-
-## Administrator and diagnostics
-
-```bash
-npm run setup-admin   # explicit first-run alternative
-npm run reset-admin   # forgotten app password; existing sessions revoked
-npm run doctor
-```
-
-Admin files and profiles live under `runtime/` by default. Don't copy the previous VPS .env to your PC; its public origin and secrets are not needed for local defaults. Existing admin hashes can be kept if deliberately reusing the same DATA_DIR; the new browser profile is separate.
-
-Debug console includes retained live logs, filters, pause/resume, copy/export and clear. It omits typed text, passwords, URLs/query strings and website page/console contents. Native Chrome DevTools can show website details directly within the authenticated stream; those contents are not copied into server logs. No frame is sent to an AI provider.
-
-## Tests and limitations
-
-```bash
-npm run lint
-npm test
-npm audit --omit=dev --audit-level=high
-```
-
-Playwright is a **development-only** dependency for testing the viewer, never the production Chrome host. The Linux native acceptance fixture uses OS input, capture, actual uploads/downloads and profile reuse; enable with RUN_NATIVE_TESTS=1 and TEST_CHROME set to installed Chrome. Production launch arguments exclude automation/headless/debugging and sandbox-disable flags. Trusted tests may relax sandboxing inside CI containers.
-
-[Architecture](docs/architecture.md) · [Security](docs/security.md) · [Deployment](docs/deployment.md) · [Test report](docs/test-report.md)
-
-## Background mode
-
-For background control without focusing your macOS/Windows desktop, install and
-start **Docker Desktop**, select Linux containers, and run:
+For background control without macOS/Windows screen/input permissions, install
+and start Docker Desktop with Linux containers, then run:
 
 ```sh
-npm ci
 node app.js --background
 # equivalent: npm run background
 ```
 
-The first launch creates a **separate background administrator** in your
-terminal and builds the Linux image. Open **http://127.0.0.1:3030** after
-`SERVICE_STARTED`, sign in with that administrator, and use the same Gemini
-assistant and browser controls. Stop the native app first if it already uses
-port 3030. Linux can also use this command with a local Docker engine, or use
-`node app.js` with its existing private Linux desktop.
+The first run builds the Linux desktop image, without asking for an app password.
+Open the same local URL after `SERVICE_STARTED`. Stop another app already using
+port 3030 first. On Linux this mode uses a local Docker engine; native Linux also
+supports its private desktop directly without Docker.
 
-Background mode captures an isolated Linux desktop, so it needs no macOS Screen
-Recording/Accessibility permission. Keep Node, Docker and the PC running and
-awake. Switching tabs or disconnecting the dashboard does not stop Chrome;
-logout, Stop, cancellation, Ctrl+C or the configured idle timeout does. Browser
-steps pause for your input; the app cannot complete MFA/CAPTCHA unattended.
+The container runs as a mapped non-root user, keeps Chromium's sandbox enabled,
+publishes only host loopback, and exposes no VNC/CDP/debugging network listener.
+Keep Node, Docker and the PC running and awake. Disconnecting the dashboard does
+not stop a job; cancellation, shutdown and timeouts do. Ctrl+C stops this launch's
+container and preserves its profile. Reserve 2 CPUs, about 4 GB RAM and disk space.
+Physical Docker Desktop/ARM compatibility still needs target validation.
 
-Data lives in `runtime/background/` (or `DATA_DIR/background/`) including its own
-admin, Chrome profile, downloads and private logs. Native and background sessions
-are separate; no personal Chrome cookies are imported. Back up this directory
-only while the workspace is stopped. To reset its administrator, stop background
-mode and run `node --env-file-if-exists=.env scripts/background-admin.js`.
+Background data is separate, under `DATA_DIR/background` (default
+`runtime/background`). Native and background sessions do not import each other's
+cookies or your personal Chrome profile. See [container notes](container/README.md)
+for sandbox/engine diagnostics.
 
-Docker runs as a non-root user, publishes only `127.0.0.1:3030`, and keeps the
-Chromium sandbox enabled. Use a **local** Docker engine; remote engine contexts
-are unsupported. Reserve 2 CPUs, about 4 GB RAM, and disk space for the first image build.
-If startup reports `BROWSER_SANDBOX`, the engine's kernel restrictions need
-attention: see [container notes](container/README.md). Google can still reject
-sign-in; there are no stealth settings or security-check bypasses. Physical
-Docker Desktop and live Google login are **UNVERIFIED** until tested on your PC.
+## Groq recovery and browser controls
 
-## Gemini-first automation and Groq recovery
+The existing sign-in assistant offers **Groq recovery settings**. Enter its API
+key there, never in chat, and a JSON-capable model identifier. The key stays in
+private server `groq.json`; API responses never return it. Native mode can also
+use `GROQ_API_KEY`/`GROQ_MODEL`. Background mode uses dashboard configuration.
+Groq receives only sanitized navigation candidate IDs/categories, never passwords,
+codes, cookies, account names, raw page text or login screenshots. Unknown sign-in
+steps use at most two bounded recovery requests; unsafe/unsupported steps hand
+off to the user. Generation uses guarded deterministic controls and pauses when
+its prompt/response/download UI cannot be verified.
 
-Update main, run `npm ci`, then start `node app.js` (native desktop) or
-`node app.js --background` (Docker Desktop/local engine). Choose **Start Gemini
-automation**. The app opens Gemini first. If it observes both signed-in Google
-account controls and the Gemini editor, with no sign-in control, it stops
-without requesting credentials. This is UI-based detection; real Google
-acceptance remains unverified until tested on your account/device.
+The manual browser provides Google search, native tabs, keyboard/mouse, text
+entry, upload through a native file chooser (20 MB), downloads and a private
+sanitized debug console. Native navigation opens a new Chrome tab; the viewer's
+address field is not an extracted current URL. Audio, drag-and-drop and control
+of unrelated applications are not provided. Use the actual Chrome controls when
+native popups require manual interaction.
 
-If Gemini shows signed-out controls, the app opens Google sign-in. A dialog asks
-for the email/username, password, or recognized verification code **only when
-Google requests that field**. Values are masked where appropriate, cleared on
-send/cancel/disconnection, and never saved in settings, logs or flow snapshots.
-The app checks the exact Google origin and recognized visible input, fills it,
-and submits Next once. Stale requests are rejected. An ambiguous result pauses
-for review without automatically retyping or resubmitting credentials.
+## Storage, access and recovery
 
-CAPTCHA, passkeys, phone approval, account blocks, unsupported forms and other
-security checks require direct interaction in the live browser. Use **Check
-again** afterwards. Unsupported/localized UI is treated as unknown, never
-assumed signed in. Stop/cancel retains the isolated Chrome profile.
+`DATA_DIR` defaults to `runtime/`. Protect this directory: it contains Google
+sessions, prompts, generated files, chat references and server secrets. Generation
+state lives in `generation/queue.json`; outputs and JSON are under
+`generation/outputs/<job-id>/`. The queue has a process lease and atomic writes.
+An interrupted potentially submitted job becomes `needs_review` after restart.
+Default limits: 50 pending jobs, 500 retained jobs, 100 MB per completed image and
+180 seconds per generation job. Remove older local jobs/outputs to reclaim space;
+partial browser files and profiles can still consume disk, so use OS quotas.
 
-Open **Groq recovery settings** in the dashboard and enter your Groq API key
-there (never in chat), plus a JSON-capable model identifier. It is saved in the
-private server `DATA_DIR/groq.json` (background mode: `DATA_DIR/background/groq.json`),
-with restrictive file permissions; the key is never returned by the API.
-Native mode may also use `GROQ_API_KEY`/`GROQ_MODEL` environment variables.
-For background mode use dashboard settings rather than assuming host environment
-secrets are forwarded into Docker.
+Back up the whole data directory only while the app is stopped; restore with the
+same private permissions. Never commit it, `.env`, logs or screenshots containing
+real user data. **No-login access is local/shared**: anyone with access to this
+PC or its trusted SSH tunnel can control the saved browser and read the workspace.
+The service binds to 127.0.0.1; use encrypted SSH forwarding from another device.
+Public anonymous access is not implemented.
 
-Deterministic recognition/actions always run first. Unknown steps may use at
-most two Groq requests per flow, with bounded tokens/time and strict local JSON
-validation. Groq sees only allowlisted navigation candidate IDs/categories;
-never raw DOM text, screenshots, cookies, account names, passwords or codes.
-It may choose a supplied safe navigation candidate, wait, or ask for human help.
-Model-produced JavaScript, selectors, arbitrary URLs and credential operations
-are never executed. When Groq is unconfigured/unavailable or has no safe target,
-the app asks you to complete the step manually.
+Optional legacy protected access requires `AUTH_REQUIRED=true`, secure CLI setup
+with `npm run setup-admin`, and valid TLS for a public origin. This is opt-in and
+does not reintroduce a default startup login. See [deployment](docs/deployment.md),
+[API](docs/api.md), [security](docs/security.md) and [operations](docs/operations.md).
 
-Automation may restart an existing manual browser to enable its private control
-pipe, retaining the profile. No CDP network port is exposed. Google may still
-reject browser automation; this is not a restriction bypass. Real Google,
-physical Mac/Windows automation and live Groq/model compatibility are **UNVERIFIED**.
+## Validation and limitations
+
+```sh
+npm test
+npm run lint
+npm run doctor
+```
+
+Tests include API/security, durable FIFO/recovery, image metadata, local
+Gemini-like browser fixtures, original image downloads, resumed chats, historical
+image exclusion, multiple images, no-image/login/account/cancel/download failures,
+and responsive no-login UI. CI also checks the production sandbox/private pipe.
+Fixture success is not proof of live Google/Gemini operation.
+
+**UNVERIFIED:** real Google sign-in and Gemini image-generation/download UI,
+actual Groq/model availability, and physical Windows/macOS/ARM acceptance.
+Google's reported insecure-browser rejection cannot be bypassed or guaranteed
+away by this app. Complete live validation on your own account/PC before relying
+on unattended operation; see [test report](docs/test-report.md).

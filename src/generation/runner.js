@@ -95,7 +95,8 @@ export class GenerationRunner {
         "The Gemini prompt editor was not recognized. No prompt was submitted.",
       );
     const accountKey = before.accountKey,
-      baseline = before.responseIds;
+      baseline = before.responseIds,
+      baselineImages = before.imageKeys;
     await phase("preparing_prompt", { accountKey });
     const filled = await this.evaluate(
       { operation: "fill_prompt", accountKey, prompt: job.submittedPrompt },
@@ -109,7 +110,7 @@ export class GenerationRunner {
     let ready;
     for (let n = 0; n < 20; n++) {
       ready = await this.evaluate(
-        { operation: "inspect", accountKey, baseline },
+        { operation: "inspect", accountKey, baseline, baselineImages },
         signal,
       );
       if (ready.canSend) break;
@@ -137,7 +138,7 @@ export class GenerationRunner {
     while (true) {
       signal.throwIfAborted();
       const state = await this.evaluate(
-        { operation: "inspect", accountKey, baseline },
+        { operation: "inspect", accountKey, baseline, baselineImages },
         signal,
       );
       if (state.chatId) await chat(state.chatId, state.chatUrl, accountKey);
@@ -157,6 +158,7 @@ export class GenerationRunner {
       selection: selected,
       accountKey,
       baseline,
+      baselineImages,
       directory,
       signal,
     });
@@ -177,7 +179,14 @@ export class GenerationRunner {
     await fs.rename(source, path.join(directory, filename));
     return { ...info, filename };
   }
-  async download({ selection, accountKey, baseline, directory, signal }) {
+  async download({
+    selection,
+    accountKey,
+    baseline,
+    baselineImages,
+    directory,
+    signal,
+  }) {
     const pipe = this.browser.pipe,
       adapter = this.browser.gemini;
     await fs.mkdir(directory, { recursive: true, mode: 0o700 });
@@ -187,6 +196,7 @@ export class GenerationRunner {
       adapter.session,
     );
     let guid, timer, resolve, reject;
+    let completed = false;
     const completion = new Promise((yes, no) => {
       resolve = yes;
       reject = no;
@@ -202,8 +212,19 @@ export class GenerationRunner {
     };
     const progress = (event) => {
       if (event.guid !== guid) return;
-      if (event.state === "completed") resolve(path.join(directory, guid));
-      else if (event.state === "canceled")
+      if (event.receivedBytes > 100 * 1024 * 1024) {
+        reject(
+          nativeError(
+            "GENERATION_DOWNLOAD_TOO_LARGE",
+            "The image download exceeds 100 MB and was cancelled.",
+          ),
+        );
+        return;
+      }
+      if (event.state === "completed") {
+        completed = true;
+        resolve(path.join(directory, guid));
+      } else if (event.state === "canceled")
         reject(
           nativeError(
             "GENERATION_DOWNLOAD_INTERRUPTED",
@@ -237,7 +258,13 @@ export class GenerationRunner {
         eventsEnabled: true,
       });
       const result = await this.evaluate(
-        { operation: "download", selection, accountKey, baseline },
+        {
+          operation: "download",
+          selection,
+          accountKey,
+          baseline,
+          baselineImages,
+        },
         signal,
       );
       if (!result.ok)
@@ -251,7 +278,7 @@ export class GenerationRunner {
       signal.removeEventListener("abort", abort);
       pipe.off("Browser.downloadWillBegin", begin);
       pipe.off("Browser.downloadProgress", progress);
-      if (signal.aborted && guid)
+      if (!completed && guid)
         await pipe.send("Browser.cancelDownload", { guid }).catch(() => {});
       await pipe
         .send("Browser.setDownloadBehavior", {

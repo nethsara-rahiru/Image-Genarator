@@ -80,3 +80,30 @@ production container smoke verifies pipe access and capture. Live Google,
 physical Mac/Windows/ARM Docker, localization and actual Groq model acceptance
 remain UNVERIFIED. Complete those tests on the user's target before claiming
 live integrations work.
+
+## Local no-login image generator — current validation
+
+- Full Linux native suite: **48 total; 47 passed, 0 failed, 1 OS helper skip**.
+- Host suite: **45 passed, 0 failed, 3 native/OS checks skipped**.
+- New controlled browser fixture opens the dashboard without an admin, submits
+  image prompts, creates/resumes real-style conversation URLs, downloads the
+  selected current-response image and compares exact bytes/metadata. It replaces
+  historical response DOM nodes to exercise old-image exclusion; multiple images
+  still produce one selected output. It also tests text-only output, expired
+  login, account mismatch, interrupted downloads and cancellation with no replay.
+- Queue/API regressions cover FIFO retry order, duplicate/concurrent submissions,
+  worker lease exclusion, restart after possible submission, timeout/shutdown,
+  corrupt-journal preservation, output symlinks and repeated deletion races.
+- Native and opt-in protected API tests retain Origin/Host/CSRF/session safeguards.
+- Production smoke: non-root Chromium sandbox/private pipe/capture plus no-admin
+  bootstrap and generator API passed with production dependencies. Lint/audit pass;
+  no production vulnerabilities found.
+
+Screenshots under CI test-results contain only local synthetic fixtures, never
+real Google account data. Fresh-image metadata comes from actual downloaded PNG
+bytes in those fixtures; the output is not a screenshot.
+
+**UNVERIFIED:** live Google authentication (the user has reported rejection),
+real Gemini image-generation/download selectors and limits, actual Groq/model
+availability, physical Mac/Windows/ARM Docker/capture/control. These are not
+established by fixture/CI success. Complete authorized target tests separately.

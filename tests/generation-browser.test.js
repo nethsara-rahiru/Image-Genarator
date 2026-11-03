@@ -115,6 +115,7 @@ test(
       function wire(){for(const b of document.querySelectorAll('[data-download]'))b.onclick=()=>{const a=document.createElement('a');a.href=b.dataset.download;a.download='original.png';document.body.append(a);a.click();a.remove();};}
       wire();document.querySelector('#send').onclick=async()=>{
         const editor=document.querySelector('[contenteditable]'),prompt=editor.textContent;document.querySelector('#send').disabled=true;
+        for(const old of document.querySelectorAll('model-response'))old.replaceWith(old.cloneNode(true));
         const response=document.createElement('model-response');response.setAttribute('aria-busy','true');response.textContent='Generating';document.querySelector('#responses').append(response);
         const stop=document.createElement('button');stop.setAttribute('aria-label','Stop response');stop.textContent='Stop';document.body.append(stop);
         const data=await(await fetch('/mock/generate',{method:'POST',body:JSON.stringify({prompt,chatId:location.pathname.split('/')[2]||null})})).json();
@@ -228,7 +229,12 @@ test(
       assert.ok(bytes.equals(png(20)));
       assert.deepEqual(downloads, ["/img/1-0.png"]);
       const second = await final(
-        (await submit("new response in saved chat", first.chatId)).id,
+        (
+          await submit(
+            "new response in saved chat featuring a rate limit sign",
+            first.chatId,
+          )
+        ).id,
       );
       assert.equal(second.state, "completed", JSON.stringify(second.error));
       assert.equal(second.chatId, first.chatId);
@@ -295,6 +301,14 @@ test(
         .locator(".generation-preview")
         .first()
         .waitFor({ state: "visible" });
+      await page.waitForFunction(
+        (id) =>
+          [...document.querySelectorAll(".generation-job")]
+            .find((e) => e.dataset.jobId === id)
+            ?.querySelector("h3")
+            ?.textContent.startsWith("cancelled"),
+        slow.id,
+      );
       await fs.mkdir("test-results", { recursive: true });
       await page.screenshot({
         path: "test-results/image-generator-desktop.png",

@@ -233,3 +233,100 @@ test("local no-login API works without an admin and retains Host/Origin/CSRF bou
   });
   assert.equal(unexpectedHost, 403);
 });
+
+test("concurrent duplicate requests execute once and repeated deletion cannot remove a different job", async (t) => {
+  const seen = [],
+    q = await queue(t, successRunner(seen));
+  const jobs = await Promise.all(
+    Array.from({ length: 12 }, () =>
+      q.create({
+        prompt: "same request",
+        idempotencyKey: "concurrent-key-0001",
+      }),
+    ),
+  );
+  assert.equal(new Set(jobs.map((j) => j.id)).size, 1);
+  await until(() => q.get(jobs[0].id).state === "completed");
+  assert.equal(seen.length, 1);
+  const second = await q.create({
+    prompt: "other request",
+    idempotencyKey: "concurrent-key-0002",
+  });
+  await until(() => q.get(second.id).state === "completed");
+  const deleted = await Promise.allSettled([
+    q.remove(jobs[0].id),
+    q.remove(jobs[0].id),
+  ]);
+  assert.equal(deleted.filter((r) => r.status === "fulfilled").length, 1);
+  assert.equal(q.data.jobs.length, 1);
+  assert.equal(q.data.jobs[0].id, second.id);
+});
+test("explicit retries go behind already queued work", async (t) => {
+  let release;
+  const gate = new Promise((r) => (release = r)),
+    order = [];
+  const success = successRunner();
+  const q = await queue(t, {
+    async run(job, context) {
+      order.push(job.prompt);
+      if (job.prompt === "A" && job.attempts === 1)
+        throw nativeError("GENERATION_LOGIN_REQUIRED", "Sign-in required.");
+      if (job.prompt === "B") await gate;
+      return success.run(job, context);
+    },
+  });
+  const a = await q.create({ prompt: "A", idempotencyKey: "fifo-retry-key-a" });
+  await until(() => q.get(a.id).state === "needs_login");
+  await q.create({ prompt: "B", idempotencyKey: "fifo-retry-key-b" });
+  await until(() => q.active?.prompt === "B");
+  await q.create({ prompt: "C", idempotencyKey: "fifo-retry-key-c" });
+  await q.retry(a.id);
+  release();
+  await until(() => q.data.jobs.every((j) => j.state === "completed"));
+  assert.deepEqual(order, ["A", "B", "C", "A"]);
+});
+test("shutdown and timeouts do not requeue a potentially submitted prompt", async (t) => {
+  const q = await queue(t, {
+    async run(job, { phase, signal }) {
+      await phase("submitting_prompt", { submissionPossible: true });
+      await pause(5000, undefined, { signal });
+    },
+  });
+  q.config.generationTimeoutMs = 60;
+  const job = await q.create({
+    prompt: "timeout",
+    idempotencyKey: "timeout-test-key",
+  });
+  await until(() => q.get(job.id).state === "needs_review");
+  assert.equal(q.get(job.id).error.code, "GENERATION_TIMEOUT");
+  q.config.generationTimeoutMs = 5000;
+  const stop = await q.create({
+    prompt: "shutdown",
+    idempotencyKey: "shutdown-test-key",
+  });
+  await until(() => q.get(stop.id).submissionPossible);
+  await q.close();
+  const disk = JSON.parse(await fs.readFile(q.file, "utf8"));
+  assert.equal(disk.jobs.find((j) => j.id === stop.id).state, "needs_review");
+});
+test("corrupt storage is preserved and output symlinks are rejected", async (t) => {
+  const q = await queue(t, successRunner());
+  const job = await q.create({
+    prompt: "safe",
+    idempotencyKey: "symlink-safe-key",
+  });
+  await until(() => q.get(job.id).state === "completed");
+  const file = await q.outputFile(job.id);
+  if (process.platform !== "win32") {
+    await fs.rm(file.path);
+    const outside = path.join(q.config.data, "outside.png");
+    await fs.writeFile(outside, png());
+    await fs.symlink(outside, file.path);
+    await assert.rejects(q.outputFile(job.id));
+  }
+  await q.close();
+  await fs.writeFile(q.file, "broken-journal");
+  const reopened = new GenerationQueue(q.config, {});
+  await assert.rejects(reopened.init());
+  assert.equal(await fs.readFile(q.file, "utf8"), "broken-journal");
+});

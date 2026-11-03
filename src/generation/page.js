@@ -49,6 +49,21 @@ export async function generationPage(request) {
     'model-response,[data-message-author-role="model"],.model-response',
   ).filter((e, i, items) => !items.some((p, j) => i !== j && p.contains(e)));
   const ids = responses.map(id);
+  const imageKey = async (image) => {
+    const url = new URL(image.currentSrc || image.src, location.href);
+    if (/(^|\.)googleusercontent\.com$/.test(url.hostname))
+      url.pathname = url.pathname.replace(/=[^/]*$/, "");
+    const data = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(url.href.slice(0, 4096)),
+    );
+    return [...new Uint8Array(data)]
+      .map((v) => v.toString(16).padStart(2, "0"))
+      .join("");
+  };
+  const imageKeys = await Promise.all(
+    responses.flatMap((r) => [...r.querySelectorAll("img")]).map(imageKey),
+  );
   const match = current.pathname.match(/^\/app\/([A-Za-z0-9_-]{4,160})\/?$/);
   const chatId = match?.[1] || null;
   const base = {
@@ -57,6 +72,7 @@ export async function generationPage(request) {
     chatId,
     chatUrl: chatId ? origin + "/app/" + chatId : null,
     responseIds: ids,
+    imageKeys,
   };
   const editors = all(
     '[contenteditable="true"][role="textbox"],.ql-editor[contenteditable="true"],textarea',
@@ -114,7 +130,7 @@ export async function generationPage(request) {
   const fresh = responses.filter(
     (e) => !(request.baseline || []).includes(id(e)),
   );
-  const response = fresh[0];
+  const response = fresh.at(-1);
   const busy =
     controls.some((e) =>
       /^(stop|stop response|stop generating|stop generating response)$/i.test(
@@ -126,12 +142,17 @@ export async function generationPage(request) {
         response.getAttribute("data-is-streaming") === "true"));
   const limited =
     /usage limit|rate limit|too many requests|try again later|unusual activity|account.{0,40}(?:disabled|suspended|locked)/i.test(
-      document.body?.innerText || "",
+      all('[role="alert"],[role="dialog"],.error-message,[data-error]')
+        .filter(
+          (e) => !responses.some((r) => r.contains(e)) && !editor?.contains(e),
+        )
+        .map((e) => e.textContent)
+        .join(" "),
     );
   if (limited) return { ...base, kind: "restricted" };
   let selected;
   if (response) {
-    const images = [...response.querySelectorAll("img")]
+    let images = [...response.querySelectorAll("img")]
       .filter(
         (e) =>
           visible(e) &&
@@ -153,6 +174,11 @@ export async function generationPage(request) {
           return false;
         }
       });
+    const allowedImages = [];
+    for (const image of images)
+      if (!(request.baselineImages || []).includes(await imageKey(image)))
+        allowedImages.push(image);
+    images = allowedImages;
     const image = images[0];
     if (image) {
       let container = image.parentElement,

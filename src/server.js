@@ -103,7 +103,7 @@ export async function startServer(config, options = {}) {
     res.set("Cache-Control", "no-store");
     next();
   });
-  app.use(express.json({ limit: "20kb" }));
+  app.use(express.json({ limit: "64kb" }));
   app.use(sessionMiddleware);
   const admin = () => readAdmin(config.data);
   const authenticated = async (req) => {

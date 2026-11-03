@@ -40,3 +40,13 @@ filling, single Next submission, stale-token rejection and explicit security/
 ambiguity handoff. Adds server-side Groq configuration and bounded recovery over
 sanitized navigation candidates; credentials and login screenshots are excluded.
 Manual native control remains available. Live integrations remain unverified.
+
+## Unreleased — local no-login image generation
+
+Opens the local dashboard without startup/admin login while preserving optional
+protected legacy mode. Adds prompt jobs, saved/new chat handling with actual
+Gemini conversation IDs, leased durable FIFO, idempotency, cancel/recovery,
+account binding, original current-response image download, real metadata and
+output gallery. Past images are excluded even when historical nodes rerender.
+Text-only or ambiguous results are explicit failures/review states; submitted
+prompts are never automatically replayed. Public anonymous access is not enabled.

@@ -80,10 +80,23 @@ export class GenerationQueue {
         "Generation storage ownership was lost.",
       );
     const value = JSON.stringify(this.data);
+    if (Buffer.byteLength(value) > 20 * 1024 * 1024)
+      throw nativeError(
+        "GENERATION_STORAGE_FULL",
+        "Generation history is full. Remove older local jobs/outputs.",
+      );
     const temp = this.file + "." + randomUUID() + ".tmp";
     const result = this.writes.then(async () => {
-      await fs.writeFile(temp, value, { mode: 0o600, flag: "wx" });
+      await fs.writeFile(temp, value, { mode: 0o600, flag: "wx", flush: true });
       await fs.rename(temp, this.file);
+      if (process.platform !== "win32") {
+        const directory = await fs.open(this.dir, "r");
+        try {
+          await directory.sync();
+        } finally {
+          await directory.close();
+        }
+      }
       this.version++;
     });
     this.writes = result.catch(() => {});
@@ -204,6 +217,11 @@ export class GenerationQueue {
     };
     this.data.jobs.push(job);
     try {
+      if (Buffer.byteLength(JSON.stringify(this.data)) > 19 * 1024 * 1024)
+        throw nativeError(
+          "GENERATION_STORAGE_FULL",
+          "Generation history is full. Remove older jobs before adding more.",
+        );
       await this.persist();
     } catch (error) {
       this.data.jobs.splice(this.data.jobs.indexOf(job), 1);
@@ -230,14 +248,17 @@ export class GenerationQueue {
   }
   async pump() {
     while (!this.stopping) {
-      const job = this.data.jobs.find((j) => j.state === "queued");
+      const job = this.data.jobs
+        .filter((j) => j.state === "queued")
+        .sort((a, b) => a.sequence - b.sequence)[0];
       if (!job) break;
       this.active = job;
       this.controller = new AbortController();
-      const signal = this.controller.signal;
+      const controller = this.controller;
+      const signal = controller.signal;
       const timeout = setTimeout(
         () =>
-          this.controller.abort(
+          controller.abort(
             nativeError(
               "GENERATION_TIMEOUT",
               "Image generation timed out. Inspect the saved chat; the prompt will not be repeated automatically.",
@@ -270,6 +291,7 @@ export class GenerationQueue {
       };
       try {
         job.attempts++;
+        job.startedAt = new Date().toISOString();
         await phase("running");
         const directory = path.join(this.outputs, job.id);
         const output = await this.runner.run(job, {
@@ -311,9 +333,10 @@ export class GenerationQueue {
           outputFilename: output.filename,
           ...output,
           createdAt: job.createdAt,
+          startedAt: job.startedAt,
           completedAt,
           selectionRule:
-            "First valid image in the first new model response; original website download.",
+            "First valid non-historical image in the latest new model response; original website download.",
         };
         await fs.writeFile(
           path.join(directory, "metadata.json"),

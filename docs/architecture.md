@@ -51,3 +51,35 @@ and Chromium sandboxing. Only in this container does the server listen on
 native capture/input is unused in this mode. Build context uses an explicit
 source allowlist. Signals stop only the container ID created by this launch;
 existing containers or profiles are not silently deleted on conflict.
+
+## Local no-login generation worker
+
+The default configuration now opens the local workspace without an administrator
+identity. Sessions remain for CSRF/transport safeguards. Public no-login origins
+are rejected; opt-in AUTH_REQUIRED preserves legacy protected access. Browser
+profiles and old admin files are preserved. Startup and Docker launch no longer
+prompt for an app password. This is a trusted shared local workspace.
+
+GenerationQueue owns a leased journal under DATA_DIR/generation and executes one
+job at a time inside the API process. Mutations are serialized and the journal is
+written to a private temporary file then renamed atomically. FIFO uses monotonic
+sequence; an explicit safe retry moves to the tail. Potential submission is
+persisted before clicking Send. Interrupted submitted jobs require review, never
+automatic replay. Shutdown cancels the wait/download and releases ownership.
+
+GenerationRunner uses fixed local code through the existing private browser pipe.
+It opens a fresh or saved Gemini chat, verifies account identity using a local
+hash of the visible account label, records response/image baselines, fills the
+composer, submits once and observes the new response. Historical image-source
+fingerprints and response IDs protect association even if old DOM nodes rerender.
+Only the first valid image in the latest new response can be selected. Unknown
+controls or ambiguous submission/download state fail safely; there is no model
+code execution, output screenshot or image-content analysis.
+
+A frame-bound Browser.downloadWillBegin/downloadProgress pair identifies the
+website's original download. Chrome temporarily saves by its GUID into the job's
+private directory; normal download behavior is restored afterwards. Unfinished
+or oversized downloads are cancelled. File signatures, actual dimensions, size
+and checksum are inspected; original bytes and metadata JSON are retained. The
+real chat ID is read from Gemini's conversation URL and stored in the local
+catalog, including failed jobs where a conversation was observed.
