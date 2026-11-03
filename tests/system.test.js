@@ -36,7 +36,11 @@ async function harness(t, options = {}) {
   const data = await fs.mkdtemp(path.join(os.tmpdir(), "native-system-"));
   await writeAdmin(data, "admin", password);
   const config = {
-    ...configuration({ DATA_DIR: data, AUTO_OPEN: "false" }),
+    ...configuration({
+      DATA_DIR: data,
+      AUTO_OPEN: "false",
+      AUTH_REQUIRED: "true",
+    }),
     port: 0,
   };
   const service = await startServer(config, { test: true, ...options });
@@ -719,6 +723,7 @@ test("exact Host, trusted TLS transport and Secure cookies protect native contro
     ...configuration({
       DATA_DIR: data,
       PUBLIC_ORIGIN: "https://native.example",
+      AUTH_REQUIRED: "true",
     }),
     port: 0,
   };

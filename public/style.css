@@ -519,3 +519,49 @@ select:focus-visible {
   margin-bottom: 0.65rem;
   overflow-wrap: anywhere;
 }
+
+.generator-panel {
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+#generator-form textarea,
+#generator-form select {
+  width: 100%;
+}
+.generator-panel select {
+  font: inherit;
+  color: inherit;
+  background: #0c131e;
+  border: 1px solid #344156;
+  border-radius: 7px;
+  padding: 10px;
+}
+.generation-job {
+  border-top: 1px solid #344156;
+  padding: 1rem 0;
+  overflow-wrap: anywhere;
+}
+.generation-job progress {
+  width: 100%;
+  accent-color: #a6e5ce;
+}
+.generation-preview {
+  display: block;
+  max-width: min(100%, 560px);
+  max-height: 440px;
+  object-fit: contain;
+  border-radius: 8px;
+  margin: 1rem 0;
+}
+.generation-chat {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  overflow-wrap: anywhere;
+}
+#groq-form input,
+#signin-form select,
+#signin-value {
+  max-width: 100%;
+}

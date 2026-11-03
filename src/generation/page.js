@@ -1,0 +1,216 @@
+// Fixed browser-side program. No model-provided code, selectors or URLs.
+export async function generationPage(request) {
+  const current = new URL(location.href);
+  const origin = request.origin || "https://gemini.google.com";
+  if (current.origin !== origin) return { kind: "needs_login" };
+  const visible = (e) =>
+    !!e &&
+    !!e.getClientRects().length &&
+    getComputedStyle(e).visibility !== "hidden";
+  const all = (selector) =>
+    [...document.querySelectorAll(selector)].filter(visible);
+  const label = (e) =>
+    (
+      e.getAttribute("aria-label") ||
+      e.getAttribute("title") ||
+      e.getAttribute("data-tooltip") ||
+      e.innerText ||
+      ""
+    )
+      .trim()
+      .replace(/\s+/g, " ");
+  const controls = all("button,[role=button],a");
+  const account = controls.find((e) =>
+    /^Google Account\s*:/i.test(e.getAttribute("aria-label") || ""),
+  );
+  if (!account || controls.some((e) => /^sign in$/i.test(label(e))))
+    return { kind: "needs_login" };
+  const keyBytes = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(account.getAttribute("aria-label")),
+  );
+  const accountKey = [...new Uint8Array(keyBytes)]
+    .map((v) => v.toString(16).padStart(2, "0"))
+    .join("");
+  if (
+    location.origin !== origin ||
+    (request.accountKey && request.accountKey !== accountKey)
+  )
+    return { kind: "account_changed" };
+  const state = (globalThis[Symbol.for("local-gemini-generation")] ||= {
+    nodes: new WeakMap(),
+    next: 0,
+  });
+  const id = (e) => {
+    if (!state.nodes.has(e)) state.nodes.set(e, "e" + ++state.next);
+    return state.nodes.get(e);
+  };
+  const responses = all(
+    'model-response,[data-message-author-role="model"],.model-response',
+  ).filter((e, i, items) => !items.some((p, j) => i !== j && p.contains(e)));
+  const ids = responses.map(id);
+  const match = current.pathname.match(/^\/app\/([A-Za-z0-9_-]{4,160})\/?$/);
+  const chatId = match?.[1] || null;
+  const base = {
+    kind: "ready",
+    accountKey,
+    chatId,
+    chatUrl: chatId ? origin + "/app/" + chatId : null,
+    responseIds: ids,
+  };
+  const editors = all(
+    '[contenteditable="true"][role="textbox"],.ql-editor[contenteditable="true"],textarea',
+  ).filter(
+    (e, i, a) => a.indexOf(e) === i && !responses.some((r) => r.contains(e)),
+  );
+  const editor = editors.length === 1 ? editors[0] : null;
+  const send = controls.filter(
+    (e) => /^(send|send message|submit prompt)$/i.test(label(e)) && !e.disabled,
+  );
+  if (request.operation === "new_chat") {
+    const buttons = controls.filter((e) =>
+      /^(new chat|start new chat)$/i.test(label(e)),
+    );
+    if (buttons.length !== 1) return { ok: false };
+    if (
+      buttons[0].tagName === "A" &&
+      new URL(buttons[0].href, location.href).origin !== origin
+    )
+      return { ok: false };
+    buttons[0].click();
+    return { ok: true };
+  }
+  if (request.operation === "fill_prompt") {
+    if (!editor || editor.readOnly || editor.disabled) return { ok: false };
+    editor.focus();
+    if (editor.tagName === "TEXTAREA")
+      Object.getOwnPropertyDescriptor(
+        HTMLTextAreaElement.prototype,
+        "value",
+      ).set.call(editor, request.prompt);
+    else editor.textContent = request.prompt;
+    editor.dispatchEvent(
+      new InputEvent("input", {
+        bubbles: true,
+        composed: true,
+        inputType: "insertText",
+        data: request.prompt,
+      }),
+    );
+    editor.dispatchEvent(new Event("change", { bubbles: true }));
+    return { ok: true };
+  }
+  if (request.operation === "send") {
+    if (
+      !editor ||
+      (editor.value ?? editor.textContent) !== request.prompt ||
+      send.length !== 1 ||
+      ids.join(",") !== (request.baseline || []).join(",")
+    )
+      return { ok: false };
+    send[0].click();
+    return { ok: true };
+  }
+  const fresh = responses.filter(
+    (e) => !(request.baseline || []).includes(id(e)),
+  );
+  const response = fresh[0];
+  const busy =
+    controls.some((e) =>
+      /^(stop|stop response|stop generating|stop generating response)$/i.test(
+        label(e),
+      ),
+    ) ||
+    (!!response &&
+      (response.getAttribute("aria-busy") === "true" ||
+        response.getAttribute("data-is-streaming") === "true"));
+  const limited =
+    /usage limit|rate limit|too many requests|try again later|unusual activity|account.{0,40}(?:disabled|suspended|locked)/i.test(
+      document.body?.innerText || "",
+    );
+  if (limited) return { ...base, kind: "restricted" };
+  let selected;
+  if (response) {
+    const images = [...response.querySelectorAll("img")]
+      .filter(
+        (e) =>
+          visible(e) &&
+          e.complete &&
+          e.naturalWidth >= 64 &&
+          e.naturalHeight >= 64 &&
+          !/avatar|profile|logo/i.test(e.alt || ""),
+      )
+      .filter((e) => {
+        try {
+          const src = new URL(e.currentSrc || e.src, location.href);
+          return (
+            src.origin === origin ||
+            (src.protocol === "blob:" && src.origin === origin) ||
+            (src.protocol === "https:" &&
+              /(^|\.)googleusercontent\.com$/.test(src.hostname))
+          );
+        } catch {
+          return false;
+        }
+      });
+    const image = images[0];
+    if (image) {
+      let container = image.parentElement,
+        download;
+      while (container && response.contains(container)) {
+        const siblings = images.filter((e) => container.contains(e));
+        const buttons = [
+          ...container.querySelectorAll('button,[role="button"]'),
+        ].filter(
+          (e) =>
+            visible(e) &&
+            !e.disabled &&
+            /download(?: image| full size| full-size)?/i.test(label(e)),
+        );
+        if (siblings.length === 1 && buttons.length === 1) {
+          download = buttons[0];
+          break;
+        }
+        if (container === response) break;
+        container = container.parentElement;
+      }
+      if (download)
+        selected = {
+          responseId: id(response),
+          imageId: id(image),
+          buttonId: id(download),
+        };
+    }
+  }
+  if (request.operation === "download") {
+    if (
+      busy ||
+      !selected ||
+      selected.responseId !== request.selection?.responseId ||
+      selected.imageId !== request.selection?.imageId ||
+      selected.buttonId !== request.selection?.buttonId
+    )
+      return { ok: false };
+    const button = [
+      ...response.querySelectorAll('button,[role="button"]'),
+    ].find((e) => id(e) === selected.buttonId);
+    button.click();
+    return { ok: true };
+  }
+  const complete =
+    !!response &&
+    [...response.querySelectorAll('button,[role="button"]')].some(
+      (e) =>
+        visible(e) &&
+        /^(good response|bad response|copy response|copy)$/i.test(label(e)),
+    );
+  return {
+    ...base,
+    busy,
+    selection: selected || null,
+    hasResponse: !!response,
+    textOnly: complete && !busy && !selected,
+    canSend: send.length === 1,
+    editorReady: !!editor,
+  };
+}

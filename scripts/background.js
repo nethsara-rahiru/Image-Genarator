@@ -6,8 +6,6 @@ import { fileURLToPath } from "node:url";
 import { createHash, randomUUID } from "node:crypto";
 import lockfile from "proper-lockfile";
 import { configuration } from "../src/config.js";
-import { readAdmin } from "../src/admin.js";
-import { interactiveAdmin } from "./admin.js";
 const root = fileURLToPath(new URL("../", import.meta.url));
 process.chdir(root);
 if (existsSync(".env")) process.loadEnvFile(".env");
@@ -55,19 +53,6 @@ try {
     update: 5000,
     retries: 0,
   });
-  const adminConfig = { ...config, data };
-  if (!(await readAdmin(data))) {
-    if (!process.stdin.isTTY)
-      throw new Error(
-        "First background launch requires an interactive terminal to create its separate administrator.",
-      );
-    console.log(
-      "Create the administrator for the isolated background workspace (separate from native mode).",
-    );
-    await interactiveAdmin(adminConfig);
-    if (!(await readAdmin(data)))
-      throw new Error("Administrator setup cancelled");
-  }
   console.log(
     "Building the private Linux desktop image. First launch downloads system packages; later builds use the cache.",
   );
@@ -109,6 +94,8 @@ try {
     `type=bind,src=${data},dst=/data`,
     "--env",
     `PUBLIC_ORIGIN=${config.origin}`,
+    "--env",
+    `AUTH_REQUIRED=${config.authRequired}`,
     "--env",
     `SESSION_HOURS=${config.sessionMs / 3600000}`,
     "--env",
