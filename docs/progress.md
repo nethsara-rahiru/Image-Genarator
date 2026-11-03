@@ -138,3 +138,60 @@ native chooser and verifies exact uploaded bytes. Final local native suite:
 36 passed/1 OS helper skip. Require the final revision's three OS checks and
 production sandbox/pipe smoke to pass before the authorized merge. Live Google,
 Groq and physical desktop acceptance remain unverified as above.
+
+## Local no-login image generation — 2026-11-03
+
+User requests removing the application's startup login, generating an image from
+a dashboard prompt, managing chats, and returning the actual Gemini chat ID.
+The user explicitly selected **Local no-login app with browser controls**.
+Public anonymous access is outside this change. Preserve runtime profiles,
+credentials and existing work; do not delete old administrator files.
+
+Execution blocker: the selected coding environment became unavailable.
+The environment tool reports connectivity offline; shell execution returned
+409 environment_offline ("Environment is not connected"). The attempted branch/
+repository inspection command did not execute. GitHub connector access still
+works, so this continuation note is committed on feat/open-image-generator.
+No application changes for this request have been implemented or tested.
+Do not describe the existing main branch as an image generator or no-login app.
+
+Implementation continuation:
+
+1. Inspect repository state and fetch feat/open-image-generator after restoring
+   the workspace. Preserve the existing PR #13 browser/sign-in/Groq work.
+2. Remove first-run administrator prompts from app.js and the background launcher.
+   Make local dashboard access require no application password. Retain exact
+   Host/Origin checks, CSRF and loopback binding. Reject accidental public
+   no-auth configuration. Google authentication is separate and remains required.
+3. Add a real prompt form, new/resume-chat selector, job progress/history,
+   actual chat ID/link, and output preview/image/JSON downloads.
+4. Implement one generation job at a time with durable local FIFO state, a
+   process lease, cancellation, idempotency and crash recovery. A submitted or
+   ambiguously submitted prompt must become needs_review after interruption;
+   never silently resubmit it.
+5. Extend the fixed private-pipe adapter to create/reopen Gemini conversations,
+   verify the selected account/chat, record response baselines, enter the image
+   prompt, submit once, and observe the current response. Keep site checks and
+   model action restrictions. Obtain the chat ID from Gemini's actual
+   /app/<conversation-id> URL, never a fabricated local ID.
+6. Select the first valid image in the new response, excluding prior chat images
+   and uploads. Prefer its website download action. Associate browser download
+   events with the controlled frame/job and save into a private job directory.
+   Validate signature, nonzero bytes and actual dimensions/format; retain the
+   original bytes plus metadata/checksum. Do not analyze image content.
+   Text-only responses must explicitly report no image, not produce a screenshot.
+7. Pause on login requirements, blocks, limits and unsupported UI. Google has
+   already rejected a live sign-in for this user; this work cannot promise to
+   bypass that restriction. Existing Groq recovery must not receive credentials,
+   login screenshots or secret page content.
+8. Add local Gemini-like fixtures for new/resumed chats, current-response
+   association, multiple images, no image, interrupted download, cancellation,
+   restart/duplicate submissions, and no-login Host/Origin/CSRF access. Update
+   deployment/API/security/progress/test documentation and run required checks.
+9. Commit/push tested changes, open the feature PR, and merge under the user's
+   standing "always merge to main" authorization only after required checks pass.
+   No release tag or live integration validation is implied.
+
+Needed external action: reconnect/restart the coding environment. Live Gemini
+image generation and the target PC still need authorized user validation after
+implementation; never request Google passwords or API secrets in chat.
