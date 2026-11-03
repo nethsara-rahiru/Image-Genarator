@@ -239,12 +239,7 @@ export class RemoteBrowser {
         "Google account chooser navigation requested. Complete sign-in and verification directly in Chrome; the profile is retained.",
       );
     } else if (d.type === "navigate") {
-      const url = await (this.options.validateUrl || publicUrl)(
-        navigationTarget(d.url),
-      );
-      await key(`${command}+L`);
-      await this.driver.command({ type: "text", text: url });
-      await key("Enter");
+      await this.openUrl(navigationTarget(d.url));
     } else if (d.type === "devtools")
       await key(this.platform === "darwin" ? "Meta+Alt+j" : "Control+Shift+j");
     else if (d.type === "newTab") await key(`${command}+t`);
@@ -313,8 +308,8 @@ export class RemoteBrowser {
       );
     } catch {
       throw nativeError(
-        "GOOGLE_SIGNIN_OPEN_FAILED",
-        "Could not request the sign-in tab. Open https://accounts.google.com/ directly in the managed Chrome window.",
+        "BROWSER_URL_OPEN_FAILED",
+        "Could not open the requested tab. Use the managed Chrome address bar directly and check this app's dedicated browser profile.",
       );
     }
   }

@@ -221,6 +221,7 @@ export class LinuxDriver {
         "Click a website file picker before uploading.",
       );
     await this.command({ type: "key", key: "Control+L" });
+    await pause(100); // Let the native GTK location entry acquire focus.
     await this.command({ type: "text", text: file });
     await this.command({ type: "key", key: "Alt+o" });
     for (let i = 0; i < 10; i++) {
