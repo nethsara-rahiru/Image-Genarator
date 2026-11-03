@@ -148,7 +148,9 @@ export class RemoteBrowser {
     const args = browserArguments(this.profile, this.proxy.port, {
       test: this.options.test,
       platform: this.platform,
-      homepage: this.options.homepage || "https://www.google.com/",
+      homepage: this.automation
+        ? "about:blank"
+        : this.options.homepage || "https://www.google.com/",
     });
     if (this.automation) args.push("--remote-debugging-pipe");
     this.child = spawn(binary, args, {

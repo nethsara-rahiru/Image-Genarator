@@ -621,6 +621,7 @@ test(
       assert.equal(recoveryBodies.length, 1);
       assert.ok(!recoveryBodies[0].includes(temporarySecret));
       assert.ok(!recoveryBodies[0].includes("fixture@example.test"));
+      assert.ok(b.child.spawnargs.includes("about:blank"));
       const targetId = b.gemini.target;
       const automationPid = b.child.pid,
         count = loginInputs.length;
