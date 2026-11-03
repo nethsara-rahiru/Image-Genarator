@@ -159,7 +159,7 @@ export async function generationPage(request) {
           e.complete &&
           e.naturalWidth >= 64 &&
           e.naturalHeight >= 64 &&
-          !/avatar|profile|logo/i.test(e.alt || ""),
+          !/avatar|profile/i.test(e.alt || ""),
       )
       .filter((e) => {
         try {
@@ -187,31 +187,40 @@ export async function generationPage(request) {
         const siblings = images.filter((e) => container.contains(e));
         const buttons = [
           ...container.querySelectorAll('button,[role="button"]'),
-        ].filter(
-          (e) =>
-            visible(e) &&
-            !e.disabled &&
-            /download(?: image| full size| full-size)?/i.test(label(e)),
-        );
-        if (siblings.length === 1 && buttons.length === 1) {
-          download = buttons[0];
+        ].filter((e) => !e.disabled && /download/i.test(label(e)));
+        if (buttons.length === siblings.length && buttons.length > 0) {
+          download = buttons[siblings.indexOf(image)];
           break;
         }
         if (container === response) break;
         container = container.parentElement;
       }
-      if (download)
-        selected = {
-          responseId: id(response),
-          imageId: id(image),
-          buttonId: id(download),
-        };
+      selected = {
+        responseId: id(response),
+        imageId: id(image),
+        buttonId: download ? id(download) : null,
+      };
     }
+  }
+  if (request.operation === "hover_image") {
+    if (!selected || selected.imageId !== request.selection?.imageId)
+      return { ok: false };
+    const image = [...response.querySelectorAll("img")].find(
+      (e) => id(e) === selected.imageId,
+    );
+    image.scrollIntoView({ block: "center", inline: "center" });
+    const rect = image.getBoundingClientRect();
+    return {
+      ok: true,
+      x: rect.x + rect.width / 2,
+      y: rect.y + rect.height / 2,
+    };
   }
   if (request.operation === "download") {
     if (
       busy ||
       !selected ||
+      !selected.buttonId ||
       selected.responseId !== request.selection?.responseId ||
       selected.imageId !== request.selection?.imageId ||
       selected.buttonId !== request.selection?.buttonId
@@ -227,7 +236,7 @@ export async function generationPage(request) {
     !!response &&
     [...response.querySelectorAll("img")].some(
       (e) =>
-        !/avatar|profile|logo/i.test(e.alt || "") &&
+        !/avatar|profile/i.test(e.alt || "") &&
         (e.naturalWidth === 0 || e.naturalWidth >= 64),
     );
   const complete =

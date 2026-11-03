@@ -7,7 +7,7 @@ let csrf = "",
   current;
 let authRequired = true;
 let intentional = false;
-let signinBusy = false;
+
 const report = (message) => {
   $("error").textContent = message;
   $("error").hidden = !message;
@@ -36,7 +36,6 @@ async function api(url, method = "GET", body) {
   return data;
 }
 function showLogin() {
-  clearSignin();
   $("groq-key").value = "";
   loggedIn = false;
   intentional = true;
@@ -113,16 +112,7 @@ function connect() {
     report("");
   };
   ws.onmessage = async (event) => {
-    if (event.data instanceof Blob) {
-      try {
-        const image = await createImageBitmap(event.data);
-        const canvas = $("screen");
-        canvas
-          .getContext("2d")
-          .drawImage(image, 0, 0, canvas.width, canvas.height);
-        image.close();
-      } catch {}
-    } else {
+    if (!(event.data instanceof Blob)) {
       const d = JSON.parse(event.data);
       if (d.type === "state") render(d);
       if (d.type === "gemini-flow") renderFlow(d);
@@ -135,8 +125,6 @@ function connect() {
     }
   };
   ws.onclose = (event) => {
-    clearSignin();
-    $("signin-details").disabled = true;
     if (intentional || !loggedIn) return;
     if (event.code === 4001) {
       showLogin();
@@ -161,9 +149,6 @@ function send(action) {
 }
 function render(state) {
   current = state;
-  $("signin-details").disabled = !signinAllowed();
-  if (!state.running) clearSignin();
-  if (state.running && geminiFlow.input) renderFlow(geminiFlow);
   $("background-status").textContent = state.backgroundInput
     ? "Background control: private Linux desktop. Keep Node running and the host awake; the browser continues when this dashboard disconnects, until the idle timeout."
     : "Native desktop control requires Chrome visible and can change focus. For background operation, use npm run background with Docker Desktop (see README).";
@@ -184,20 +169,13 @@ function render(state) {
   ])
     $(id).disabled = !state.running;
   $("upload").disabled = !state.running;
-  const screen = $("screen");
-  if (screen.width !== state.width || screen.height !== state.height) {
-    screen.width = state.width;
-    screen.height = state.height;
-  }
-  screen.hidden = !state.running || !state.frameReady;
-  $("empty").hidden = state.running && state.frameReady;
   $("browser-status").textContent =
     state.message ||
     (state.running
       ? `Desktop Chrome · ${state.width} × ${state.height}`
       : "Browser stopped · local profile saved");
   $("tabs").textContent =
-    `Native Chrome · ${state.platform || "OS detected automatically"} · tabs appear inside the display`;
+    `Native Chrome · ${state.platform || "OS detected automatically"} · tabs appear in Chrome`;
 }
 $("start").onclick = async () => {
   $("start").disabled = true;
@@ -237,88 +215,6 @@ $("navigation").onsubmit = (e) => {
   if (!url) return;
   report("");
   send({ type: "navigate", url });
-  $("screen").focus();
-};
-const canvas = $("screen");
-canvas.onclick = (e) => {
-  const r = canvas.getBoundingClientRect();
-  canvas.focus();
-  send({
-    type: "click",
-    x: ((e.clientX - r.left) * canvas.width) / r.width,
-    y: ((e.clientY - r.top) * canvas.height) / r.height,
-    double: e.detail === 2,
-  });
-};
-canvas.oncontextmenu = (e) => {
-  e.preventDefault();
-  const r = canvas.getBoundingClientRect();
-  send({
-    type: "click",
-    button: "right",
-    x: ((e.clientX - r.left) * canvas.width) / r.width,
-    y: ((e.clientY - r.top) * canvas.height) / r.height,
-  });
-};
-let wheelTimer = null,
-  wheelX = 0,
-  wheelY = 0;
-canvas.addEventListener(
-  "wheel",
-  (e) => {
-    e.preventDefault();
-    wheelX += e.deltaX;
-    wheelY += e.deltaY;
-    if (!wheelTimer)
-      wheelTimer = setTimeout(() => {
-        send({ type: "scroll", x: wheelX, y: wheelY });
-        wheelX = 0;
-        wheelY = 0;
-        wheelTimer = null;
-      }, 60);
-  },
-  { passive: false },
-);
-canvas.addEventListener("paste", (e) => {
-  e.preventDefault();
-  const text = e.clipboardData.getData("text/plain");
-  if (text) send({ type: "text", text: text.slice(0, 10000) });
-});
-canvas.onkeydown = (e) => {
-  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") return;
-  const allowed = [
-    "Enter",
-    "Tab",
-    "Backspace",
-    "Delete",
-    "Escape",
-    "ArrowLeft",
-    "ArrowRight",
-    "ArrowUp",
-    "ArrowDown",
-    "Home",
-    "End",
-    "PageUp",
-    "PageDown",
-    "F5",
-  ];
-  if (!e.ctrlKey && !e.metaKey && !e.altKey && e.key.length === 1) {
-    e.preventDefault();
-    send({ type: "text", text: e.key });
-    return;
-  }
-  if (
-    allowed.includes(e.key) ||
-    ((e.ctrlKey || e.metaKey || e.altKey) && /^[a-z0-9]$/i.test(e.key))
-  ) {
-    e.preventDefault();
-    const mods = [];
-    if (e.ctrlKey) mods.push("Control");
-    if (e.metaKey) mods.push("Meta");
-    if (e.altKey) mods.push("Alt");
-    if (e.shiftKey) mods.push("Shift");
-    send({ type: "key", key: [...mods, e.key].join("+") });
-  }
 };
 $("paste").onclick = () => {
   $("text-value").value = "";
@@ -491,8 +387,7 @@ $("debug-clear").onclick = async () => {
   }
 };
 let geminiFlow = { state: "idle", active: false };
-let dialogInputToken = null;
-let promptedInputToken = null;
+
 function renderFlow(value) {
   geminiFlow = value;
   $("gemini-status").textContent =
@@ -504,26 +399,18 @@ function renderFlow(value) {
     "awaiting_input",
   ].includes(value.state);
   $("gemini-cancel").hidden = !value.active || value.state === "cancelling";
-  $("signin-details").disabled = !signinAllowed();
   const rows = (value.steps || []).map((step) => {
     const row = document.createElement("li");
     row.textContent = `${new Date(step.at).toLocaleTimeString()} — ${step.message}`;
     return row;
   });
   $("gemini-steps").replaceChildren(...rows);
-  if (dialogInputToken && dialogInputToken !== value.input?.token)
-    clearSignin();
-  if (signinAllowed() && promptedInputToken !== value.input.token) {
-    promptedInputToken = value.input.token;
-    openSignin();
-  }
 }
 for (const command of ["start", "proceed", "cancel"])
   $("gemini-" + command).onclick = async () => {
     const button = $("gemini-" + command);
     button.disabled = true;
     try {
-      clearSignin();
       renderFlow(
         await api("/api/gemini-flow", "POST", { command, id: geminiFlow.id }),
       );
@@ -534,81 +421,6 @@ for (const command of ["start", "proceed", "cancel"])
       button.disabled = command === "start" && !!geminiFlow.active;
     }
   };
-function signinAllowed() {
-  return (
-    !signinBusy &&
-    loggedIn &&
-    ws?.readyState === WebSocket.OPEN &&
-    current?.running &&
-    geminiFlow.state === "awaiting_input" &&
-    !!geminiFlow.input?.token
-  );
-}
-function clearSignin() {
-  $("signin-value").value = "";
-  $("signin-target").checked = false;
-  dialogInputToken = null;
-  $("signin-dialog").close();
-}
-function openSignin() {
-  if (!signinAllowed()) return;
-  clearSignin();
-  dialogInputToken = geminiFlow.input.token;
-  $("signin-kind").value = geminiFlow.input.kind;
-  $("signin-kind").disabled = true;
-  $("signin-value").type =
-    geminiFlow.input.kind === "email" ? "text" : "password";
-  $("signin-value-label").textContent = geminiFlow.input.label;
-  $("signin-result").textContent =
-    "This request expires when the Google page step changes.";
-  $("signin-dialog").showModal();
-  $("signin-value").focus();
-}
-$("signin-details").onclick = openSignin;
-$("signin-dismiss").onclick = clearSignin;
-$("signin-dialog").addEventListener("cancel", clearSignin);
-$("signin-dialog").addEventListener("close", () => {
-  $("signin-value").value = "";
-  $("signin-target").checked = false;
-});
-window.addEventListener("pagehide", () => {
-  clearSignin();
-  $("groq-key").value = "";
-});
-$("signin-form").onsubmit = async (event) => {
-  event.preventDefault();
-  if (
-    !signinAllowed() ||
-    dialogInputToken !== geminiFlow.input.token ||
-    !$("signin-target").checked ||
-    !$("signin-value").value
-  )
-    return;
-  const value = $("signin-value").value,
-    token = dialogInputToken,
-    id = geminiFlow.id;
-  clearSignin();
-  signinBusy = true;
-  $("signin-send").disabled = true;
-  $("signin-details").disabled = true;
-  try {
-    renderFlow(
-      await api("/api/gemini-flow", "POST", {
-        command: "input",
-        id,
-        token,
-        value,
-      }),
-    );
-    report("");
-  } catch (error) {
-    report(error.message);
-  } finally {
-    signinBusy = false;
-    $("signin-send").disabled = false;
-    renderFlow(geminiFlow);
-  }
-};
 $("groq-settings").addEventListener("toggle", async () => {
   if (!$("groq-settings").open || !loggedIn) {
     $("groq-key").value = "";

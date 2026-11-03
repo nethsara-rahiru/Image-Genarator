@@ -40,12 +40,11 @@ root or disable Chromium's sandbox for production.
 
 ## Generate an image and get the chat ID
 
-1. Connect a Google account in the browser section. **Start Gemini automation**
-   checks Gemini first and stops if signed-in account/editor controls are visible.
-   If required, enter only the requested Google detail in the dialog. Security
-   challenges remain interactive. If Google rejects the controlled browser, stop
-   it, use **Start browser → Google sign-in** manually, then check the saved
-   profile again; acceptance is not guaranteed.
+1. Choose **Open Gemini / sign in**. If signed out, sign in manually in the
+   opened Chrome window, including verification, then choose **Check again**.
+   The app never collects Google credentials or automates sign-in. Generation
+   remains blocked until Gemini shows a signed-in account and editor. Browser
+   preview streaming is disabled; use the Chrome window directly.
 2. In **Image generator**, choose **New chat** or a saved conversation and enter
    the image description. **Generate image** returns a job immediately. The app
    submits `Create an image based on this description:` followed by your prompt.

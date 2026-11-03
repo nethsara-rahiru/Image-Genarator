@@ -83,7 +83,7 @@ test(
               html +=
                 '<div class="image-container"><img alt="Generated image" src="' +
                 file +
-                '"><button aria-label="Download image" data-download="' +
+                '"><button aria-label="Download full size" data-download="' +
                 download +
                 '">Download image</button></div>';
             }
@@ -111,7 +111,7 @@ test(
       const history = (chats.get(id) || [])
         .map((html) => "<model-response>" + html + "</model-response>")
         .join("");
-      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>body{font:16px sans-serif}model-response{display:block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><div contenteditable="true" role="textbox" class="ql-editor"></div><button id="send" aria-label="Send message">Send</button><script>
+      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><div contenteditable="true" role="textbox" class="ql-editor"></div><button id="send" aria-label="Send message">Send</button><script>
       function wire(){for(const b of document.querySelectorAll('[data-download]'))b.onclick=()=>{const a=document.createElement('a');a.href=b.dataset.download;a.download='original.png';document.body.append(a);a.click();a.remove();};}
       wire();document.querySelector('#send').onclick=async()=>{
         const editor=document.querySelector('[contenteditable]'),prompt=editor.textContent;document.querySelector('#send').disabled=true;
@@ -219,6 +219,11 @@ test(
       await until(() => service.generation.data.jobs.length === 1);
       const first = await final(service.generation.data.jobs[0].id);
       assert.equal(first.state, "completed", JSON.stringify(first.error));
+      assert.equal(await page.locator("#screen").count(), 0);
+      await page.waitForFunction(() => {
+        const image = document.querySelector(".generation-preview");
+        return image?.complete && image.naturalWidth === 64;
+      });
       assert.equal(first.chatId, "fixture-chat-1");
       assert.equal(first.output.width, 64);
       let bytes = Buffer.from(
