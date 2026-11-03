@@ -1,12 +1,12 @@
 # Security
 
-The app grants its single authenticated administrator normal Chrome privileges under the host OS account. The native Chrome address bar and file picker can access files/protocols available to that account; this is not an isolation boundary against the administrator. Prefer a dedicated local OS account. No personal Chrome profile, passwords or cookies are imported. The dedicated native-profile stays on the PC and uses Chrome's normal credential storage. No stealth patches, captcha/MFA workarounds, cookie transfer or browser security bypass are implemented.
+The default app grants trusted local users normal Chrome privileges under the host OS account without an application login. Optional AUTH_REQUIRED mode retains the legacy administrator boundary. The native Chrome address bar and file picker can access files/protocols available to that account; this is not an isolation boundary against the administrator. Prefer a dedicated local OS account. No personal Chrome profile, passwords or cookies are imported. The dedicated native-profile stays on the PC and uses Chrome's normal credential storage. No stealth patches, captcha/MFA workarounds, cookie transfer or browser security bypass are implemented.
 
 Production uses installed desktop Chrome with its normal sandbox. Manual mode uses OS input/capture; automated Gemini uses a private stdio CDP connection, never a network debugging port. No headless or stealth configuration is used. Do not run as root or add --no-sandbox. Test-only sandbox relaxation exists only in trusted test constructor arguments; environment variables and API requests cannot enable it. Windows/macOS native permission prompts/policies require local approval; no global security-policy disabling is automated. Google sign-in may still fail; stop and follow the site's supported verification flow.
 
 Frames are limited to the managed Chrome PID's window on Windows/macOS. Linux captures an isolated virtual display containing the managed Chrome environment, not the host's working desktop. No full-host-screen fallback is used. Windows/macOS input may change foreground focus/move the mouse. Keep the desktop unlocked and the window unminimized. Native dialogs or GPU/OS capture rules can prevent operation. macOS briefly writes a private frame file before deleting it; abrupt crashes can leave a residual private frame. Never share runtime or capture it in user-data test artifacts.
 
-Argon2id identity with confirmed hidden CLI password entry; bounded server-side sessions, HttpOnly/SameSite=Strict cookies, Secure cookies under HTTPS, CSRF for mutations, exact Host/Origin and authenticated WebSocket revocation. Sessions are checked before logs/frames, and reset invalidates prior identities. Restart invalidates session cookies. One process/one administrator; no shared multi-user isolation is promised. Login/input are rate-limited, and sensitive typed text is excluded from logs. Native helper requests use fixed operations and stdio JSON, not shell interpolation or arbitrary code evaluation.
+Default no-login mode is confined to a loopback origin and listener, with exact Host/Origin and CSRF checks. Optional protected mode uses Argon2id identity with confirmed hidden CLI password entry; bounded server-side sessions, HttpOnly/SameSite=Strict cookies, Secure cookies under HTTPS, CSRF for mutations, exact Host/Origin and authenticated WebSocket revocation. Sessions are checked before logs/frames, and reset invalidates prior identities. Restart invalidates session cookies. One process/one administrator; no shared multi-user isolation is promised. Login/input are rate-limited, and sensitive typed text is excluded from logs. Native helper requests use fixed operations and stdio JSON, not shell interpolation or arbitrary code evaluation.
 
 Only the viewer and private native network proxy listen, both on loopback. X11 uses a private cookie and Unix socket, TCP disabled. No VNC, CDP or debugging listener is exposed. Remote access requires an encrypted authenticated SSH tunnel or trusted TLS proxy. On a busy PC, don't expose Node directly to LAN/public HTTP. Trust forwarded transport headers only from the loopback proxy. An optional VPS reverse tunnel carries viewer traffic only; website traffic remains on the PC.
 
@@ -48,3 +48,22 @@ wait or ask_user is accepted. Fixed local code rechecks the target/site; model
 JavaScript, shell, arbitrary navigation and credential operations are prohibited.
 API settings hide the Groq key and store it with mode 600 in the private data
 directory. Existing CSRF/auth/session/transport checks protect settings and input.
+
+Generation uses a process lease and serialized mutations. Browser/profile locks
+still apply. A job owns the browser until it completes, fails or is cancelled;
+manual actions and sign-in changes are blocked during that ownership. Input is
+bounded and request keys are idempotent. A possible submission is durably marked
+before Send; neither restart nor retry silently replays it.
+
+Output paths are constructed from validated UUIDs and fixed PNG/JPEG/WebP names;
+symlinks and paths escaping the output root are rejected. Downloads are tied to
+the controlled frame and fresh response and checked for complete signatures,
+actual dimensions, bytes and checksum. Header parsing is not image-content
+analysis. Retention/deletion affects local data only. The journal and metadata
+intentionally retain prompts; sanitized operational logs do not.
+
+No-login mode is not a public service or a multi-user isolation boundary. Anyone
+with access to the local PC or its SSH-forwarded interface can control the Google
+session and read its jobs. Keep DATA_DIR private and use an encrypted trusted
+SSH tunnel for remote use. Setting a public origin without AUTH_REQUIRED is
+rejected. Existing Google authentication requirements and restrictions remain.

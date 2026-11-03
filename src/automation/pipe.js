@@ -1,6 +1,8 @@
+import { EventEmitter } from "node:events";
 import { nativeError } from "../native/common.js";
-export class BrowserPipe {
+export class BrowserPipe extends EventEmitter {
   constructor(child) {
+    super();
     this.input = child.stdio[3];
     this.pending = new Map();
     this.sequence = 0;
@@ -14,6 +16,10 @@ export class BrowserPipe {
         this.buffer = this.buffer.subarray(end + 1);
         try {
           const message = JSON.parse(data.toString());
+          if (message.method) {
+            this.emit(message.method, message.params);
+            continue;
+          }
           const item = this.pending.get(message.id);
           if (!item) continue;
           this.pending.delete(message.id);

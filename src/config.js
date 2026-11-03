@@ -23,7 +23,17 @@ export function configuration(env = process.env) {
     ["127.0.0.1", "[::1]", "localhost"].includes(origin.hostname);
   if (origin.protocol !== "https:" && !local)
     throw new Error("Public access requires HTTPS");
+  const authRequired = env.AUTH_REQUIRED === "true";
+  if (
+    !authRequired &&
+    !["127.0.0.1", "[::1]", "localhost"].includes(origin.hostname)
+  )
+    throw new Error(
+      "No-login mode is local only. Use localhost/SSH forwarding, or explicitly enable AUTH_REQUIRED for protected remote access.",
+    );
   return {
+    authRequired,
+    generationTimeoutMs: integer("GENERATION_TIMEOUT_SECONDS", 180, 900) * 1000,
     port,
     chromePath: env.CHROME_PATH || "",
     autoOpen: env.AUTO_OPEN !== "false",

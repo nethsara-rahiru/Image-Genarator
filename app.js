@@ -1,6 +1,4 @@
 import { spawn } from "node:child_process";
-import { interactiveAdmin } from "./scripts/admin.js";
-import { readAdmin } from "./src/admin.js";
 import { existsSync } from "node:fs";
 import { configuration } from "./src/config.js";
 import { startServer } from "./src/server.js";
@@ -15,15 +13,11 @@ if (process.argv.includes("--background")) {
   console.log(
     `Detected ${process.platform} (${process.arch}); native desktop browser mode.`,
   );
-  if (!(await readAdmin(config.data)) && process.stdin.isTTY) {
-    console.log("First run: create your local administrator.");
-    await interactiveAdmin(config);
-    if (!(await readAdmin(config.data))) process.exit(1);
-  }
   const service = await startServer(config);
   console.log(`Local Native Browser listening on 127.0.0.1:${service.port}`);
   console.log("Access:", service.config.origin);
-  if (!(await service.admin())) console.log("First run: npm run setup-admin");
+  if (config.authRequired && !(await service.admin()))
+    console.log("First run: npm run setup-admin");
   if (config.autoOpen) {
     const command =
       process.platform === "win32"

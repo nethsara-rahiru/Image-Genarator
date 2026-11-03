@@ -16,7 +16,10 @@ test("only encrypted public origins or loopback tunnel origins are permitted", (
   ])
     assert.throws(() => configuration({ PUBLIC_ORIGIN: origin }));
   assert.equal(
-    configuration({ PUBLIC_ORIGIN: "https://162.35.181.135:3443" }).secure,
+    configuration({
+      AUTH_REQUIRED: "true",
+      PUBLIC_ORIGIN: "https://162.35.181.135:3443",
+    }).secure,
     true,
   );
   assert.throws(() => configuration({ PORT: "hello" }));

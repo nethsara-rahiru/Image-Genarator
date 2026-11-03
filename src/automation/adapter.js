@@ -29,8 +29,13 @@ export class GeminiAdapter {
       );
     return result.result.value;
   }
-  async open(which) {
-    const original = which === "gemini" ? GEMINI_URL : GOOGLE_LOGIN;
+  async open(which, chatId = null) {
+    if (chatId && !/^[A-Za-z0-9_-]{4,160}$/.test(chatId))
+      throw nativeError("INVALID_CHAT", "Invalid Gemini chat ID.");
+    const original =
+      which === "gemini"
+        ? GEMINI_URL + (chatId ? "/" + chatId : "")
+        : GOOGLE_LOGIN;
     const url = await (
       this.browser.options.validateUrl ||
       (await import("../security.js")).publicUrl

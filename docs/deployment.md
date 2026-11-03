@@ -1,5 +1,23 @@
 # Local PC setup and remote access
 
+## Current default: local no-login generator
+
+Run npm ci and node app.js. No administrator setup or startup password is
+required. Open http://127.0.0.1:3030; connect Google separately through the browser
+controls, then submit image prompts. Real Gemini can reject authentication or
+return no image. Use node app.js --background with Docker Desktop for an isolated
+Linux desktop; it also no longer prompts for an app administrator.
+
+For an existing .env set AUTH_REQUIRED=false and
+PUBLIC_ORIGIN=http://127.0.0.1:3030 (or the matching PORT). Public no-login origins
+are rejected. Use secure SSH forwarding for trusted remote access. Existing
+admin files/profiles are not deleted. GENERATION_TIMEOUT_SECONDS defaults to 180
+and is forwarded into background mode. Protect generation/queue.json and outputs
+inside DATA_DIR; see operations.md and api.md for jobs, recovery and backups.
+
+The protected-admin/TLS instructions below apply only when AUTH_REQUIRED=true is
+explicitly configured. They are not needed for normal local startup.
+
 ## Local startup
 
 Install Node.js 22+ and desktop Google Chrome (Edge fallback supported). Clone/download the reviewed main source. In a terminal in the project directory: npm ci, then node app.js. Startup detects the OS and prompts to create the admin if no identity exists and stdin is interactive. It opens the configured viewer URL. Later only node app.js is needed. Explicit CLI bootstrap/reset remain available. For service/noninteractive startup provision the administrator first.
@@ -88,8 +106,7 @@ Stop Node with Ctrl+C before restarting the terminal. Do not delete the native p
 
 Install/start Docker Desktop with Linux containers on macOS/Windows (or a local
 Docker engine on Linux). Stop any native app on the chosen port, update source,
-run `npm ci`, then `node app.js --background`. The launcher prompts for a separate
-background administrator, builds the image, and serves the dashboard at
+run `npm ci`, then `node app.js --background`. The launcher builds the image without an app-password prompt, and serves the dashboard at
 http://127.0.0.1:3030 by default. It preserves its profile under
 `DATA_DIR/background`. Select Start Gemini sign-in and follow the live steps.
 Keep Docker/Node running and the PC awake. Ctrl+C stops only this launch's

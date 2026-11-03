@@ -17,6 +17,9 @@ import { token, equal } from "./security.js";
 import { readAdmin } from "./admin.js";
 import { GroqRecovery } from "./automation/groq.js";
 import { GeminiFlow } from "./geminiFlow.js";
+import { GenerationQueue } from "./generation/queue.js";
+import { GenerationRunner } from "./generation/runner.js";
+import { nativeError } from "./native/common.js";
 import { RemoteBrowser } from "./browser.js";
 const publicDir = fileURLToPath(new URL("../public", import.meta.url));
 class SessionStore extends session.Store {
@@ -100,10 +103,11 @@ export async function startServer(config, options = {}) {
     res.set("Cache-Control", "no-store");
     next();
   });
-  app.use(express.json({ limit: "20kb" }));
+  app.use(express.json({ limit: "64kb" }));
   app.use(sessionMiddleware);
   const admin = () => readAdmin(config.data);
   const authenticated = async (req) => {
+    if (!config.authRequired) return true;
     const a = await admin();
     return (
       a &&
@@ -132,9 +136,13 @@ export async function startServer(config, options = {}) {
     const a = await admin();
     res.json({
       csrf: req.session.csrf,
-      configured: !!a,
+      authRequired: !!config.authRequired,
+      configured: !config.authRequired || !!a,
       authenticated: !!(await authenticated(req)),
-      username: (await authenticated(req)) ? a.username : undefined,
+      username:
+        config.authRequired && (await authenticated(req))
+          ? a.username
+          : undefined,
     });
   });
   const attempts = new Map();
@@ -197,10 +205,18 @@ export async function startServer(config, options = {}) {
     log.write("info", "auth", "LOGIN_SUCCEEDED", "Administrator signed in.");
     res.json({ csrf: req.session.csrf, username: a.username });
   });
+  let generation;
   let chain = Promise.resolve();
   let pending = 0;
   let shuttingDown = false;
   const action = (d, request = null) => {
+    if (request && generation?.busy)
+      return Promise.reject(
+        nativeError(
+          "GENERATION_BUSY",
+          "A generation job owns the browser. Cancel or finish it before using manual controls.",
+        ),
+      );
     if (shuttingDown)
       return Promise.reject(new Error("Service is shutting down"));
     if (pending >= 64)
@@ -299,6 +315,11 @@ export async function startServer(config, options = {}) {
   app.get("/api/gemini-flow", auth, (req, res) => res.json(flow.snapshot()));
   app.post("/api/gemini-flow", auth, async (req, res) => {
     try {
+      if (generation?.busy)
+        return res.status(409).json({
+          error:
+            "Finish or cancel the generation job before changing sign-in state.",
+        });
       const { command, id, token, value } = req.body || {};
       let state;
       if (command === "start") state = flow.start();
@@ -315,7 +336,92 @@ export async function startServer(config, options = {}) {
       });
     }
   });
+  generation = new GenerationQueue(
+    config,
+    options.test && options.generationRunner
+      ? options.generationRunner
+      : new GenerationRunner(browser, (d) => action(d)),
+    log,
+  );
+  await generation.init();
+  const jobError = (res, error) => {
+    const diagnosed = actionError(error);
+    res.status(400).json({ code: diagnosed.code, error: diagnosed.message });
+  };
+  app.get("/api/generation", auth, (req, res) =>
+    res.json(generation.snapshot()),
+  );
+  app.post("/api/generation/jobs", auth, async (req, res) => {
+    if (flow.snapshot().active)
+      return res.status(409).json({
+        error:
+          "Finish or cancel the sign-in assistant before starting generation.",
+      });
+    try {
+      res.status(202).json(await generation.create(req.body));
+    } catch (error) {
+      jobError(res, error);
+    }
+  });
+  app.get("/api/generation/jobs/:id", auth, (req, res) => {
+    try {
+      res.json(generation.publicJob(generation.get(req.params.id)));
+    } catch (error) {
+      jobError(res, error);
+    }
+  });
+  for (const operation of ["cancel", "retry"])
+    app.post(
+      "/api/generation/jobs/:id/" + operation,
+      auth,
+      async (req, res) => {
+        try {
+          res.json(await generation[operation](req.params.id));
+        } catch (error) {
+          jobError(res, error);
+        }
+      },
+    );
+  app.delete("/api/generation/jobs/:id", auth, async (req, res) => {
+    try {
+      await generation.remove(req.params.id);
+      res.json({ ok: true });
+    } catch (error) {
+      jobError(res, error);
+    }
+  });
+  app.patch("/api/generation/chats/:id", auth, async (req, res) => {
+    try {
+      await generation.renameChat(req.params.id, req.body?.title);
+      res.json({ ok: true });
+    } catch (error) {
+      jobError(res, error);
+    }
+  });
+  app.get("/api/generation/jobs/:id/image", auth, async (req, res) => {
+    try {
+      const { path: file, job } = await generation.outputFile(req.params.id);
+      res.type(job.output.contentType);
+      if (req.query.download === "1")
+        res.download(file, job.id + "." + job.output.format);
+      else res.sendFile(file);
+    } catch {
+      res.status(404).json({ error: "Completed image not found" });
+    }
+  });
+  app.get("/api/generation/jobs/:id/metadata", auth, async (req, res) => {
+    try {
+      const { path: file } = await generation.outputFile(req.params.id, true);
+      res.download(file, req.params.id + ".json");
+    } catch {
+      res.status(404).json({ error: "Completed metadata not found" });
+    }
+  });
   app.post("/api/logout", auth, async (req, res) => {
+    if (generation.busy) {
+      await generation.cancel(generation.active.id);
+      await generation.task;
+    }
     flow.interrupted();
     await new Promise((resolve, reject) =>
       req.session.destroy((e) => (e ? reject(e) : resolve())),
@@ -379,6 +485,11 @@ export async function startServer(config, options = {}) {
     if (!req.file)
       return res.status(400).json({ error: "Choose one file (up to 20 MB)" });
     try {
+      if (generation.busy)
+        throw nativeError(
+          "GENERATION_BUSY",
+          "A generation job owns the browser. Wait before uploading.",
+        );
       await chain;
       await browser.upload(req.file);
       res.json({ ok: true });
@@ -457,6 +568,7 @@ export async function startServer(config, options = {}) {
     let busy = false;
     let inputs = 0;
     let sentState = "";
+    let generationVersion = -1;
     let logCursor = null,
       logGeneration = null;
     log.write(
@@ -503,6 +615,10 @@ export async function startServer(config, options = {}) {
           )
             flow.interrupted();
           send({ type: "gemini-flow", ...flow.snapshot() });
+          if (generationVersion !== generation.version) {
+            send({ type: "generation", ...generation.snapshot() });
+            generationVersion = generation.version;
+          }
           let image = null;
           if (browser.running) {
             try {
@@ -576,20 +692,30 @@ export async function startServer(config, options = {}) {
     });
   });
   const idle = setInterval(() => {
-    if (browser.running && Date.now() - browser.lastUsed > config.idleMs)
+    if (
+      !generation.busy &&
+      browser.running &&
+      Date.now() - browser.lastUsed > config.idleMs
+    )
       action({ type: "stop" }).catch(() => {});
   }, 10000);
   idle.unref();
-  await new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(
-      config.port,
-      process.env.BROWSER_CONTAINER === "1" && existsSync("/.dockerenv")
-        ? "0.0.0.0"
-        : "127.0.0.1",
-      resolve,
-    );
-  });
+  try {
+    await new Promise((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(
+        config.port,
+        process.env.BROWSER_CONTAINER === "1" && existsSync("/.dockerenv")
+          ? "0.0.0.0"
+          : "127.0.0.1",
+        resolve,
+      );
+    });
+  } catch (error) {
+    await generation.close();
+    throw error;
+  }
+  generation.start();
   log.write(
     "info",
     "server",
@@ -601,6 +727,7 @@ export async function startServer(config, options = {}) {
     server,
     app,
     browser,
+    generation,
     flow,
     config,
     admin,
@@ -611,6 +738,7 @@ export async function startServer(config, options = {}) {
       clearInterval(idle);
       for (const ws of wss.clients) ws.terminate();
       wss.close();
+      await generation.close();
       await chain;
       await browser.stop();
       await new Promise((resolve, reject) =>

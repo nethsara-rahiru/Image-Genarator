@@ -3,14 +3,16 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Local Native Browser</title>
+    <title>Local Gemini Image Generator</title>
     <link rel="stylesheet" href="/style.css" />
     <script src="/app.js" defer></script>
   </head>
   <body>
     <header>
       <a class="brand" href="/"
-        ><span>Local browser<small>Your local PC workspace</small></span></a
+        ><span
+          >Local image generator<small>Your local Gemini workspace</small></span
+        ></a
       >
       <div class="header-right">
         <span id="connection" role="status">Connecting…</span
@@ -54,6 +56,49 @@
         </p>
       </section>
       <section id="workspace" hidden>
+        <section
+          class="panel generator-panel"
+          aria-labelledby="generator-title"
+        >
+          <span class="eyebrow">LOCAL IMAGE WORKSPACE</span>
+          <h1 id="generator-title">Image generator</h1>
+          <p>
+            Enter a description. The app asks Gemini to create an image, tracks
+            the actual conversation, and downloads one original image from the
+            new response.
+          </p>
+          <form id="generator-form">
+            <label for="generation-chat">Conversation</label>
+            <select id="generation-chat">
+              <option value="">New chat (created by this job)</option>
+            </select>
+            <label for="generation-prompt">Image description</label>
+            <textarea
+              id="generation-prompt"
+              rows="4"
+              maxlength="8000"
+              required
+              placeholder="Describe the image you want to create…"
+            ></textarea>
+            <div class="actions">
+              <button id="generate" class="primary">Generate image</button
+              ><button id="refresh-generation" type="button">
+                Refresh jobs
+              </button>
+            </div>
+          </form>
+          <p id="generation-status" role="status">Loading saved jobs…</p>
+          <p class="muted">
+            A signed-in Gemini session is required. Jobs run one at a time. The
+            first valid image in the new response is selected; Gemini may return
+            text instead. Starting a job may restart the managed browser with
+            its saved profile. Manual browser controls pause while a job is
+            running.
+          </p>
+          <div id="generation-jobs"></div>
+          <h2>Saved chats</h2>
+          <div id="generation-chats"></div>
+        </section>
         <div class="workspace-heading">
           <div>
             <span class="eyebrow">REMOTE WORKSPACE</span>

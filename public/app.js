@@ -5,6 +5,7 @@ let csrf = "",
   reconnect,
   delay = 1000,
   current;
+let authRequired = true;
 let intentional = false;
 let signinBusy = false;
 const report = (message) => {
@@ -54,13 +55,15 @@ function showWorkspace() {
   intentional = false;
   $("login-panel").hidden = true;
   $("workspace").hidden = false;
-  $("logout").hidden = false;
+  $("logout").hidden = !authRequired;
   connect();
+  refreshGeneration();
 }
 async function boot() {
   try {
     const s = await api("/api/session");
     csrf = s.csrf;
+    authRequired = s.authRequired;
     $("setup").hidden = s.configured;
     $("login-form").hidden = !s.configured;
     if (s.authenticated) showWorkspace();
@@ -123,6 +126,7 @@ function connect() {
       const d = JSON.parse(event.data);
       if (d.type === "state") render(d);
       if (d.type === "gemini-flow") renderFlow(d);
+      if (d.type === "generation") renderGeneration(d);
       if (d.type === "logs") receiveLogs(d);
       if (d.type === "error")
         report(
@@ -148,6 +152,10 @@ function connect() {
   };
 }
 function send(action) {
+  if (generationBusy) {
+    report("A generation job owns the browser. Finish or cancel it first.");
+    return;
+  }
   if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(action));
   else report("Browser connection is offline. Wait for reconnection.");
 }
@@ -637,4 +645,210 @@ $("groq-form").onsubmit = async (event) => {
     $("groq-save").disabled = false;
   }
 };
+let generationBusy = false;
+let generationSnapshot = { jobs: [], chats: [] };
+let generationRequestKey = crypto.randomUUID();
+function renderGeneration(data) {
+  generationSnapshot = data;
+  generationBusy = data.busy;
+  $("generation-status").textContent = data.busy
+    ? "A generation job is running. See its current stage below."
+    : "Ready · " +
+      data.jobs.filter((j) => j.state === "queued").length +
+      " queued · " +
+      data.jobs.filter((j) => j.state === "completed").length +
+      " completed in recent history";
+  const selected = $("generation-chat").value;
+  $("generation-chat").replaceChildren(
+    new Option("New chat (created by this job)", ""),
+    ...data.chats.map(
+      (chat) => new Option(chat.title + " · " + chat.id, chat.id),
+    ),
+  );
+  if (data.chats.some((chat) => chat.id === selected))
+    $("generation-chat").value = selected;
+  $("generation-jobs").replaceChildren();
+  for (const job of data.jobs) {
+    const card = document.createElement("article");
+    card.className = "generation-job";
+    card.dataset.jobId = job.id;
+    const heading = document.createElement("h3");
+    heading.textContent = job.state.replaceAll("_", " ") + " · " + job.id;
+    const prompt = document.createElement("p");
+    prompt.textContent = job.promptPreview;
+    const progress = document.createElement("progress");
+    progress.max = 100;
+    progress.value = job.progress;
+    progress.setAttribute("aria-label", "Job stage progress");
+    const info = document.createElement("p");
+    info.className = "muted";
+    info.textContent = job.queuePosition
+      ? "FIFO queue position: " + job.queuePosition
+      : "Attempts: " + job.attempts;
+    card.append(heading, prompt, progress, info);
+    if (job.chatId) {
+      const text = document.createElement("p");
+      text.textContent = "Chat ID: " + job.chatId;
+      card.append(text);
+      const link = document.createElement("a");
+      link.href = job.chatUrl;
+      link.textContent = "Open Gemini conversation";
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      card.append(link);
+    }
+    if (job.error) {
+      const error = document.createElement("p");
+      error.className = "error";
+      error.textContent = job.error.code + ": " + job.error.message;
+      card.append(error);
+    }
+    const actions = document.createElement("div");
+    actions.className = "actions";
+    const button = (label, operation) => {
+      const control = document.createElement("button");
+      control.textContent = label;
+      control.onclick = async () => {
+        control.disabled = true;
+        try {
+          await api(
+            "/api/generation/jobs/" +
+              job.id +
+              (operation ? "/" + operation : ""),
+            operation ? "POST" : "DELETE",
+          );
+          await refreshGeneration();
+        } catch (error) {
+          report(error.message);
+        } finally {
+          control.disabled = false;
+        }
+      };
+      actions.append(control);
+    };
+    if (
+      [
+        "queued",
+        "running",
+        "preparing_prompt",
+        "submitting_prompt",
+        "generating",
+        "downloading",
+      ].includes(job.state)
+    )
+      button("Cancel job", "cancel");
+    else {
+      if (!job.submissionPossible && job.state !== "completed")
+        button("Retry before submission", "retry");
+      const remove = document.createElement("button");
+      remove.textContent = "Remove local job/output";
+      remove.onclick = async () => {
+        if (
+          confirm(
+            "Remove this local job and its downloaded image? The Gemini chat is retained.",
+          )
+        ) {
+          try {
+            await api("/api/generation/jobs/" + job.id, "DELETE");
+            await refreshGeneration();
+          } catch (error) {
+            report(error.message);
+          }
+        }
+      };
+      actions.append(remove);
+    }
+    if (job.state === "completed") {
+      const image = document.createElement("img");
+      image.src = "/api/generation/jobs/" + job.id + "/image";
+      image.alt = "Generated image for " + job.promptPreview;
+      image.loading = "lazy";
+      image.className = "generation-preview";
+      card.append(image);
+      const details = document.createElement("p");
+      details.textContent =
+        job.output.width +
+        " × " +
+        job.output.height +
+        " · " +
+        job.output.format +
+        " · " +
+        job.output.bytes +
+        " bytes";
+      card.append(details);
+      for (const [label, suffix] of [
+        ["Download original image", "/image?download=1"],
+        ["Download metadata JSON", "/metadata"],
+      ]) {
+        const link = document.createElement("a");
+        link.href = "/api/generation/jobs/" + job.id + suffix;
+        link.textContent = label;
+        actions.append(link);
+      }
+    }
+    card.append(actions);
+    $("generation-jobs").append(card);
+  }
+  if (!data.jobs.length)
+    $("generation-jobs").textContent = "No generation jobs yet.";
+  $("generation-chats").replaceChildren();
+  for (const chat of data.chats) {
+    const row = document.createElement("div");
+    row.className = "generation-chat";
+    const label = document.createElement("p");
+    label.textContent = chat.title + " · Chat ID: " + chat.id;
+    const rename = document.createElement("button");
+    rename.textContent = "Rename locally";
+    rename.onclick = async () => {
+      const title = prompt("Local chat title", chat.title);
+      if (title === null) return;
+      try {
+        await api(
+          "/api/generation/chats/" + encodeURIComponent(chat.id),
+          "PATCH",
+          { title },
+        );
+        await refreshGeneration();
+      } catch (error) {
+        report(error.message);
+      }
+    };
+    row.append(label, rename);
+    $("generation-chats").append(row);
+  }
+  if (!data.chats.length)
+    $("generation-chats").textContent =
+      "A real chat ID appears after Gemini creates its conversation.";
+}
+async function refreshGeneration() {
+  if (!loggedIn) return;
+  try {
+    renderGeneration(await api("/api/generation"));
+  } catch (error) {
+    report(error.message);
+  }
+}
+$("refresh-generation").onclick = refreshGeneration;
+$("generator-form").onsubmit = async (event) => {
+  event.preventDefault();
+  $("generate").disabled = true;
+  try {
+    const job = await api("/api/generation/jobs", "POST", {
+      prompt: $("generation-prompt").value,
+      chatId: $("generation-chat").value || null,
+      idempotencyKey: generationRequestKey,
+    });
+    generationRequestKey = crypto.randomUUID();
+    report("");
+    $("generation-status").textContent = "Accepted job " + job.id;
+    await refreshGeneration();
+  } catch (error) {
+    report(error.message);
+  } finally {
+    $("generate").disabled = false;
+  }
+};
+setInterval(() => {
+  if (loggedIn && ws?.readyState !== WebSocket.OPEN) refreshGeneration();
+}, 3000);
 boot();

@@ -138,3 +138,164 @@ native chooser and verifies exact uploaded bytes. Final local native suite:
 36 passed/1 OS helper skip. Require the final revision's three OS checks and
 production sandbox/pipe smoke to pass before the authorized merge. Live Google,
 Groq and physical desktop acceptance remain unverified as above.
+
+## Local no-login image generation — 2026-11-03
+
+User requests removing the application's startup login, generating an image from
+a dashboard prompt, managing chats, and returning the actual Gemini chat ID.
+The user explicitly selected **Local no-login app with browser controls**.
+Public anonymous access is outside this change. Preserve runtime profiles,
+credentials and existing work; do not delete old administrator files.
+
+Execution blocker: the selected coding environment became unavailable.
+The environment tool reports connectivity offline; shell execution returned
+409 environment_offline ("Environment is not connected"). The attempted branch/
+repository inspection command did not execute. GitHub connector access still
+works, so this continuation note is committed on feat/open-image-generator.
+No application changes for this request have been implemented or tested.
+Do not describe the existing main branch as an image generator or no-login app.
+
+Implementation continuation:
+
+1. Inspect repository state and fetch feat/open-image-generator after restoring
+   the workspace. Preserve the existing PR #13 browser/sign-in/Groq work.
+2. Remove first-run administrator prompts from app.js and the background launcher.
+   Make local dashboard access require no application password. Retain exact
+   Host/Origin checks, CSRF and loopback binding. Reject accidental public
+   no-auth configuration. Google authentication is separate and remains required.
+3. Add a real prompt form, new/resume-chat selector, job progress/history,
+   actual chat ID/link, and output preview/image/JSON downloads.
+4. Implement one generation job at a time with durable local FIFO state, a
+   process lease, cancellation, idempotency and crash recovery. A submitted or
+   ambiguously submitted prompt must become needs_review after interruption;
+   never silently resubmit it.
+5. Extend the fixed private-pipe adapter to create/reopen Gemini conversations,
+   verify the selected account/chat, record response baselines, enter the image
+   prompt, submit once, and observe the current response. Keep site checks and
+   model action restrictions. Obtain the chat ID from Gemini's actual
+   /app/<conversation-id> URL, never a fabricated local ID.
+6. Select the first valid image in the new response, excluding prior chat images
+   and uploads. Prefer its website download action. Associate browser download
+   events with the controlled frame/job and save into a private job directory.
+   Validate signature, nonzero bytes and actual dimensions/format; retain the
+   original bytes plus metadata/checksum. Do not analyze image content.
+   Text-only responses must explicitly report no image, not produce a screenshot.
+7. Pause on login requirements, blocks, limits and unsupported UI. Google has
+   already rejected a live sign-in for this user; this work cannot promise to
+   bypass that restriction. Existing Groq recovery must not receive credentials,
+   login screenshots or secret page content.
+8. Add local Gemini-like fixtures for new/resumed chats, current-response
+   association, multiple images, no image, interrupted download, cancellation,
+   restart/duplicate submissions, and no-login Host/Origin/CSRF access. Update
+   deployment/API/security/progress/test documentation and run required checks.
+9. Commit/push tested changes, open the feature PR, and merge under the user's
+   standing "always merge to main" authorization only after required checks pass.
+   No release tag or live integration validation is implied.
+
+Needed external action: reconnect/restart the coding environment. Live Gemini
+image generation and the target PC still need authorized user validation after
+implementation; never request Google passwords or API secrets in chat.
+
+### Resume attempt and second environment outage — 2026-11-03
+
+The environment returned connected and shell commands worked. The local
+feat/open-image-generator branch was checked out from origin and implementation
+began. The environment then disconnected again while creating new tests; status
+is offline and exec-server recovery failed. Available environment tools can
+inspect status but do not offer a restart/connect action.
+
+IMPORTANT: application changes are currently in the workspace working tree,
+not committed/pushed. The GitHub feature branch contains continuation notes only.
+Do not overwrite the workspace or claim the feature is merged/validated.
+
+Confirmed working-tree changes before the second outage:
+
+- app.js: removed interactive administrator bootstrap; default opens directly.
+- src/config.js: AUTH_REQUIRED defaults false, rejects public no-login origins,
+  adds GENERATION_TIMEOUT_SECONDS. Explicit protected legacy mode remains.
+- scripts/background.js: removed password bootstrap and forwards AUTH_REQUIRED.
+- src/server.js: anonymous local session bootstrap retaining CSRF/Host/Origin;
+  optional protected mode preserved; generation API, worker lifecycle, busy
+  browser ownership and WebSocket progress integrated.
+- src/automation/pipe.js: emits browser download events over the private pipe.
+- src/automation/adapter.js: supports validated real Gemini conversation IDs.
+- src/generation/page.js: fixed local Gemini composer/response/image operations,
+  hashed account binding, response baselines and scoped first-image selection.
+- src/generation/imageInfo.js: original PNG/JPEG/WebP dimensions/signature/bytes.
+- src/generation/runner.js: one prompt submission, current-response observation,
+  actual chat IDs, frame-associated download events and original-byte download.
+- src/generation/queue.js: leased local durable FIFO, idempotency, recovery,
+  cancellation, chat catalog and original image/metadata output.
+- public index/app/style: prompt form, saved chats, job progress/cancel/retry,
+  gallery, chat IDs, image/JSON downloads; hides login/logout in local mode.
+- Existing tests/security.test.js and tests/system.test.js were adapted to
+  explicitly exercise the preserved protected mode.
+
+Last confirmed check: existing baseline suite 37 tests, 35 passed/2 OS/native
+skips after integration; syntax/Prettier were run during edits. This does NOT
+validate new image generation or no-login/browser E2E.
+
+The failing final command attempted to create tests/fixtures/png.js and
+tests/generation.test.js, patch premature text-only detection in generation/page.js,
+format them, and run the suite. Its execution was not confirmed. Inspect these
+paths before recreating anything. If the patch is missing, textOnly must NOT be
+reported while a generated image is still loading or lacks a recognized download
+control; wait/pause instead of reporting a false no-image failure.
+
+Next actions after reconnection:
+
+1. Run git status/diff first; preserve all uncommitted implementation above.
+   Fetch origin and incorporate this notes-only branch commit without discarding
+   local changes. Inspect the final attempted test files before writing them.
+2. Add/run queue and no-login API tests (no administrator, CSRF/Host preserved),
+   image signature/dimension tests, lease/idempotency/recovery/cancel tests.
+3. Extend real native local fixtures for generation: new and resumed real-style
+   chat URLs, historical-image exclusion, multiple-image first selection,
+   text-only failure, delayed/failed downloads, account change and restart.
+   Real Gemini remains unverified; do not work around Google's sign-in rejection.
+4. Review queue mutation races/durability and output path/symlink checks; ensure
+   shutdown cancels current waiting/download operations and releases ownership.
+   Forward the generation timeout into Docker if configured on the host.
+5. Update README/.env/API/security/operations/test/progress docs, test the
+   production container, commit/push tested changes, open the feature PR and
+   merge only after final CI/reviews pass under standing authorization.
+
+No new app behavior is available on main yet. Restore the coding environment to
+finish; do not ask the user for Google passwords or API secrets in chat.
+
+## Local generator implementation complete for review — 2026-11-03
+
+The offline blockers above are historical. The workspace reconnected, the
+existing changes were preserved, and source checkpoints were pushed as 696d6fc
+and f85068a on feat/open-image-generator. The user's confirmed scope remains
+local no-login access with browser controls; public anonymous access is not added.
+
+Implemented: no administrator prompt/login by default (native and Docker), local
+origin guard/CSRF retained, optional protected legacy mode, prompt-driven image
+jobs, durable leased FIFO with serialized mutations, idempotency, safe retry/cancel
+and restart recovery, actual Gemini chat IDs/catalog/local rename, hashed account
+binding, current-response image association, original frame-bound downloads,
+metadata/header/dimension/checksum checks, gallery and original image/JSON links.
+History/source fingerprints exclude older images even when old nodes rerender.
+Pending images are not misreported as text-only replies. Retry goes to the FIFO
+tail; concurrent duplicates execute once; repeated deletion cannot remove another
+job. Failed/oversized/incomplete downloads are cancelled. Potentially submitted
+prompts never auto-resubmit. Existing admin files/profiles are preserved.
+
+Validation evidence: full Linux native suite 48 tests, 47 passed, 0 failed,
+1 OS helper check skipped; host suite 45 passed/3 native/OS checks skipped.
+Fixtures cover new/resumed chats, actual returned conversation URLs, multiple
+images/first current image, original bytes/metadata, old DOM replacement,
+text-only/login/account mismatch, interrupted download/cancel, no-login UI,
+queue lease/idempotency/FIFO retry/shutdown/corrupt journal/symlink/concurrent
+mutation regressions. Desktop/mobile generator screenshots are synthetic only.
+Production smoke passed with the real Chromium sandbox/private pipe, capture,
+no-admin session bootstrap and generator API. Lint and production audit pass;
+0 vulnerabilities reported. Updated docs include api.md and operations.md.
+
+Finish: push the final tested revision, open the feature PR, wait for all final
+CI/reviews and merge using the user's standing authorization. No release tag is
+implied. Real Google sign-in, Gemini image-generation/download selectors, actual
+Groq/model availability and physical Mac/Windows/ARM acceptance remain UNVERIFIED.
+Google's insecure-browser rejection still requires its supported sign-in flow;
+this app does not bypass it or guarantee that Gemini will return an image.
