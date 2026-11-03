@@ -70,3 +70,51 @@ npm audit --omit=dev --audit-level=high
 Playwright is a **development-only** dependency for testing the viewer, never the production Chrome host. The Linux native acceptance fixture uses OS input, capture, actual uploads/downloads and profile reuse; enable with RUN_NATIVE_TESTS=1 and TEST_CHROME set to installed Chrome. Production launch arguments exclude automation/headless/debugging and sandbox-disable flags. Trusted tests may relax sandboxing inside CI containers.
 
 [Architecture](docs/architecture.md) · [Security](docs/security.md) · [Deployment](docs/deployment.md) · [Test report](docs/test-report.md)
+
+## Guided Gemini sign-in and background mode
+
+Update with `git pull --ff-only` and `npm ci`. For the existing native desktop
+mode, run `node app.js`, sign in to the dashboard, and choose **Start Gemini
+sign-in**. The dashboard records actual launch/navigation steps and shows the
+live browser. Enter your Google email/password and complete MFA directly in
+Google's page in that stream. Then choose **Open Gemini after sign-in**, inspect
+the page, and choose **I can see Gemini signed in**. This final state is your
+confirmation; the app does not independently verify Google authentication.
+This flow is for existing Google accounts. Account creation and security checks
+remain interactive on Google's official pages.
+
+For background control without focusing your macOS/Windows desktop, install and
+start **Docker Desktop**, select Linux containers, and run:
+
+```sh
+npm ci
+node app.js --background
+# equivalent: npm run background
+```
+
+The first launch creates a **separate background administrator** in your
+terminal and builds the Linux image. Open **http://127.0.0.1:3030** after
+`SERVICE_STARTED`, sign in with that administrator, and use the same Gemini
+assistant and browser controls. Stop the native app first if it already uses
+port 3030. Linux can also use this command with a local Docker engine, or use
+`node app.js` with its existing private Linux desktop.
+
+Background mode captures an isolated Linux desktop, so it needs no macOS Screen
+Recording/Accessibility permission. Keep Node, Docker and the PC running and
+awake. Switching tabs or disconnecting the dashboard does not stop Chrome;
+logout, Stop, cancellation, Ctrl+C or the configured idle timeout does. Browser
+steps pause for your input; the app cannot complete MFA/CAPTCHA unattended.
+
+Data lives in `runtime/background/` (or `DATA_DIR/background/`) including its own
+admin, Chrome profile, downloads and private logs. Native and background sessions
+are separate; no personal Chrome cookies are imported. Back up this directory
+only while the workspace is stopped. To reset its administrator, stop background
+mode and run `node --env-file-if-exists=.env scripts/background-admin.js`.
+
+Docker runs as a non-root user, publishes only `127.0.0.1:3030`, and keeps the
+Chromium sandbox enabled. Use a **local** Docker engine; remote engine contexts
+are unsupported. Reserve about 4 GB RAM and disk space for the first image build.
+If startup reports `BROWSER_SANDBOX`, the engine's kernel restrictions need
+attention: see [container notes](container/README.md). Google can still reject
+sign-in; there are no stealth settings or security-check bypasses. Physical
+Docker Desktop and live Google login are **UNVERIFIED** until tested on your PC.

@@ -83,3 +83,24 @@ A Chrome window can open while viewing/control remains unavailable. Run npm run 
 - MAC_WINDOW_QUERY_FAILED / MAC_NATIVE_FAILED: a bridge/helper operation failed. Share doctor output and the safe helper stage; repeatedly toggling permissions may not solve this.
 
 Stop Node with Ctrl+C before restarting the terminal. Do not delete the native profile or reset macOS TCC permissions globally. Google sign-in can be opened from its new button without desktop-control permission, or manually at https://accounts.google.com/ in the already opened Chrome. Complete password/MFA there; retain the profile for session reuse.
+
+## Local PC background workspace
+
+Install/start Docker Desktop with Linux containers on macOS/Windows (or a local
+Docker engine on Linux). Stop any native app on the chosen port, update source,
+run `npm ci`, then `node app.js --background`. The launcher prompts for a separate
+background administrator, builds the image, and serves the dashboard at
+http://127.0.0.1:3030 by default. It preserves its profile under
+`DATA_DIR/background`. Select Start Gemini sign-in and follow the live steps.
+Keep Docker/Node running and the PC awake. Ctrl+C stops only this launch's
+container; restarting resumes its saved profile where the website allows.
+Use `node --env-file-if-exists=.env scripts/background-admin.js` to reset the
+background admin after stopping it. Native `reset-admin` changes native mode only.
+
+If a crash leaves a container running, inspect `docker ps` for the
+`local-browser-...` container with label `local-native-browser.background=true`,
+verify its mounts identify this workspace, and use `docker stop <container-id>`.
+Do not delete profiles or unrelated containers. The launcher refuses a name or
+profile conflict. Kernel user-namespace restrictions can block sandbox startup;
+inspect `BROWSER_SANDBOX` diagnostics without disabling sandboxing. Physical
+Docker Desktop and live Google sign-in acceptance are still required.

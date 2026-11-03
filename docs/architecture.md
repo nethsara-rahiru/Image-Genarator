@@ -13,3 +13,23 @@ A local HTTP CONNECT proxy validates all DNS answers, refuses private/reserved/m
 Native input commands are serialized; frame streaming has backpressure and session checks. The viewer renders actual frame dimensions, including native Chrome tabs and dialogs. Navigation/search uses Chrome’s normal URL invocation to open a new tab without simulated omnibox typing; no DOM/load-completion claim is made. Google search URLs are deterministic and network-validated. DevTools is opened via a native key chord, not a debugging API.
 
 Chrome preferences for this dedicated profile point downloads to private app storage. Downloads are enumerated from disk with opaque IDs; partial/hidden/symlink/oversized entries are excluded and newest 100 retained. Uploads are saved with randomized private names and passed only into a verified native chooser, newest bounded set retained. No file content analysis occurs. Files/profiles/logs are never committed.
+
+## Guided Gemini flow and isolated background workspace
+
+`GeminiFlow` performs bounded browser launch and fixed Google/Gemini navigation
+through the existing serialized action queue. Its authenticated API returns
+immediately for launch/navigation; WebSocket messages replay the current step
+history after reconnect. `awaiting_signin` and `awaiting_confirmation` require
+human input; `user_confirmed` explicitly does not assert independent Google
+verification. Flow state is in memory, while sanitized step events and Chrome's
+profile persist. After Node restart start a new flow with the saved profile.
+The flow never reads DOM account identity or stores Google credentials.
+
+`node app.js --background` builds the production-only Linux image and publishes
+its dashboard on host loopback. The container runs the same application with
+private Xvfb/OS input, a separate bind-mounted data directory, resource limits,
+and Chromium sandboxing. Only in this container does the server listen on
+0.0.0.0; the Docker host publication is explicitly 127.0.0.1. Windows/macOS host
+native capture/input is unused in this mode. Build context uses an explicit
+source allowlist. Signals stop only the container ID created by this launch;
+existing containers or profiles are not silently deleted on conflict.

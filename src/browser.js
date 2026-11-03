@@ -214,6 +214,7 @@ export class RemoteBrowser {
       running: this.running,
       platform: this.platform,
       mode: "native",
+      backgroundInput: this.platform === "linux",
       width: this.width,
       height: this.height,
       frameReady: this.hasFrame,

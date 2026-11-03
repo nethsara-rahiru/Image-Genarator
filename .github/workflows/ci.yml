@@ -41,3 +41,12 @@ jobs:
           name: native-browser-fixture-previews-${{ matrix.os }}
           path: test-results/
           if-no-files-found: ignore
+  background:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production background workspace
+        run: docker build -f container/Dockerfile -t local-browser-ci .
+      - name: Verify non-root sandboxed Chromium and private capture
+        run: docker run --rm --init --shm-size=1g --security-opt seccomp=container/seccomp.json local-browser-ci node scripts/container-smoke.js

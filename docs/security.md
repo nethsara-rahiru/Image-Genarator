@@ -15,3 +15,15 @@ The native browser network proxy validates all public DNS answers and pins the s
 Profiles and directories use mode 700 and files mode 600 where supported; enforce Windows ACLs for equivalent privacy. Native Chrome can create its own files subject to OS defaults; protect the whole DATA_DIR. Downloads are authenticated attachments with nosniff, opaque IDs and symlink/path guards. Uploads are memory/size bounded and passed to a native chooser only. Native browser download temporary files can use unbounded disk before enumeration; use OS quotas. Logs are private/rotated and contain only safe event/action codes, IDs, timings and status categories, not query strings, typed text, credentials or page content. Chrome DevTools is visible only in the administrator's stream and is not copied to log storage.
 
 The Google sign-in action opens only the fixed official account-chooser URL using the already-managed Chrome profile's standard URL invocation. It never accepts/stores Google passwords, fills sign-in fields, bypasses Google verification, or claims an authenticated account. Screen/control permission is independent of that navigation; the viewer still requires macOS permission. New macOS diagnostic codes expose only allowlisted stages and messages, not raw Apple-event exceptions (which can contain typed text). Read-only permission/window-count diagnostics do not capture any screen or issue automation events.
+
+Background workspace: Docker Desktop/engine is a trusted local prerequisite.
+Do not use a remote engine context or publish the container's port publicly.
+The launcher publishes loopback only, runs as a non-root user with Chromium's
+sandbox enabled, and passes only allowlisted non-secret settings. The included
+seccomp policy permits Chromium sandbox namespaces without privileged mode.
+The separate `DATA_DIR/background` contains authentication cookies and admin
+hashes: protect it like the native profile. Its session/admin credentials do not
+migrate from native mode. Never add .env, runtime data or personal profiles to
+the image. Inspect Docker Desktop resource/file-sharing settings if binding this
+private directory fails. Google credentials remain interactive in Google's
+browser pages; logs contain static flow steps and sanitized errors, not inputs.

@@ -13,7 +13,8 @@
     "test": "node --test --test-concurrency=1 tests/*.test.js",
     "lint": "node scripts/check.js && prettier --check .",
     "doctor": "node --env-file-if-exists=.env scripts/doctor.js",
-    "setup-host": "node --env-file-if-exists=.env scripts/setup-host.js"
+    "setup-host": "node --env-file-if-exists=.env scripts/setup-host.js",
+    "background": "node app.js --background"
   },
   "dependencies": {
     "argon2": "^0.44.0",

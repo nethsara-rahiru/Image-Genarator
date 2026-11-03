@@ -1,0 +1,13 @@
+# Only explicit application sources may enter the image build context.
+**
+!package.json
+!package-lock.json
+!app.js
+!src/
+!src/**
+!scripts/
+!scripts/**
+!public/
+!public/**
+!container/
+!container/Dockerfile

@@ -205,14 +205,23 @@ export class LinuxDriver {
     }
   }
   async fileDialog() {
-    const id = (await run("xdotool", ["getactivewindow"], { env: this.env }))
-      .toString()
-      .trim();
-    if (!/^\d+$/.test(id)) return false;
-    const type = (
-      await run("xprop", ["-id", id, "_NET_WM_WINDOW_TYPE"], { env: this.env })
-    ).toString();
-    return type.includes("_NET_WM_WINDOW_TYPE_DIALOG");
+    try {
+      const id = (await run("xdotool", ["getactivewindow"], { env: this.env }))
+        .toString()
+        .trim();
+      if (!/^\d+$/.test(id)) return false;
+      const type = (
+        await run("xprop", ["-id", id, "_NET_WM_WINDOW_TYPE"], {
+          env: this.env,
+        })
+      ).toString();
+      return type.includes("_NET_WM_WINDOW_TYPE_DIALOG");
+    } catch (error) {
+      // Closing a chooser can destroy its X window between these two queries.
+      // Only accept that as 'no dialog' while the private display is still alive.
+      await run("xdotool", ["getdisplaygeometry"], { env: this.env });
+      return false;
+    }
   }
   async upload(file) {
     if (!(await this.fileDialog()))
