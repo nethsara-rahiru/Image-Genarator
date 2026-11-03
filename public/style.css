@@ -500,3 +500,8 @@ select:focus-visible {
 .screen {
   min-height: 240px;
 }
+
+.footer .actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}

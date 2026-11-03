@@ -247,6 +247,23 @@ test(
         { input: JSON.stringify({ type: "capture", pid: 0 }) },
       );
       assert.equal(JSON.parse(output).ok, false);
+      assert.equal(JSON.parse(output).code, "WINDOW_NOT_READY");
+      const diagnostic = await run(
+        "/usr/bin/osascript",
+        [
+          "-l",
+          "JavaScript",
+          fileURLToPath(new URL("../src/native/macos.js", import.meta.url)),
+        ],
+        { input: JSON.stringify({ type: "diagnostics", pid: 0 }) },
+      );
+      const parsed = JSON.parse(diagnostic);
+      assert.equal(parsed.ok, true);
+      assert.equal(parsed.result.windowQuery, "ok");
+      for (const field of ["screenRecording", "accessibility"])
+        assert.ok(
+          [true, false, null].includes(parsed.result.permissions[field]),
+        );
     }
   },
 );
@@ -395,6 +412,27 @@ test(
           .slice(before)
           .some((r) => r.cookie.includes("native_session=preserved")),
       );
+      const managedPid = b.child.pid;
+      const originalValidate = b.options.validateUrl;
+      const originalCommand = b.driver.command;
+      b.options.validateUrl = async (value) =>
+        value === "https://accounts.google.com/AccountChooser"
+          ? base + "/google-signin-fixture"
+          : originalValidate(value);
+      b.driver.command = async () => {
+        throw new Error("Native keyboard permission unavailable in this test");
+      };
+      try {
+        await b.action({ type: "googleSignIn" });
+        await eventually(() =>
+          requests.some((r) => r.path === "/google-signin-fixture"),
+        );
+        assert.equal(b.child.pid, managedPid);
+        assert.ok(b.running);
+      } finally {
+        b.options.validateUrl = originalValidate;
+        b.driver.command = originalCommand;
+      }
       const client = await chromium.launch({
         headless: true,
         executablePath: process.env.TEST_CHROME,

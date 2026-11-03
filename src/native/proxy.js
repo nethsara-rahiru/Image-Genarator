@@ -26,6 +26,7 @@ export async function startBrowserProxy({
     };
   }
   const track = (socket) => {
+    if (sockets.has(socket)) return;
     sockets.add(socket);
     socket.on("error", () => {});
     socket.on("close", () => sockets.delete(socket));

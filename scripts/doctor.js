@@ -1,3 +1,4 @@
+import { DesktopDriver } from "../src/native/desktop.js";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
@@ -48,6 +49,55 @@ if (process.platform === "darwin")
   console.log(
     "Check Screen Recording, Accessibility and Automation permissions for the terminal/Node. Grant permissions locally; the app cannot bypass them. No desktop screenshot is taken by this diagnostic.",
   );
+if (process.platform === "darwin") {
+  try {
+    const driver = new DesktopDriver(
+      "darwin",
+      path.join(config.data, "native"),
+    );
+    let managedPid = 0;
+    try {
+      const record = JSON.parse(
+        await fs.readFile(
+          path.join(config.data, "native", "browser.json"),
+          "utf8",
+        ),
+      );
+      if (Number.isSafeInteger(record.pid) && record.pid > 0) {
+        process.kill(record.pid, 0);
+        managedPid = record.pid;
+      }
+    } catch {}
+    driver.setProcess(managedPid);
+    const result = await driver.diagnostics();
+    const status = (value) =>
+      value === true
+        ? "granted"
+        : value === false
+          ? "not granted"
+          : "preflight unavailable";
+    console.log(
+      "macOS Screen Recording preflight: " +
+        status(result.permissions.screenRecording),
+    );
+    console.log(
+      "macOS Accessibility preflight: " +
+        status(result.permissions.accessibility),
+    );
+    console.log("macOS window query: " + result.windowQuery);
+    console.log(
+      managedPid
+        ? "Visible windows for managed Chrome: " + result.visibleManagedWindows
+        : "No running managed Chrome record in this DATA_DIR; start it to check visible-window ownership.",
+    );
+    console.log(
+      "Automation is checked when controlling System Events; MAC_AUTOMATION_REQUIRED identifies a denied request.",
+    );
+  } catch (error) {
+    console.error(error.code || "MAC_NATIVE_FAILED", error.message);
+    failed = true;
+  }
+}
 console.log(
   (await readAdmin(config.data))
     ? "Administrator exists."

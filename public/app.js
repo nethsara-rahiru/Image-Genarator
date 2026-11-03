@@ -159,6 +159,7 @@ function render(state) {
     "reload",
     "paste",
     "google",
+    "google-signin",
     "chrome-console",
   ])
     $(id).disabled = !state.running;
@@ -200,6 +201,10 @@ $("stop").onclick = () => {
 $("new-tab").onclick = () => send({ type: "newTab" });
 $("close-tab").onclick = () => send({ type: "closeTab" });
 $("chrome-console").onclick = () => send({ type: "devtools" });
+$("google-signin").onclick = () => {
+  report("");
+  send({ type: "googleSignIn" });
+};
 $("google").onclick = () => {
   report("");
   send({ type: "navigate", url: "https://www.google.com/" });

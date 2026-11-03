@@ -1,13 +1,57 @@
 // JXA, executed by /usr/bin/osascript, not imported by Node or served to clients.
 ObjC.import("Foundation");
 ObjC.import("CoreGraphics");
+ObjC.import("ApplicationServices");
+function permissions() {
+  let screenRecording = null,
+    accessibility = null;
+  try {
+    screenRecording = !!$.CGPreflightScreenCaptureAccess();
+  } catch {}
+  try {
+    accessibility = !!$.AXIsProcessTrusted();
+  } catch {}
+  return { screenRecording, accessibility };
+}
+function windows() {
+  const raw = $.CGWindowListCopyWindowInfo(1, 0);
+  if (!raw) return [];
+  let all;
+  try {
+    all = ObjC.deepUnwrap(raw);
+  } catch {}
+  if (!Array.isArray(all)) all = ObjC.deepUnwrap(ObjC.castRefToObject(raw));
+  if (!Array.isArray(all)) throw new Error("MAC_WINDOW_QUERY_FAILED");
+  return all;
+}
 function run() {
+  let stage = "decode";
   try {
     const data = $.NSFileHandle.fileHandleWithStandardInput.readDataToEndOfFile;
     const request = JSON.parse(
       $.NSString.alloc.initWithDataEncoding(data, $.NSUTF8StringEncoding).js,
     );
-    const all = ObjC.deepUnwrap($.CGWindowListCopyWindowInfo(1, 0));
+    stage = "permissions";
+    const access = permissions();
+    stage = "window-query";
+    let all;
+    try {
+      all = windows();
+    } catch {
+      throw new Error("MAC_WINDOW_QUERY_FAILED");
+    }
+    if (request.type === "diagnostics")
+      return JSON.stringify({
+        ok: true,
+        result: {
+          permissions: access,
+          windowQuery: "ok",
+          visibleManagedWindows: all.filter(
+            (w) =>
+              w.kCGWindowOwnerPID === request.pid && w.kCGWindowLayer === 0,
+          ).length,
+        },
+      });
     const window = all.find(
       (w) =>
         w.kCGWindowOwnerPID === request.pid &&
@@ -20,8 +64,9 @@ function run() {
     if (request.type === "capture")
       return JSON.stringify({
         ok: true,
-        result: { windowId: window.kCGWindowNumber, rect },
+        result: { windowId: window.kCGWindowNumber, rect, permissions: access },
       });
+    stage = "focus";
     const system = Application("System Events");
     const process = system.processes.whose({ unixId: request.pid })[0];
     process.frontmost = true;
@@ -45,6 +90,7 @@ function run() {
       PageDown: 121,
       F5: 96,
     };
+    stage = request.type === "upload" ? "chooser" : "input";
     if (request.type === "upload") {
       const windows = process.windows();
       const hasDialog = windows.some((w) => {
@@ -104,12 +150,25 @@ function run() {
     else throw new Error("INPUT_DENIED");
     return JSON.stringify({ ok: true, result: {} });
   } catch (error) {
-    return JSON.stringify({
-      ok: false,
-      code:
-        error.message === "FILE_DIALOG_REQUIRED"
-          ? "FILE_DIALOG_REQUIRED"
-          : "DESKTOP_PERMISSION_REQUIRED",
-    });
+    const known = [
+      "WINDOW_NOT_READY",
+      "FOCUS_DENIED",
+      "MAC_WINDOW_QUERY_FAILED",
+      "FILE_DIALOG_REQUIRED",
+      "INPUT_DENIED",
+    ];
+    let code = known.includes(error.message)
+      ? error.message
+      : "MAC_NATIVE_FAILED";
+    const number = Number(error.number);
+    if (number === -1743) code = "MAC_AUTOMATION_REQUIRED";
+    else if (
+      number === -25211 ||
+      /not allowed assistive|assistive access|AXError/i.test(
+        String(error.message),
+      )
+    )
+      code = "MAC_ACCESSIBILITY_REQUIRED";
+    return JSON.stringify({ ok: false, code, stage });
   }
 }

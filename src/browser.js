@@ -15,6 +15,7 @@ import {
   terminate,
   validKey,
   launchFailure,
+  run,
 } from "./native/common.js";
 import { startBrowserProxy } from "./native/proxy.js";
 export class RemoteBrowser {
@@ -137,6 +138,8 @@ export class RemoteBrowser {
         ? new LinuxDriver(this.data)
         : new DesktopDriver(this.platform, this.data));
     const env = await this.driver.prepare();
+    this.environment = env;
+    this.binary = binary;
     const args = browserArguments(this.profile, this.proxy.port, {
       test: this.options.test,
       platform: this.platform,
@@ -227,7 +230,15 @@ export class RemoteBrowser {
       throw nativeError("BROWSER_CLOSED", "Start the browser first.");
     const command = this.platform === "darwin" ? "Meta" : "Control";
     const key = (value) => this.driver.command({ type: "key", key: value });
-    if (d.type === "navigate") {
+    if (d.type === "googleSignIn") {
+      await this.openUrl("https://accounts.google.com/AccountChooser");
+      this.log?.write(
+        "info",
+        "browser",
+        "GOOGLE_SIGNIN_OPENED",
+        "Google account chooser navigation requested. Complete sign-in and verification directly in Chrome; the profile is retained.",
+      );
+    } else if (d.type === "navigate") {
       const url = await (this.options.validateUrl || publicUrl)(
         navigationTarget(d.url),
       );
@@ -282,6 +293,30 @@ export class RemoteBrowser {
       if (!validKey(d.key)) throw new Error("Unsupported key");
       await key(d.key);
     } else throw new Error("Unknown action");
+  }
+  async openUrl(value) {
+    if (!this.running)
+      throw nativeError("BROWSER_CLOSED", "Start the browser first.");
+    const url = await (this.options.validateUrl || publicUrl)(value);
+    try {
+      await run(
+        this.binary,
+        [
+          `--user-data-dir=${this.profile}`,
+          ...(this.options.test ? ["--no-sandbox"] : []),
+          url,
+        ],
+        {
+          env: this.environment,
+          timeout: 10000,
+        },
+      );
+    } catch {
+      throw nativeError(
+        "GOOGLE_SIGNIN_OPEN_FAILED",
+        "Could not request the sign-in tab. Open https://accounts.google.com/ directly in the managed Chrome window.",
+      );
+    }
   }
   async upload(file) {
     if (!this.running)
