@@ -312,5 +312,5 @@ this app does not bypass it or guarantee that Gemini will return an image.
   retains original-file verification and duplicate-submission protection.
 - Browser fixture uses hover-only download controls and verifies exact image
   bytes and a loaded image in the dashboard. Real Google/Gemini remains unverified.
-- Host tests: 46 passed, 3 environment skips. Native fixture/CI results are
+- Host tests: 46 passed, 3 environment skips. Full native Linux suite: 48 passed, 1 OS helper skip. CI results are
   recorded in the follow-up pull request. No Google security bypass is added.

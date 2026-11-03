@@ -3,7 +3,7 @@
 Run `npm ci` then `node app.js`; use `node app.js --background` with Docker for an
 isolated Linux desktop. The default local dashboard requires no app password.
 Google authentication is separate. Configure an ordinary signed-in profile using
-the existing browser/sign-in assistant. Stop on Google security/account/limit
+**Open Gemini / sign in**, completing sign-in directly in Chrome, then **Check again**. Stop on Google security/account/limit
 rejection; do not change accounts or browser security to work around restrictions.
 
 ## Jobs and recovery
