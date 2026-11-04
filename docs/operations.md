@@ -80,3 +80,10 @@ IMAGE_DOWNLOAD_VERIFIED. A timeout distinguishes no Chrome download event from a
 transfer that stalled. The download starts with a trusted browser mouse click;
 new child frames are checked against the managed page before accepting a file.
 No image URLs, cookies, tokens or prompt content are included in these events.
+
+Extensionless UUID files from earlier versions came from Chrome's temporary
+allowAndName setting; the name alone does not mean the bytes are corrupt. Keep the
+failed job and use Download existing image after updating. New attempts preserve
+the website filename and reconcile completed files before assigning the image's
+actual format/extension. Avoid additional manual downloads while a job owns Chrome;
+multiple files in one attempt require review rather than an arbitrary selection.

@@ -353,3 +353,20 @@ this app does not bypass it or guarantee that Gemini will return an image.
   input acknowledgement before submitting and permits up to three attempts only
   after a confirmed chooser cancellation. Production prompt submission never
   retries. The image-download fixture passed in both original CI runs.
+
+## Named downloads and completion reconciliation
+
+- Removed Chrome allowAndName mode, which deliberately produced extensionless
+  UUID filenames while the app waited for completion. Downloads keep their
+  website filenames in fresh per-attempt folders, then verified image bytes are
+  renamed to image.png/jpg/webp for the job and shown in the dashboard.
+- Completion reconciles a single stable valid image file instead of depending
+  solely on Browser.downloadProgress. Partial/unsafe/multiple files are rejected;
+  cancelled jobs release listeners/timers and restore normal browser downloads.
+- Page.frameAttached records verified child frames, including short-lived frames
+  which may disappear before a frame-tree snapshot. Download-only recovery never
+  submits another prompt.
+- Regression tests cover missing completion events, short-lived child frames,
+  partial-to-final file rename and ambiguous files. Real Chromium fixture drops
+  all completed progress events and still verifies original bytes and dashboard
+  output. Live Gemini remains UNVERIFIED; final CI evidence is in the PR.

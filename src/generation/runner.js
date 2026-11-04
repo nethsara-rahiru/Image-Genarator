@@ -210,6 +210,7 @@ export class GenerationRunner {
       info = imageInfo(data),
       filename = "image." + info.format;
     await fs.rename(source, path.join(directory, filename));
+    await fs.rmdir(path.dirname(source)).catch(() => {});
     this.browser.log?.write(
       "info",
       "browser",
@@ -286,6 +287,10 @@ export class GenerationRunner {
       for (const child of node.childFrames || []) collect(child);
     };
     collect(frameTree);
+    const attemptDirectory = await fs.mkdtemp(
+      path.join(directory, "download-"),
+    );
+    await fs.chmod(attemptDirectory, 0o700);
     let guid, timer, resolve, reject;
     let completed = false,
       finished = false;
@@ -295,8 +300,90 @@ export class GenerationRunner {
     });
     completion.catch(() => {});
     let pendingGuid, pendingProgress;
+    let unverifiedFrame = false,
+      polling = false,
+      pollTimer,
+      previousFile,
+      previousBytes = 0,
+      stable = 0,
+      transferCompleted = false;
+    const attached = (event) => {
+      if (frames.has(event.parentFrameId)) frames.add(event.frameId);
+    };
+    const pollFile = async () => {
+      if (polling || finished || unverifiedFrame || pendingGuid) return;
+      polling = true;
+      try {
+        const names = await fs.readdir(attemptDirectory);
+        if (finished) return;
+        const partials = names.filter((name) =>
+          /\.(crdownload|tmp|part)$/i.test(name),
+        );
+        const files = names.filter((name) => !partials.includes(name));
+        if (files.length > 1)
+          throw nativeError(
+            "GENERATION_DOWNLOAD_AMBIGUOUS",
+            "Multiple files arrived during this download. No file was selected; inspect the saved chat.",
+          );
+        let bytes = 0;
+        for (const name of names) {
+          const stat = await fs.lstat(path.join(attemptDirectory, name));
+          if (!stat.isFile() || stat.isSymbolicLink())
+            throw nativeError(
+              "GENERATION_INVALID_DOWNLOAD",
+              "An unsafe download file was rejected.",
+            );
+          bytes += stat.size;
+        }
+        if (bytes > 100 * 1024 * 1024)
+          throw nativeError(
+            "GENERATION_DOWNLOAD_TOO_LARGE",
+            "The image download exceeds 100 MB.",
+          );
+        if (finished) return;
+        if (bytes > previousBytes) {
+          previousBytes = bytes;
+          armTimeout(60000);
+        }
+        if (partials.length || files.length !== 1) {
+          stable = 0;
+          return;
+        }
+        const file = path.join(attemptDirectory, files[0]);
+        const data = await fs.readFile(file);
+        try {
+          imageInfo(data);
+        } catch (error) {
+          if (transferCompleted) throw error;
+          return;
+        }
+        const fingerprint =
+          files[0] + ":" + data.length + ":" + imageInfo(data).checksum;
+        stable = fingerprint === previousFile ? stable + 1 : 0;
+        previousFile = fingerprint;
+        if (stable < 2 || finished) return;
+        completed = true;
+        this.browser.log?.write(
+          "info",
+          "browser",
+          "IMAGE_DOWNLOAD_FILE_READY",
+          "A single complete image file was verified in this job's isolated download folder.",
+        );
+        resolve(file);
+      } catch (error) {
+        if (!finished && error.code !== "ENOENT") reject(error);
+      } finally {
+        polling = false;
+      }
+    };
     const accept = (event) => {
-      if (guid || finished) return;
+      if (finished) {
+        pipe
+          .send("Browser.cancelDownload", { guid: event.guid })
+          .catch(() => {});
+        return;
+      }
+      if (guid) return;
       guid = event.guid;
       armTimeout(60000);
       this.browser.log?.write(
@@ -326,13 +413,15 @@ export class GenerationRunner {
         .then(({ frameTree }) => {
           collect(frameTree);
           if (frames.has(event.frameId)) accept(event);
-          else
+          else {
+            unverifiedFrame = true;
             this.browser.log?.write(
               "warn",
               "browser",
               "IMAGE_DOWNLOAD_FRAME_UNVERIFIED",
               "Chrome reported a download outside the verified page frames; it was not accepted.",
             );
+          }
         })
         .catch(() => {})
         .finally(() => {
@@ -359,8 +448,8 @@ export class GenerationRunner {
         return;
       }
       if (event.state === "completed") {
-        completed = true;
-        resolve(path.join(directory, guid));
+        transferCompleted = true;
+        void pollFile();
       } else if (event.state === "canceled")
         reject(
           nativeError(
@@ -374,6 +463,7 @@ export class GenerationRunner {
         signal.reason ||
           nativeError("GENERATION_CANCELLED", "Generation cancelled."),
       );
+    pipe.on("Page.frameAttached", attached);
     pipe.on("Browser.downloadWillBegin", begin);
     pipe.on("Browser.downloadProgress", progress);
     signal.addEventListener("abort", abort, { once: true });
@@ -396,10 +486,14 @@ export class GenerationRunner {
     try {
       signal.throwIfAborted();
       await pipe.send("Browser.setDownloadBehavior", {
-        behavior: "allowAndName",
-        downloadPath: directory,
+        behavior: "allow",
+        downloadPath: attemptDirectory,
         eventsEnabled: true,
       });
+      await pipe.send("Page.enable", {}, adapter.session);
+      pollTimer = setInterval(() => {
+        void pollFile();
+      }, 300);
       const result = await this.evaluate(
         {
           operation: "download",
@@ -452,6 +546,8 @@ export class GenerationRunner {
     } finally {
       finished = true;
       clearTimeout(timer);
+      clearInterval(pollTimer);
+      pipe.off("Page.frameAttached", attached);
       signal.removeEventListener("abort", abort);
       pipe.off("Browser.downloadWillBegin", begin);
       pipe.off("Browser.downloadProgress", progress);
