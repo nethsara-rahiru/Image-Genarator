@@ -159,8 +159,8 @@ export class GenerationQueue {
     this.mutations = result.catch(() => {});
     return result;
   }
-  create(input) {
-    return this.mutate(() => this.createJob(input));
+  create(input, apiClientId = null) {
+    return this.mutate(() => this.createJob(input, apiClientId));
   }
   cancel(id) {
     return this.mutate(() => this.cancelJob(id));
@@ -177,7 +177,10 @@ export class GenerationQueue {
   renameChat(id, title) {
     return this.mutate(() => this.renameSavedChat(id, title));
   }
-  async createJob({ prompt, chatId = null, idempotencyKey } = {}) {
+  async createJob(
+    { prompt, chatId = null, idempotencyKey } = {},
+    apiClientId = null,
+  ) {
     if (
       typeof prompt !== "string" ||
       !prompt.trim() ||
@@ -193,7 +196,9 @@ export class GenerationQueue {
         "Enter a prompt (up to 8000 characters), a valid chat selection and an idempotency key.",
       );
     const prior = this.data.jobs.find(
-      (j) => j.idempotencyKey === idempotencyKey,
+      (j) =>
+        j.idempotencyKey === idempotencyKey &&
+        (j.apiClientId || null) === apiClientId,
     );
     if (prior) {
       if (prior.prompt !== prompt.trim() || prior.requestedChatId !== chatId)
@@ -221,6 +226,7 @@ export class GenerationQueue {
     const job = {
       id: randomUUID(),
       idempotencyKey,
+      apiClientId,
       sequence: Math.max(0, ...this.data.jobs.map((j) => j.sequence)) + 1,
       prompt: prompt.trim(),
       submittedPrompt:
