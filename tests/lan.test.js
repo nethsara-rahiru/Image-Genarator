@@ -135,7 +135,8 @@ test(
           clearTimeout(timer);
           resolve();
         });
-        child.kill("SIGTERM");
+        if (child.connected) child.send({ type: "lan-shutdown" });
+        else child.kill("SIGTERM");
       });
     };
     t.after(async () => {
@@ -156,7 +157,7 @@ test(
           BROWSER_CONTAINER: "",
           CADDY_PATH: process.env.TEST_CADDY,
         },
-        stdio: ["ignore", "pipe", "pipe"],
+        stdio: ["ignore", "pipe", "pipe", "ipc"],
       });
       child.stdout.on("data", (chunk) => (output += chunk));
       child.stderr.on("data", (chunk) => (output += chunk));

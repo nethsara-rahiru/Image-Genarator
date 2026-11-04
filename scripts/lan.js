@@ -102,6 +102,8 @@ export async function startLan() {
       if (service) await service.close();
       await release();
       for (const signal of ["SIGINT", "SIGTERM"]) process.off(signal, shutdown);
+      process.off("message", parentShutdown);
+      if (process.connected) process.disconnect();
     })();
     return closing;
   };
@@ -109,6 +111,9 @@ export async function startLan() {
     close().catch(() => {
       process.exitCode = 1;
     });
+  };
+  const parentShutdown = (message) => {
+    if (message?.type === "lan-shutdown") shutdown();
   };
   try {
     let saved = {};
@@ -156,6 +161,7 @@ export async function startLan() {
       return;
     }
     for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, shutdown);
+    if (process.send) process.on("message", parentShutdown);
     child = spawn(
       caddy,
       ["run", "--config", configFile, "--adapter", "caddyfile"],
