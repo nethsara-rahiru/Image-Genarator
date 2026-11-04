@@ -348,3 +348,8 @@ this app does not bypass it or guarantee that Gemini will return an image.
   with unchanged submission counts, and reject ambiguous response associations.
 - Live Gemini behavior remains UNVERIFIED until tested with the user's account.
   Final automated evidence and CI links are recorded in the follow-up PR.
+- CI exposed two intermittent failures in the existing OS-input fixture (textbox
+  activation and a cancelled native chooser). The fixture now waits for a real
+  input acknowledgement before submitting and permits up to three attempts only
+  after a confirmed chooser cancellation. Production prompt submission never
+  retries. The image-download fixture passed in both original CI runs.

@@ -386,7 +386,7 @@ test(
         "native_session=preserved; Max-Age=3600; Path=/",
       );
       res.end(
-        '<!doctype html><title>Native Chrome fixture</title><style>body{font:20px sans-serif;background:#eef4ff;padding:30px}input{padding:12px;font:inherit}</style><h1>Real desktop Chrome</h1><form><input name="q" autofocus><button>Submit</button></form><a href="/file" download>Download original</a><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||document.readyState!=="complete")return;reported=true;const input=document.querySelector("input");input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch("/ready?x="+encodeURIComponent(r.x+10+screenX)+"&y="+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});}addEventListener("load",ready);document.addEventListener("visibilitychange",ready);document.addEventListener("prerenderingchange",ready);ready();</script>',
+        `<!doctype html><title>Native Chrome fixture</title><style>body{font:20px sans-serif;background:#eef4ff;padding:30px}input{padding:12px;font:inherit}</style><h1>Real desktop Chrome</h1><form><input name="q" autofocus oninput="fetch('/typed?q='+encodeURIComponent(this.value))"><button>Submit</button></form><a href="/file" download>Download original</a><script>let reported=false;function ready(){if(reported||document.hidden||document.prerendering||document.readyState!=="complete")return;reported=true;const input=document.querySelector("input");input.focus();requestAnimationFrame(()=>{const r=input.getBoundingClientRect();fetch("/ready?x="+encodeURIComponent(r.x+10+screenX)+"&y="+encodeURIComponent(r.y+10+screenY+outerHeight-innerHeight));});}addEventListener("load",ready);document.addEventListener("visibilitychange",ready);document.addEventListener("prerenderingchange",ready);ready();</script>`,
       );
     });
     await new Promise((r) => fixture.listen(0, "127.0.0.1", r));
@@ -453,11 +453,32 @@ test(
       const capture = await b.capture();
       assert.equal(jpegDimensions(capture).width, 1280);
       const ready = requests.find((r) => r.path === "/ready");
-      await b.action({ type: "click", x: ready.x, y: ready.y });
-      await b.action({ type: "text", text: "native input checked" });
+      let typed = false;
+      for (let attempt = 0; attempt < 3 && !typed; attempt++) {
+        await b.action({ type: "click", x: ready.x, y: ready.y });
+        await b.action({ type: "key", key: "Control+A" });
+        await b.action({ type: "text", text: "native input checked" });
+        try {
+          await eventually(
+            () =>
+              requests.some(
+                (r) => r.path === "/typed" && r.q === "native input checked",
+              ),
+            2500,
+          );
+          typed = true;
+        } catch {
+          /* A native activation click can be consumed. Retype only in this fixture. */
+        }
+      }
+      assert.equal(
+        typed,
+        true,
+        "Native input never reached the fixture textbox",
+      );
       await b.action({ type: "key", key: "Enter" });
       await eventually(() =>
-        requests.some((r) => r.q === "native input checked"),
+        requests.some((r) => r.path === "/" && r.q === "native input checked"),
       );
       await b.action({ type: "navigate", url: base + "/file" });
       try {
@@ -483,19 +504,31 @@ test(
       await b.action({ type: "navigate", url: base + "/upload-page" });
       await eventually(() => requests.some((r) => r.path === "/ready-file"));
       const fileButton = requests.find((r) => r.path === "/ready-file");
-      await b.action({ type: "click", x: fileButton.x, y: fileButton.y });
-      try {
-        await eventually(() => b.driver.fileDialog(), 2500);
-      } catch {
-        // A window-manager activation click can be consumed when the tab first receives focus.
+      for (let attempt = 0; attempt < 3 && !uploads.length; attempt++) {
+        const cancellations = requests.filter(
+          (r) => r.path === "/upload-cancel",
+        ).length;
         await b.action({ type: "click", x: fileButton.x, y: fileButton.y });
-        await eventually(() => b.driver.fileDialog());
+        try {
+          await eventually(() => b.driver.fileDialog(), 2500);
+        } catch {
+          // A window-manager activation click can be consumed when the tab first receives focus.
+          await b.action({ type: "click", x: fileButton.x, y: fileButton.y });
+          await eventually(() => b.driver.fileDialog());
+        }
+        await b.upload({
+          originalname: "reference.txt",
+          buffer: Buffer.from("original native upload"),
+          mimetype: "text/plain",
+        });
+        await eventually(
+          () =>
+            uploads.length > 0 ||
+            requests.filter((r) => r.path === "/upload-cancel").length >
+              cancellations,
+        );
+        if (!uploads.length) assert.equal(await b.driver.fileDialog(), false);
       }
-      await b.upload({
-        originalname: "reference.txt",
-        buffer: Buffer.from("original native upload"),
-        mimetype: "text/plain",
-      });
       try {
         await eventually(() => uploads.includes("original native upload"));
       } catch (error) {
