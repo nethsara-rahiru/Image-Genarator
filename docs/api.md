@@ -1,5 +1,8 @@
 # Local generator API
 
+For authenticated public/server-to-server clients use the separate
+[versioned HTTPS client API](client-api.md), not dashboard session endpoints.
+
 Default base: http://127.0.0.1:3030. No application login is required locally.
 Fetch `GET /api/session` first and retain its HttpOnly session cookie. Mutations
 require the exact configured `Origin` and returned `csrf` as `X-CSRF-Token`.

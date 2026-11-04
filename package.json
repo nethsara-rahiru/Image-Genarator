@@ -14,7 +14,8 @@
     "lint": "node scripts/check.js && prettier --check .",
     "doctor": "node --env-file-if-exists=.env scripts/doctor.js",
     "setup-host": "node --env-file-if-exists=.env scripts/setup-host.js",
-    "background": "node app.js --background"
+    "background": "node app.js --background",
+    "api-client": "node --env-file-if-exists=.env scripts/api-client.js"
   },
   "dependencies": {
     "argon2": "^0.44.0",

@@ -370,3 +370,22 @@ this app does not bypass it or guarantee that Gemini will return an image.
   partial-to-final file rename and ambiguous files. Real Chromium fixture drops
   all completed progress events and still verifies original bytes and dashboard
   output. Live Gemini remains UNVERIFIED; final CI evidence is in the PR.
+
+## Versioned public HTTPS client API
+
+- Added /api/v1 bearer authentication independent of dashboard sessions/CSRF.
+  Keys are hashed at rest, scoped (read/generate/browser), expiring, revocable
+  and rotatable through the local api-client CLI. No secrets are committed.
+- Added browser start/stop/status/open-Gemini, enqueue/poll/list own jobs,
+  client-owned chats, image/metadata downloads, cancel/safe retry/download-only
+  recovery. Idempotency is scoped to the client. The queue remains globally FIFO.
+- Public API keeps existing Host/TLS checks; public dashboard configurations
+  require AUTH_REQUIRED=true. Browser controls share the host's Google session;
+  this is a trusted-client service, not isolated tenant browsers. Google sign-in
+  remains manual. No arbitrary browser code/navigation or profile APIs are added.
+- API integration tests cover auth, revocation/rotation/expiry, scope denials,
+  ownership, original bytes/metadata, pagination, rate limits, HTTPS/Host checks,
+  idempotency isolation and unchanged dashboard CSRF/auth enforcement.
+- Public DNS/TLS deployment and live Google/Gemini require target validation.
+  docs/client-api.md contains provisioning, HTTPS deployment and curl examples.
+  Automated results and final commit/PR references are recorded in the PR.

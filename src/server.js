@@ -20,6 +20,8 @@ import { GeminiFlow } from "./geminiFlow.js";
 import { GenerationQueue } from "./generation/queue.js";
 import { GenerationRunner } from "./generation/runner.js";
 import { nativeError } from "./native/common.js";
+import { clientAuthentication } from "./apiClients.js";
+import { clientApi } from "./clientApi.js";
 import { RemoteBrowser } from "./browser.js";
 const publicDir = fileURLToPath(new URL("../public", import.meta.url));
 class SessionStore extends session.Store {
@@ -120,7 +122,10 @@ export async function startServer(config, options = {}) {
       return res.status(401).json({ error: "Please sign in" });
     next();
   };
+  app.use("/api/v1", clientAuthentication(config));
   app.use("/api", (req, res, next) => {
+    if (req.apiClient && /^\/api\/v1(?:\/|$)/.test(req.originalUrl))
+      return next();
     if (
       !["GET", "HEAD"].includes(req.method) &&
       (req.headers.origin !== config.origin ||
@@ -251,6 +256,11 @@ export async function startServer(config, options = {}) {
       ["click", "scroll", "text", "key"].includes(actionName) ||
       (d.type === "automation" && d.command === "fill");
     const result = chain.then(async () => {
+      if (request && generation?.busy)
+        throw nativeError(
+          "GENERATION_BUSY",
+          "A generation job owns the browser. Cancel or finish it before using manual controls.",
+        );
       if (!noisy)
         log.write(
           "info",
@@ -260,7 +270,7 @@ export async function startServer(config, options = {}) {
           { action: actionName, actionId },
         );
       try {
-        if (request) {
+        if (request && !request.apiClient) {
           const stored = sessions.items.get(request.sessionID);
           if (
             !stored ||
@@ -534,6 +544,7 @@ export async function startServer(config, options = {}) {
   app.get("/api/health", auth, (req, res) =>
     res.json({ ok: true, browser: browser.running }),
   );
+  app.use("/api/v1", clientApi({ browser, generation, flow, action }));
   app.use(express.static(publicDir, { index: "index.html", maxAge: 0 }));
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);

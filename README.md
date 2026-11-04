@@ -157,3 +157,13 @@ actual Groq/model availability, and physical Windows/macOS/ARM acceptance.
 Google's reported insecure-browser rejection cannot be bypassed or guaranteed
 away by this app. Complete live validation on your own account/PC before relying
 on unattended operation; see [test report](docs/test-report.md).
+
+## Public HTTPS API
+
+Use the versioned bearer-token API to start Chrome, open Gemini, generate images,
+track jobs and download outputs from another application. Create scoped, expiring
+client keys with `npm run api-client -- create "my-backend" read,generate,browser 90`.
+Public access requires `AUTH_REQUIRED=true`, a configured HTTPS origin and a valid
+TLS reverse proxy. Google sign-in stays manual on the host; clients share its
+browser/session and global queue. See [client API guide](docs/client-api.md) for
+HTTPS deployment, token revocation, endpoints and curl examples.
