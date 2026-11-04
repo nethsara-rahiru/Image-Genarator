@@ -189,6 +189,7 @@ export class GenerationRunner {
     });
     const source = await this.download({
       selection: selected,
+      expectedChatId: job.chatId,
       accountKey,
       baseline,
       baselineImages,
@@ -219,8 +220,87 @@ export class GenerationRunner {
     );
     return { ...info, filename };
   }
+  async stableDownloadControl(
+    { selection, expectedChatId, accountKey, baseline, baselineImages },
+    signal,
+  ) {
+    const original = selection;
+    const request = { accountKey, baseline, baselineImages };
+    for (let attempt = 0; attempt < 8; attempt++) {
+      signal.throwIfAborted();
+      const state = await this.evaluate(
+        { operation: "inspect", ...request },
+        signal,
+      );
+      const current = state.selection;
+      const sameImage =
+        current &&
+        (original.imageKey
+          ? current.imageKey === original.imageKey
+          : current.imageId === original.imageId);
+      if (!sameImage || (expectedChatId && state.chatId !== expectedChatId))
+        throw nativeError(
+          "GENERATION_DOWNLOAD_CHANGED",
+          "The selected image or saved conversation changed. No download click was sent.",
+        );
+      selection = current;
+      const point = await this.evaluate(
+        { operation: "download", selection, ...request },
+        signal,
+      );
+      if (point.ok) {
+        await this.browser.pipe.send(
+          "Input.dispatchMouseEvent",
+          { type: "mouseMoved", x: point.x, y: point.y },
+          this.browser.gemini.session,
+        );
+        const next = await this.evaluate(
+          { operation: "inspect", ...request },
+          signal,
+        );
+        const sameNext =
+          next.selection &&
+          (original.imageKey
+            ? next.selection.imageKey === original.imageKey
+            : next.selection.imageId === original.imageId);
+        if (!sameNext || (expectedChatId && next.chatId !== expectedChatId))
+          throw nativeError(
+            "GENERATION_DOWNLOAD_CHANGED",
+            "The selected image or saved conversation changed. No download click was sent.",
+          );
+        selection = next.selection;
+        const checked = await this.evaluate(
+          { operation: "download", selection, ...request },
+          signal,
+        );
+        if (
+          checked.ok &&
+          Math.abs(checked.x - point.x) <= 2 &&
+          Math.abs(checked.y - point.y) <= 2
+        )
+          return checked;
+      } else {
+        const hover = await this.evaluate(
+          { operation: "hover_image", selection, ...request },
+          signal,
+        );
+        if (hover.ok)
+          await this.browser.pipe.send(
+            "Input.dispatchMouseEvent",
+            { type: "mouseMoved", x: hover.x, y: hover.y },
+            this.browser.gemini.session,
+          );
+      }
+      await pause(100, undefined, { signal });
+    }
+    throw nativeError(
+      "GENERATION_DOWNLOAD_UNSTABLE",
+      "The verified image download control did not settle. Wait for Gemini's layout to finish, then use Download existing image; no prompt or download click was repeated.",
+    );
+  }
   async download({
     selection,
+    expectedChatId,
     accountKey,
     baseline,
     baselineImages,
@@ -559,46 +639,10 @@ export class GenerationRunner {
       pollTimer = setInterval(() => {
         void pollFile();
       }, 300);
-      let result = await this.evaluate(
-        {
-          operation: "download",
-          selection,
-          accountKey,
-          baseline,
-          baselineImages,
-        },
+      const result = await this.stableDownloadControl(
+        { selection, expectedChatId, accountKey, baseline, baselineImages },
         signal,
       );
-      if (!result.ok)
-        throw nativeError(
-          "GENERATION_DOWNLOAD_CHANGED",
-          "The selected current-response image changed. No download was started.",
-        );
-      await pipe.send(
-        "Input.dispatchMouseEvent",
-        { type: "mouseMoved", x: result.x, y: result.y },
-        adapter.session,
-      );
-      const checked = await this.evaluate(
-        {
-          operation: "download",
-          selection,
-          accountKey,
-          baseline,
-          baselineImages,
-        },
-        signal,
-      );
-      if (
-        !checked.ok ||
-        Math.abs(checked.x - result.x) > 1 ||
-        Math.abs(checked.y - result.y) > 1
-      )
-        throw nativeError(
-          "GENERATION_DOWNLOAD_CHANGED",
-          "The download control moved or changed before the click. No new prompt was submitted.",
-        );
-      result = checked;
       clicked = true;
       await pipe.send(
         "Input.dispatchMouseEvent",

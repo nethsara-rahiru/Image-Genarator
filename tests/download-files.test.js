@@ -75,3 +75,75 @@ for (const mode of ["missing-events", "ephemeral-frame", "ambiguous-files"]) {
     assert.equal(pipe.listenerCount("Page.frameAttached"), 0);
   });
 }
+
+for (const mode of [
+  "moves-once",
+  "always-moving",
+  "image-changes",
+  "chat-changes",
+]) {
+  test(`download control reacquisition: ${mode}`, async () => {
+    let hovered = false,
+      coordinates = 0;
+    const events = [];
+    const browser = {
+      gemini: { session: "session" },
+      pipe: {
+        async send(method, params) {
+          events.push(params.type);
+          if (params.type === "mouseMoved") hovered = true;
+        },
+      },
+    };
+    const runner = new GenerationRunner(browser);
+    runner.evaluate = async ({ operation }) => {
+      if (operation === "inspect")
+        return {
+          chatId:
+            mode === "chat-changes" && hovered
+              ? "different-chat"
+              : "saved-chat",
+          selection: {
+            imageKey:
+              mode === "image-changes" && hovered
+                ? "other-image"
+                : "original-image",
+            imageId: "image",
+            responseId: "response",
+            buttonId: hovered ? "replacement-button" : "first-button",
+          },
+        };
+      return {
+        ok: true,
+        x:
+          mode === "always-moving"
+            ? 30 + (coordinates++ % 2) * 24
+            : hovered
+              ? 54
+              : 30,
+        y: 30,
+      };
+    };
+    const control = runner.stableDownloadControl(
+      {
+        selection: { imageKey: "original-image", imageId: "image" },
+        expectedChatId: "saved-chat",
+      },
+      new AbortController().signal,
+    );
+    if (mode === "moves-once") {
+      assert.deepEqual(await control, { ok: true, x: 54, y: 30 });
+      assert.equal(events.filter((event) => event === "mouseMoved").length, 2);
+    } else
+      await assert.rejects(control, {
+        code:
+          mode === "always-moving"
+            ? "GENERATION_DOWNLOAD_UNSTABLE"
+            : "GENERATION_DOWNLOAD_CHANGED",
+      });
+    assert.ok(
+      !events.includes("mousePressed"),
+      "reacquisition must never click or submit",
+    );
+  });
+}
