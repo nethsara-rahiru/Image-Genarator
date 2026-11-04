@@ -52,7 +52,12 @@ export class GenerationRunner {
       );
     return value;
   }
+  async waitForDownloadCleanup() {
+    await this.downloadCleanup;
+    if (this.downloadCleanupError) throw this.downloadCleanupError;
+  }
   async run(job, { signal, directory, phase, chat }) {
+    await this.waitForDownloadCleanup();
     this.recoveryRequest = job.downloadOnly
       ? job.downloadCheckpoint?.imageKey
         ? { recoverImageKey: job.downloadCheckpoint.imageKey }
@@ -386,12 +391,14 @@ export class GenerationRunner {
       previousFile,
       previousBytes = 0,
       stable = 0,
-      transferCompleted = false;
+      transferCompleted = false,
+      fileObserved = false,
+      clickAcknowledged = false;
     const attached = (event) => {
       if (frames.has(event.parentFrameId)) frames.add(event.frameId);
     };
     const pollFile = async () => {
-      if (polling || finished || unverifiedFrame || pendingGuid) return;
+      if (polling || finished) return;
       polling = true;
       try {
         const names = await fs.readdir(attemptDirectory);
@@ -429,6 +436,15 @@ export class GenerationRunner {
           stable = 0;
           return;
         }
+        if (!fileObserved) {
+          fileObserved = true;
+          this.browser.log?.write(
+            "info",
+            "browser",
+            "IMAGE_DOWNLOAD_FILE_OBSERVED",
+            "A completed-name file appeared in the job download folder; checking bytes independently of Chrome.",
+          );
+        }
         const file = path.join(attemptDirectory, files[0]);
         const data = await fs.readFile(file);
         try {
@@ -442,6 +458,18 @@ export class GenerationRunner {
         stable = fingerprint === previousFile ? stable + 1 : 0;
         previousFile = fingerprint;
         if (stable < 2 || finished) return;
+        if (unverifiedFrame)
+          throw nativeError(
+            "GENERATION_DOWNLOAD_FRAME_UNVERIFIED",
+            "A download from an unexpected origin was observed; the file was not attached to this job.",
+          );
+        if (!clickAcknowledged)
+          this.browser.log?.write(
+            "info",
+            "browser",
+            "IMAGE_DOWNLOAD_ACK_PENDING",
+            "The image file is complete while Chrome's click acknowledgement is still pending; file handoff will continue.",
+          );
         completed = true;
         this.browser.log?.write(
           "info",
@@ -458,9 +486,10 @@ export class GenerationRunner {
     };
     const accept = (event) => {
       if (finished) {
-        pipe
-          .send("Browser.cancelDownload", { guid: event.guid })
-          .catch(() => {});
+        if (!completed)
+          pipe
+            .send("Browser.cancelDownload", { guid: event.guid })
+            .catch(() => {});
         return;
       }
       if (guid) return;
@@ -486,22 +515,56 @@ export class GenerationRunner {
         accept(event);
         return;
       }
+      // Frame confirmation is supplementary: never pause the Node file scanner.
+      if (event.url) {
+        try {
+          const url = new URL(event.url);
+          const origin =
+            (this.browser.options?.test &&
+              this.browser.options.automationOrigins?.gemini) ||
+            "https://gemini.google.com";
+          if (
+            url.origin !== origin &&
+            !(
+              url.protocol === "https:" &&
+              /(^|\.)googleusercontent\.com$/.test(url.hostname)
+            )
+          ) {
+            unverifiedFrame = true;
+            reject(
+              nativeError(
+                "GENERATION_DOWNLOAD_FRAME_UNVERIFIED",
+                "An unrelated-origin download was rejected.",
+              ),
+            );
+            return;
+          }
+        } catch {
+          unverifiedFrame = true;
+          reject(
+            nativeError(
+              "GENERATION_DOWNLOAD_FRAME_UNVERIFIED",
+              "Download origin could not be verified.",
+            ),
+          );
+          return;
+        }
+      }
       // Google can create its download iframe after the toolbar click.
       pendingGuid = event.guid;
       pipe
         .send("Page.getFrameTree", {}, adapter.session)
         .then(({ frameTree }) => {
+          if (finished) return;
           collect(frameTree);
           if (frames.has(event.frameId)) accept(event);
-          else {
-            unverifiedFrame = true;
+          else
             this.browser.log?.write(
-              "warn",
+              "info",
               "browser",
-              "IMAGE_DOWNLOAD_FRAME_UNVERIFIED",
-              "Chrome reported a download outside the verified page frames; it was not accepted.",
+              "IMAGE_DOWNLOAD_FRAME_PENDING",
+              "The frame was not in the current tree; the isolated file monitor remains active after the verified image click.",
             );
-          }
         })
         .catch(() => {})
         .finally(() => {
@@ -644,7 +707,8 @@ export class GenerationRunner {
         signal,
       );
       clicked = true;
-      await pipe.send(
+      // Queue down/up in order without making the up event wait for a renderer ACK.
+      const press = pipe.send(
         "Input.dispatchMouseEvent",
         {
           type: "mousePressed",
@@ -655,7 +719,7 @@ export class GenerationRunner {
         },
         adapter.session,
       );
-      await pipe.send(
+      const release = pipe.send(
         "Input.dispatchMouseEvent",
         {
           type: "mouseReleased",
@@ -669,9 +733,28 @@ export class GenerationRunner {
       this.browser.log?.write(
         "info",
         "browser",
-        "IMAGE_DOWNLOAD_CLICKED",
-        "Original-image download control clicked using browser input.",
+        "IMAGE_DOWNLOAD_CLICK_SENT",
+        "Verified download input was queued once; completed files are tracked independently of Chrome acknowledgements.",
       );
+      Promise.all([press, release])
+        .then(() => {
+          clickAcknowledged = true;
+          this.browser.log?.write(
+            "info",
+            "browser",
+            "IMAGE_DOWNLOAD_CLICKED",
+            "Chrome acknowledged the original-image download click.",
+          );
+        })
+        .catch(() => {
+          if (!finished)
+            this.browser.log?.write(
+              "warn",
+              "browser",
+              "IMAGE_DOWNLOAD_ACK_DELAYED",
+              "Chrome did not acknowledge the input command; the independent file monitor remains active. No click will be repeated.",
+            );
+        });
       return await completion;
     } finally {
       finished = true;
@@ -681,20 +764,73 @@ export class GenerationRunner {
       pipe.off("Network.loadingFinished", networkFinished);
       pipe.off("Network.loadingFailed", networkFailed);
       pipe.off("Page.windowOpen", popup);
-      await pipe.send("Network.disable", {}, adapter.session).catch(() => {});
       pipe.off("Page.frameAttached", attached);
       signal.removeEventListener("abort", abort);
       pipe.off("Browser.downloadWillBegin", begin);
       pipe.off("Browser.downloadProgress", progress);
-      if (!completed && guid)
-        await pipe.send("Browser.cancelDownload", { guid }).catch(() => {});
-      await pipe
-        .send("Browser.setDownloadBehavior", {
-          behavior: "allow",
-          downloadPath: this.browser.downloadDir,
-          eventsEnabled: false,
+      this.downloadCleanupPending = true;
+      this.browser.log?.write(
+        "info",
+        "browser",
+        "IMAGE_DOWNLOAD_CLEANUP_PENDING",
+        "Browser download cleanup is pending; a verified file can be published before it finishes.",
+      );
+      this.downloadCleanup = (async () => {
+        if (!completed && guid)
+          await pipe.send("Browser.cancelDownload", { guid }).catch(() => {});
+        try {
+          await pipe.send("Browser.setDownloadBehavior", {
+            behavior: "allow",
+            downloadPath: this.browser.downloadDir,
+            eventsEnabled: false,
+          });
+        } catch {
+          this.browser.log?.write(
+            "warn",
+            "browser",
+            "IMAGE_DOWNLOAD_CLEANUP_FAILED",
+            "Browser cleanup failed; resetting the managed browser before another job. Saved output is retained.",
+          );
+          if (this.browser.stop) await this.browser.stop();
+          else
+            throw nativeError(
+              "GENERATION_BROWSER_RESET_REQUIRED",
+              "Browser cleanup failed; restart the app before another generation.",
+            );
+          return;
+        }
+        try {
+          await pipe.send("Network.disable", {}, adapter.session);
+        } catch {
+          this.browser.log?.write(
+            "warn",
+            "browser",
+            "IMAGE_DOWNLOAD_TELEMETRY_DELAYED",
+            "Telemetry cleanup was not acknowledged; the download destination was restored and saved output remains available.",
+          );
+        }
+      })()
+        .catch(() => {
+          this.downloadCleanupError = nativeError(
+            "GENERATION_BROWSER_RESET_REQUIRED",
+            "Browser cleanup could not finish. Restart the app before generating again; completed images remain available.",
+          );
+          this.browser.log?.write(
+            "warn",
+            "browser",
+            "IMAGE_DOWNLOAD_RESET_FAILED",
+            "Managed browser reset failed after download cleanup; inspect the browser before continuing.",
+          );
         })
-        .catch(() => {});
+        .finally(() => {
+          this.downloadCleanupPending = false;
+          this.browser.log?.write(
+            "info",
+            "browser",
+            "IMAGE_DOWNLOAD_CLEANUP_FINISHED",
+            "Browser download cleanup finished.",
+          );
+        });
     }
   }
 }

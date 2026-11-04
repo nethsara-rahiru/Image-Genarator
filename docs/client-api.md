@@ -156,3 +156,7 @@ dashboard endpoints retain their separate session/CSRF rules.
 
 Automated API tests use local fixtures. Real public DNS/TLS, the target machine's
 browser, Google sign-in and live Gemini generation require deployment validation.
+
+A completed job may report browserCleanupPending=true while its image/metadata
+are already downloadable. The queue holds the browser until cleanup finishes;
+clients should use job state rather than queueBusy to decide if output is ready.

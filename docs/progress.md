@@ -461,3 +461,21 @@ this app does not bypass it or guarantee that Gemini will return an image.
   checks continuously moving controls and real image/chat changes without clicks.
 - Earlier live Gemini timeout remains separately unverified. Final CI evidence
   and commit/PR references are recorded in the PR.
+
+## Independent file-to-job download handoff
+
+- User clarified that the file itself downloads on time; only detection waits
+  for focus. Traced pending frame checks, input ACK awaits and renderer cleanup
+  waits on the completed-file handoff path; no selector/prompt changes made.
+- Node scans the isolated attempt directory independently of pending frame/input
+  ACKs. Down/up are queued once in order. Validated output/metadata are committed
+  and streamed before deferred browser cleanup; next-job ownership waits safely.
+- Added browserCleanupPending status and cleanup-stage UI text. An unsuccessful
+  browser reset stops further generation without removing completed images.
+- Added sanitized file-observed/input-sent/output-committed diagnostics; URL/body
+  contents, credentials and private filenames remain excluded.
+- Tests withhold input/frame/cleanup ACKs and verify completed files; real Chromium
+  keeps Gemini-like content hidden behind a blank tab and publishes output/UI
+  before ACK release. FIFO tests keep the next job queued through cleanup.
+- Physical Mac focus/App Nap and live Google cause remain separately UNVERIFIED;
+  final automated evidence and CI links are recorded in the PR.

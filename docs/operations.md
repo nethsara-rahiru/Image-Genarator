@@ -118,3 +118,30 @@ click. It uses nearest scrolling so centering a toolbar button does not move the
 image away from the pointer. An image/chat change still stops the operation;
 GENERATION_DOWNLOAD_UNSTABLE means the control never settled, not that a new
 prompt should be submitted. Retry only the existing image download.
+
+## Download finished but the dashboard waits for Chrome focus
+
+Download completion is now driven by the Node filesystem monitor after one
+verified image click. It scans/validates the isolated attempt folder even while
+Chrome input or supplementary frame acknowledgements are pending. It never
+repeats the click or prompt to obtain an acknowledgement. Explicit unrelated-origin
+downloads, partial/invalid files and multiple-file ambiguity are still rejected.
+
+The worker commits the verified image/metadata and publishes `completed` before
+waiting for browser cleanup. `browserCleanupPending:true` means the file is ready
+and its normal image/metadata endpoints work, but the global queue still holds the
+browser until the download destination is restored. Telemetry acknowledgement
+failure alone does not reset Chrome. If the destination cannot be restored, the
+managed browser is reset before another job; an unsuccessful reset stops new
+generations and asks for an app restart while preserving completed output.
+
+The sanitized timeline is IMAGE_DOWNLOAD_CLICK_SENT → IMAGE_DOWNLOAD_FILE_OBSERVED
+→ IMAGE_DOWNLOAD_FILE_READY → IMAGE_DOWNLOAD_VERIFIED → GENERATION_OUTPUT_COMMITTED.
+IMAGE_DOWNLOAD_ACK_PENDING shows that file completion overtook an input ACK;
+IMAGE_DOWNLOAD_CLEANUP_FINISHED may arrive later. Compare these timestamps instead
+of focusing Chrome to refresh its UI. No filenames, URLs or credentials are logged.
+
+Regression coverage withholds Chrome input/frame/cleanup acknowledgements, drops
+completion events and leaves the real Gemini-like tab in the background. This
+verifies the independent handoff; physical macOS App Nap/occlusion and live Google
+behavior still require target testing.

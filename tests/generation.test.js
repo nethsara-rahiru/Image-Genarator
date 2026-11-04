@@ -428,3 +428,81 @@ test("manual image attachment validates bytes and consent, preserves job and nev
     assert.deepEqual(await fs.readdir(escape), []);
   }
 });
+
+test("completed output is published before browser cleanup, but the next job waits", async (t) => {
+  let release;
+  const cleanup = new Promise((resolve) => {
+    release = resolve;
+  });
+  let runs = 0;
+  const runner = successRunner();
+  const run = runner.run;
+  runner.downloadCleanupPending = true;
+  runner.run = async (...args) => {
+    runs++;
+    return run(...args);
+  };
+  runner.waitForDownloadCleanup = async () => {
+    await cleanup;
+    runner.downloadCleanupPending = false;
+  };
+  const q = await queue(t, runner);
+  try {
+    const first = await q.create({
+      prompt: "first",
+      idempotencyKey: "first-cleanup-key",
+    });
+    const second = await q.create({
+      prompt: "second",
+      idempotencyKey: "second-cleanup-key",
+    });
+    await until(
+      () =>
+        q.get(first.id).state === "completed" &&
+        q.publicJob(q.get(first.id)).browserCleanupPending,
+    );
+    assert.equal(q.get(second.id).state, "queued");
+    assert.equal(runs, 1);
+    const bytes = await fs.readFile((await q.outputFile(first.id)).path);
+    assert.ok(bytes.equals(png(1)));
+    // Await the commit, not just its in-memory assignment.
+    await until(
+      async () =>
+        JSON.parse(await fs.readFile(q.file, "utf8")).jobs[0].state ===
+        "completed",
+    );
+    assert.equal(q.busy, true);
+    release();
+    await until(() => q.get(second.id).state === "completed");
+    assert.equal(runs, 2);
+  } finally {
+    release();
+  }
+});
+
+test("failed browser cleanup retains completed output and stops further generation", async (t) => {
+  const runner = successRunner();
+  runner.waitForDownloadCleanup = async () => {
+    runner.downloadCleanupError = nativeError(
+      "GENERATION_BROWSER_RESET_REQUIRED",
+      "Restart required; output retained.",
+    );
+    throw runner.downloadCleanupError;
+  };
+  const q = await queue(t, runner);
+  const first = await q.create({
+    prompt: "saved output",
+    idempotencyKey: "cleanup-failure-key",
+  });
+  await until(
+    () => q.get(first.id).state === "completed" && q.stopping && !q.busy,
+  );
+  assert.ok(
+    (await fs.readFile((await q.outputFile(first.id)).path)).equals(png(1)),
+  );
+  assert.ok(q.snapshot().cleanupError);
+  await assert.rejects(
+    q.create({ prompt: "next", idempotencyKey: "must-not-start-key" }),
+    { code: "GENERATION_BROWSER_RESET_REQUIRED" },
+  );
+});

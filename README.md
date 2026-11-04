@@ -376,6 +376,10 @@ Use Postman's **Send and Download** / response save action for the image. It is 
 binary PNG/JPEG/WebP response, not base64, a screenshot or an image URL inside JSON.
 Use its actual Content-Type/attachment extension when naming the local file.
 Requesting either output before completion returns 409.
+A completed job may temporarily report `browserCleanupPending:true`: its image
+and metadata are already available, while the global queue finishes restoring
+browser download state. File publication does not wait for Chrome focus or a
+renderer acknowledgement.
 
 A completed job has an `output` object shaped like this **illustrative excerpt**;
 the example dimensions/bytes are not a live generation result:

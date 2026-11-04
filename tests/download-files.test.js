@@ -147,3 +147,132 @@ for (const mode of [
     );
   });
 }
+
+for (const mode of [
+  "input-ack",
+  "frame-ack",
+  "cleanup-ack",
+  "telemetry-error",
+]) {
+  test(
+    `completed file handoff does not wait for Chrome ${mode}`,
+    { timeout: 5000 },
+    async (t) => {
+      const directory = await fs.mkdtemp(
+        path.join(os.tmpdir(), "independent-download-"),
+      );
+      let unpause;
+      const blocked = new Promise((resolve) => {
+        unpause = resolve;
+      });
+      t.after(async () => {
+        unpause();
+        await fs.rm(directory, { recursive: true, force: true });
+      });
+      const pipe = new EventEmitter();
+      let downloadPath,
+        frameCalls = 0;
+      const presses = [];
+      pipe.send = async (method, params) => {
+        if (method === "Page.getFrameTree") {
+          if (++frameCalls > 1 && mode === "frame-ack") await blocked;
+          return {
+            frameTree: {
+              frame: { id: "main" },
+              childFrames: [{ frame: { id: "download-frame" } }],
+            },
+          };
+        }
+        if (method === "Browser.setDownloadBehavior" && params.eventsEnabled)
+          downloadPath = params.downloadPath;
+        if (method === "Network.disable" && mode === "cleanup-ack")
+          await blocked;
+        if (method === "Network.disable" && mode === "telemetry-error")
+          throw Error("Synthetic renderer ACK timeout");
+        if (
+          method === "Input.dispatchMouseEvent" &&
+          params.type === "mousePressed"
+        ) {
+          presses.push(params.type);
+          if (mode === "input-ack") await blocked;
+        }
+        if (
+          method === "Input.dispatchMouseEvent" &&
+          params.type === "mouseReleased"
+        ) {
+          presses.push(params.type);
+          if (mode === "frame-ack")
+            pipe.emit("Browser.downloadWillBegin", {
+              frameId: "late-frame",
+              guid: "822ce7ee-b783-4114-9777-e23d9fb5d985",
+              url: "https://gemini.google.com/image-download",
+            });
+          await fs.writeFile(path.join(downloadPath, "original.png"), png(80));
+          if (mode === "input-ack") await blocked;
+        }
+        return {};
+      };
+      const runner = new GenerationRunner({
+        pipe,
+        gemini: { session: "session" },
+        downloadDir: directory,
+      });
+      runner.evaluate = async ({ operation }) =>
+        operation === "inspect"
+          ? { selection: { imageId: "image", buttonId: "button" } }
+          : { ok: true, x: 30, y: 30 };
+      const file = await runner.download({
+        selection: { imageId: "image", buttonId: "button" },
+        directory,
+        signal: new AbortController().signal,
+      });
+      assert.ok((await fs.readFile(file)).equals(png(80)));
+      assert.deepEqual(presses, ["mousePressed", "mouseReleased"]);
+      if (mode === "cleanup-ack")
+        assert.equal(runner.downloadCleanupPending, true);
+      unpause();
+      await runner.waitForDownloadCleanup();
+      assert.equal(runner.downloadCleanupPending, false);
+    },
+  );
+}
+
+test("an unrelated-origin download is not accepted as the selected image", async (t) => {
+  const directory = await fs.mkdtemp(
+    path.join(os.tmpdir(), "foreign-download-"),
+  );
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+  const pipe = new EventEmitter();
+  pipe.send = async (method, params) => {
+    if (method === "Page.getFrameTree")
+      return { frameTree: { frame: { id: "managed" } } };
+    if (
+      method === "Input.dispatchMouseEvent" &&
+      params.type === "mouseReleased"
+    )
+      pipe.emit("Browser.downloadWillBegin", {
+        guid: "822ce7ee-b783-4114-9777-e23d9fb5d985",
+        frameId: "other-page",
+        url: "https://unrelated.example/image.png",
+      });
+    return {};
+  };
+  const runner = new GenerationRunner({
+    pipe,
+    gemini: { session: "session" },
+    downloadDir: directory,
+  });
+  runner.evaluate = async ({ operation }) =>
+    operation === "inspect"
+      ? { selection: { imageId: "image", buttonId: "button" } }
+      : { ok: true, x: 30, y: 30 };
+  await assert.rejects(
+    runner.download({
+      selection: { imageId: "image", buttonId: "button" },
+      directory,
+      signal: new AbortController().signal,
+    }),
+    { code: "GENERATION_DOWNLOAD_FRAME_UNVERIFIED" },
+  );
+  await runner.waitForDownloadCleanup();
+});
