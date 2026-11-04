@@ -10,6 +10,7 @@ import { startServer } from "../src/server.js";
 import { configuration } from "../src/config.js";
 import { GEMINI_URL } from "../src/automation/adapter.js";
 import { png } from "./fixtures/png.js";
+import { BrowserPipe } from "../src/automation/pipe.js";
 async function until(fn, ms = 20000) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
@@ -24,6 +25,16 @@ test(
   "real local no-login generator: new/resumed chats, current image download, no-image/login/account/cancel failures",
   { skip: !enabled, timeout: 120000 },
   async (t) => {
+    // Real Chrome must complete with named files even when its completion event is lost.
+    const originalEmit = BrowserPipe.prototype.emit;
+    BrowserPipe.prototype.emit = function (name, ...args) {
+      if (name === "Browser.downloadProgress" && args[0]?.state === "completed")
+        return false;
+      return originalEmit.call(this, name, ...args);
+    };
+    t.after(() => {
+      BrowserPipe.prototype.emit = originalEmit;
+    });
     let signedIn = true,
       account = "Synthetic A",
       posts = 0;
