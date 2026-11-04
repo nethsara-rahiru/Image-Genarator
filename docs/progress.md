@@ -432,3 +432,19 @@ this app does not bypass it or guarantee that Gemini will return an image.
 - LAN integration now starts without any admin file, verifies open dashboard/session
   access despite old .env auth settings, and still requires a token for /api/v1.
   Final checks and CI evidence are recorded in the follow-up PR.
+
+## Continued live download timeout: diagnostics and manual output recovery
+
+- Live cause is not confirmed: user could not identify a Chrome download/dialog.
+  Avoid claiming another fully validated live-Google automatic fix.
+- Added instant scroll and final button geometry/hit-test; provider preparation
+  network activity can extend the no-start wait within the existing job deadline.
+  Logs retain only fixed events/counts, never request URLs/bodies/credentials.
+- Added consent-based Attach downloaded image for eligible failed download jobs,
+  including extensionless original files. Checks real PNG/JPEG/WebP bytes/size,
+  isolates writes, prevents symlink escape/completed overwrite and preserves job
+  ID/chat/prompt without another submission. Source/provenance is explicitly
+  manual/user-confirmed, not automatically verified. Upload concurrency is one.
+- Regression tests cover delayed preparation, smooth-scroll pages, real browser
+  manual attachment, metadata/source flags, no resubmission, invalid bytes/consent
+  and unsafe output paths. Final CI/automated evidence is recorded in the PR.

@@ -71,6 +71,14 @@ test(
         setTimeout(() => res.destroy(), 100);
         return;
       }
+      if (url.pathname === "/prepare") {
+        res.setHeader("Content-Type", "application/json");
+        setTimeout(
+          () => res.end(JSON.stringify({ url: url.searchParams.get("file") })),
+          250,
+        );
+        return;
+      }
       if (url.pathname === "/mock/generate" && req.method === "POST") {
         const chunks = [];
         req.on("data", (c) => chunks.push(c));
@@ -129,8 +137,8 @@ test(
             "</model-response>",
         )
         .join("");
-      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><div contenteditable="true" role="textbox" class="ql-editor"></div><button id="send" aria-label="Send message">Send</button><script>
-      function wire(){for(const b of document.querySelectorAll('[data-download]'))b.onclick=(event)=>{if(!event.isTrusted || !navigator.userActivation.isActive)return;const frame=document.createElement('iframe');frame.src=b.dataset.download;document.body.append(frame);};}
+      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>html{scroll-behavior:smooth}body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><div contenteditable="true" role="textbox" class="ql-editor"></div><button id="send" aria-label="Send message">Send</button><script>
+      function wire(){for(const b of document.querySelectorAll('[data-download]'))b.onclick=async(event)=>{if(!event.isTrusted || !navigator.userActivation.isActive)return;const prepared=await(await fetch('/prepare?file='+encodeURIComponent(b.dataset.download))).json();const frame=document.createElement('iframe');frame.src=prepared.url;document.body.append(frame);};}
       wire();document.querySelector('#send').onclick=async()=>{
         const editor=document.querySelector('[contenteditable]'),prompt=editor.textContent;document.querySelector('#send').disabled=true;
         for(const old of document.querySelectorAll('model-response'))old.replaceWith(old.cloneNode(true));
@@ -271,6 +279,11 @@ test(
       );
       assert.ok(bytes.equals(png(20)));
       assert.deepEqual(downloads, ["/img/1-0.png"]);
+      assert.ok(
+        service.log
+          .snapshot()
+          .entries.some((event) => event.code === "IMAGE_DOWNLOAD_PREPARING"),
+      );
       const second = await final(
         (
           await submit(
@@ -430,6 +443,33 @@ test(
       const refused = await final(first.id);
       assert.equal(refused.error.code, "GENERATION_RECOVERY_UNVERIFIED");
       assert.equal(posts, beforeAmbiguous);
+      await page.locator("#result-filter").selectOption("attention");
+      const beforeImport = posts;
+      const jobCard = page.locator(`[data-job-id="${broken.id}"]`);
+      await jobCard
+        .getByRole("button", { name: "Attach downloaded image" })
+        .waitFor();
+      page.once("dialog", (dialog) => dialog.accept());
+      await jobCard.locator('input[type="file"]').setInputFiles({
+        name: "822ce7ee-b783-4114-9777-e23d9fb5d985",
+        mimeType: "application/octet-stream",
+        buffer: png(100),
+      });
+      await until(
+        () => service.generation.get(broken.id).state === "completed",
+      );
+      assert.equal(posts, beforeImport);
+      const imported = await (
+        await request("/api/generation/jobs/" + broken.id + "/metadata")
+      ).json();
+      assert.equal(imported.retrievalMode, "manual_import");
+      assert.equal(imported.associationVerified, false);
+      await page.locator("#result-filter").selectOption("completed");
+      await page
+        .getByText(
+          "Manually attached · association confirmed by user, not automatically verified.",
+        )
+        .waitFor();
     } catch (error) {
       await fs.mkdir("test-results", { recursive: true });
       if (service.browser.running)

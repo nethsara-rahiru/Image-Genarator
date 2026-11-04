@@ -87,3 +87,26 @@ failed job and use Download existing image after updating. New attempts preserve
 the website filename and reconcile completed files before assigning the image's
 actual format/extension. Avoid additional manual downloads while a job owns Chrome;
 multiple files in one attempt require review rather than an arbitrary selection.
+
+## When Chrome still does not start an automatic download
+
+Do not submit the prompt again. Open the saved Gemini conversation and use its
+original-image download manually. On the failed dashboard job choose **Attach
+downloaded image**, select the original PNG/JPEG/WebP (an extensionless UUID file
+is allowed) and confirm that it belongs to that saved conversation. The app checks
+actual file bytes/dimensions/size, then exposes it in the gallery and existing image
+and metadata endpoints. Maximum 100 MB, one attachment at a time.
+
+Manual attachments are explicitly marked in the UI and metadata:
+`output.source=manual_import`, `retrievalMode=manual_import`,
+`association=user_confirmed`, `associationVerified=false`. File validity is checked;
+Google provenance/content and automatic job/image association are not claimed.
+No new prompt or browser action is sent during attachment.
+
+Automatic download now uses instant scroll plus a last hit-test before clicking.
+The no-start window is 30 seconds; observed provider image/service requests extend
+preparation waiting within the overall job deadline. Debug events include
+IMAGE_DOWNLOAD_PREPARING, IMAGE_DOWNLOAD_REQUEST_FAILED and
+IMAGE_DOWNLOAD_WINDOW_OPENED. Timeout messages include sanitized activity counts,
+not URLs, cookies, credentials or request bodies. These changes address regression
+cases; live Google UI behavior still requires validation with the target account.

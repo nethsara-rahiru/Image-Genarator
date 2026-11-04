@@ -403,6 +403,52 @@ export async function startServer(config, options = {}) {
         }
       },
     );
+  let imageImports = 0;
+  const imageImport = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 100 * 1024 * 1024, files: 1, fields: 1, fieldSize: 10 },
+  }).single("file");
+  app.post(
+    "/api/generation/jobs/:id/import",
+    auth,
+    (req, res, next) => {
+      if (imageImports >= 1)
+        return res.status(429).json({
+          error: "Another image attachment is in progress. Try again shortly.",
+        });
+      imageImports++;
+      let released = false;
+      const release = () => {
+        if (!released) {
+          released = true;
+          imageImports--;
+        }
+      };
+      res.once("finish", release);
+      res.once("close", release);
+      imageImport(req, res, (error) => {
+        if (error)
+          return res.status(error.code === "LIMIT_FILE_SIZE" ? 413 : 400).json({
+            error:
+              "Choose one original image up to 100 MB and confirm its job association.",
+          });
+        next();
+      });
+    },
+    async (req, res) => {
+      try {
+        res.json(
+          await generation.importManual(
+            req.params.id,
+            req.file?.buffer,
+            req.body?.confirmed === "true",
+          ),
+        );
+      } catch (error) {
+        jobError(res, error);
+      }
+    },
+  );
   app.delete("/api/generation/jobs/:id", auth, async (req, res) => {
     try {
       await generation.remove(req.params.id);

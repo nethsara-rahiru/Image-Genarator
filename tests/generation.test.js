@@ -368,3 +368,63 @@ test("download recovery preserves submission marker and is distinct from prompt 
   assert.equal(calls, 2);
   await assert.rejects(q.recover(job.id), /no verified download-stage/);
 });
+
+test("manual image attachment validates bytes and consent, preserves job and never resubmits", async (t) => {
+  let submissions = 0;
+  const q = await queue(t, {
+    async run(job, context) {
+      submissions++;
+      await context.phase("submitting_prompt", {
+        submissionPossible: true,
+        accountKey: "account-a",
+      });
+      await context.chat(
+        "manual-chat",
+        "https://gemini.google.com/app/manual-chat",
+        "account-a",
+      );
+      await context.phase("downloading", {
+        downloadCheckpoint: { imageKey: "a".repeat(64) },
+      });
+      throw nativeError("GENERATION_DOWNLOAD_TIMEOUT", "No file arrived");
+    },
+  });
+  const job = await q.create({
+    prompt: "original image",
+    idempotencyKey: "manual-image-request",
+  });
+  await until(() => q.get(job.id).state === "needs_review" && !q.busy);
+  await assert.rejects(q.importManual(job.id, png(), false), /confirm/);
+  await assert.rejects(
+    q.importManual(job.id, Buffer.from("<html>not an image</html>"), true),
+  );
+  const imported = await q.importManual(job.id, png(100), true);
+  assert.equal(imported.state, "completed");
+  assert.equal(imported.output.source, "manual_import");
+  assert.equal(imported.chatId, "manual-chat");
+  assert.equal(submissions, 1);
+  assert.ok(
+    (await fs.readFile((await q.outputFile(job.id)).path)).equals(png(100)),
+  );
+  const metadata = JSON.parse(
+    await fs.readFile((await q.outputFile(job.id, true)).path),
+  );
+  assert.equal(metadata.association, "user_confirmed");
+  assert.equal(metadata.associationVerified, false);
+  await assert.rejects(q.importManual(job.id, png(), true));
+  if (process.platform !== "win32") {
+    const other = await q.create({
+      prompt: "another image",
+      idempotencyKey: "manual-image-request-2",
+    });
+    await until(() => q.get(other.id).state === "needs_review" && !q.busy);
+    const escape = await fs.mkdtemp(path.join(os.tmpdir(), "manual-escape-"));
+    t.after(() => fs.rm(escape, { recursive: true, force: true }));
+    await fs.symlink(escape, path.join(q.outputs, other.id), "dir");
+    await assert.rejects(
+      q.importManual(other.id, png(), true),
+      /Unsafe output directory/,
+    );
+    assert.deepEqual(await fs.readdir(escape), []);
+  }
+});

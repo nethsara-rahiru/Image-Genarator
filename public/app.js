@@ -580,6 +580,47 @@ function renderGeneration(data) {
       button("Cancel job", "cancel");
     else {
       if (job.canRecoverDownload) button("Download existing image", "recover");
+      if (job.canRecoverDownload) {
+        const attach = document.createElement("button");
+        attach.textContent = "Attach downloaded image";
+        const file = document.createElement("input");
+        file.type = "file";
+        file.hidden = true;
+        file.setAttribute(
+          "aria-label",
+          "Original image downloaded manually from this job's Gemini chat",
+        );
+        attach.onclick = () => file.click();
+        file.onchange = async () => {
+          if (!file.files[0]) return;
+          if (
+            !confirm(
+              "Confirm this is the original image downloaded from this job's saved Gemini conversation. This is a user-confirmed attachment; the app cannot verify its image association automatically. No prompt will be submitted.",
+            )
+          ) {
+            file.value = "";
+            return;
+          }
+          attach.disabled = true;
+          try {
+            const body = new FormData();
+            body.append("file", file.files[0]);
+            body.append("confirmed", "true");
+            await api(
+              "/api/generation/jobs/" + job.id + "/import",
+              "POST",
+              body,
+            );
+            await refreshGeneration();
+          } catch (error) {
+            report(error.message);
+          } finally {
+            attach.disabled = false;
+            file.value = "";
+          }
+        };
+        actions.append(attach, file);
+      }
       if (!job.submissionPossible && job.state !== "completed")
         button("Retry before submission", "retry");
       const remove = document.createElement("button");
@@ -618,6 +659,13 @@ function renderGeneration(data) {
         job.output.bytes +
         " bytes";
       card.append(details);
+      if (job.output.source === "manual_import") {
+        const note = document.createElement("p");
+        note.className = "muted";
+        note.textContent =
+          "Manually attached · association confirmed by user, not automatically verified.";
+        card.append(note);
+      }
       for (const [label, suffix] of [
         ["Download original image", "/image?download=1"],
         ["Download metadata JSON", "/metadata"],

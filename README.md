@@ -422,6 +422,14 @@ could have occurred. For download failures, use `/recover` when
 then retries only the download. Ambiguous matches stop for review. Keep the
 original failed job; do not delete it or submit a new generation to recover a file.
 
+If automatic recovery still fails, manually download the original from the saved
+Gemini chat, then choose **Attach downloaded image** on that dashboard job. Confirm
+its association with the displayed job/chat. The app accepts complete PNG/JPEG/WebP
+bytes up to 100 MB, including extensionless UUID files. It marks the output as
+manual (`output.source=manual_import`, metadata `associationVerified=false`) and
+makes it available through the existing image/metadata endpoints without another
+prompt. This is user-confirmed provenance, not automatic Gemini association.
+
 ### List conversations and continue a chat
 
 Send `GET {{baseUrl}}/chats`. An illustrative response (timestamp placeholders
@@ -575,6 +583,7 @@ Google credentials to this login; it is for the app administrator only.
 | POST   | `/api/generation/jobs/:id/cancel`    | Updated job; cannot undo a submitted prompt                                                                              |
 | POST   | `/api/generation/jobs/:id/retry`     | Safe pre-submission retry; updated job                                                                                   |
 | POST   | `/api/generation/jobs/:id/recover`   | Download-only recovery; updated job                                                                                      |
+| POST   | `/api/generation/jobs/:id/import`    | Multipart `file` (up to 100 MB) and `confirmed=true`; user-confirmed manual output attachment; returns completed job     |
 | DELETE | `/api/generation/jobs/:id`           | Remove terminal local job/output; Google chat retained                                                                   |
 | PATCH  | `/api/generation/chats/:id`          | JSON `title` (1–100 chars); local rename                                                                                 |
 | GET    | `/api/generation/jobs/:id/image`     | Inline original image; add `?download=1` for attachment                                                                  |
