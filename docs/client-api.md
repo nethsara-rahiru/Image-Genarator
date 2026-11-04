@@ -160,3 +160,27 @@ browser, Google sign-in and live Gemini generation require deployment validation
 A completed job may report browserCleanupPending=true while its image/metadata
 are already downloadable. The queue holds the browser until cleanup finishes;
 clients should use job state rather than queueBusy to decide if output is ready.
+
+## API request diagnostics
+
+The dashboard's **API requests** table shows the latest 100 retained API requests,
+newest first: time, method, matched route, HTTP status, duration and job/request
+ID. History shares the bounded persistent debug journal and updates live. Use
+Debug console → Source → API to filter/export these events. Each API response
+includes `X-Request-Id` for correlation. Tokens, prompts, request bodies, query
+strings and arbitrary unmatched URLs are omitted; unknown routes show `unmatched`.
+
+If no automation starts, check the request row first:
+
+- `404`: use **POST /api/v1/generations**, with forward slashes and that spelling.
+- `400` with `GENERATION_IDEMPOTENCY_KEY_REQUIRED`: set `Idempotency-Key` to
+  8–128 letters/digits/underscores/dashes in Postman's Headers tab.
+- `401` / `403`: check the bearer token, `generate` scope, HTTPS and configured Host.
+- `409`: finish the manual sign-in flow or inspect the browser ownership message.
+- `202`: a job was accepted. Poll its Location URL; check `state` and `error`.
+  Reusing the same key returns the old job and does not start a new generation.
+  Use a new key for a new prompt. Never retry an ambiguous submitted prompt blindly.
+
+A missing API table row suggests the request did not reach this running app
+(e.g. a wrong port, unavailable tunnel, or TLS failure). Google sign-in remains
+manual in the host browser. Live Gemini generation requires target-PC validation.

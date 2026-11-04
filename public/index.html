@@ -341,6 +341,41 @@
           </p>
           <div id="download-list"></div>
         </section>
+        <section class="panel" aria-labelledby="api-log-heading">
+          <div class="workspace-heading">
+            <h2 id="api-log-heading">API requests</h2>
+            <span id="api-log-status" class="muted" role="status"
+              >No API requests yet</span
+            >
+          </div>
+          <p class="muted">
+            Generate with POST /api/v1/generations. Send a bearer token, JSON
+            prompt and Idempotency-Key header. HTTP 202 means queued; poll the
+            returned job ID for its result. Tokens and request bodies are never
+            logged.
+          </p>
+          <div class="api-log-scroll">
+            <table class="api-log-table">
+              <caption class="sr-only">
+                Latest API requests, newest first
+              </caption>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Method / endpoint</th>
+                  <th>Status</th>
+                  <th>Duration</th>
+                  <th>Job / request ID</th>
+                </tr>
+              </thead>
+              <tbody id="api-log-rows">
+                <tr>
+                  <td colspan="5">No API requests yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
         <section
           id="debug-panel"
           class="panel debug-panel"
@@ -374,6 +409,7 @@
               <option value="viewer">Viewer</option>
               <option value="server">Server</option>
               <option value="auth">Authentication</option>
+              <option value="api">API</option>
             </select>
             <label for="debug-filter" class="sr-only"
               >Filter log text or action ID</label

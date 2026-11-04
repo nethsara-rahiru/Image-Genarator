@@ -479,3 +479,19 @@ this app does not bypass it or guarantee that Gemini will return an image.
   before ACK release. FIFO tests keep the next job queued through cleanup.
 - Physical Mac focus/App Nap and live Google cause remain separately UNVERIFIED;
   final automated evidence and CI links are recorded in the PR.
+
+## API generation diagnostics and live request table
+
+- User reports generation API does not start automation while other routes work;
+  exact response/status on the target PC remains unavailable. Existing bearer API
+  integration tests pass; no live failure cause is claimed.
+- Added explicit missing/invalid Idempotency-Key error and unknown-route guidance
+  to POST /api/v1/generations. Repeated keys still return their original job.
+- Added bounded persistent API events and live dashboard table with safe matched
+  routes, status, duration, request ID and accepted/polled job ID. No tokens,
+  prompts, request bodies, arbitrary URL paths or query strings are recorded.
+- Integration coverage checks 401/400/404/202 logs and secret omission. Real
+  Chromium fixture additionally submits through bearer API with the real runner,
+  polls completion, downloads exact original bytes and checks the live table.
+- Final test/CI evidence and PR references are recorded in the PR. Live target-PC
+  request reproduction and live Google generation remain UNVERIFIED.

@@ -59,6 +59,33 @@ export async function startServer(config, options = {}) {
   const app = express();
   app.disable("x-powered-by");
   app.set("trust proxy", "loopback");
+  app.use("/api/v1", (req, res, next) => {
+    const started = Date.now();
+    const requestId = randomUUID();
+    res.set("X-Request-Id", requestId);
+    res.on("finish", () => {
+      const route = req.route?.path;
+      log.write(
+        res.statusCode >= 500
+          ? "error"
+          : res.statusCode >= 400
+            ? "warn"
+            : "info",
+        "api",
+        "API_REQUEST_FINISHED",
+        "API request completed.",
+        {
+          actionId: requestId,
+          method: req.method,
+          endpoint: typeof route === "string" ? "/api/v1" + route : "unmatched",
+          status: res.statusCode,
+          durationMs: Date.now() - started,
+          jobId: res.locals.apiJobId,
+        },
+      );
+    });
+    next();
+  });
   const sessions = new SessionStore();
   const sessionMiddleware = session({
     secret: token(),

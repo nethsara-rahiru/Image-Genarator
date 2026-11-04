@@ -11,6 +11,7 @@ import { configuration } from "../src/config.js";
 import { GEMINI_URL } from "../src/automation/adapter.js";
 import { png } from "./fixtures/png.js";
 import { BrowserPipe } from "../src/automation/pipe.js";
+import { createClient } from "../src/apiClients.js";
 async function until(fn, ms = 20000) {
   const end = Date.now() + ms;
   while (Date.now() < end) {
@@ -541,6 +542,42 @@ test(
         .getByText(
           "Manually attached · association confirmed by user, not automatically verified.",
         )
+        .waitFor();
+      // Exercise the public bearer API with the real runner, not a mocked queue.
+      await until(() => !service.generation.busy);
+      const apiClient = await createClient(data, "Browser fixture API");
+      const apiHeaders = {
+        Authorization: "Bearer " + apiClient.token,
+        "Content-Type": "application/json",
+        "Idempotency-Key": "browser-api-generation-0001",
+      };
+      const accepted = await fetch(base + "/api/v1/generations", {
+        method: "POST",
+        headers: apiHeaders,
+        body: JSON.stringify({ prompt: "API image generation" }),
+      });
+      assert.equal(accepted.status, 202);
+      const apiJob = await accepted.json();
+      assert.equal((await final(apiJob.id)).state, "completed");
+      const status = await (
+        await fetch(base + "/api/v1/generations/" + apiJob.id, {
+          headers: apiHeaders,
+        })
+      ).json();
+      assert.equal(status.state, "completed");
+      assert.ok(status.chatId);
+      const output = await fetch(
+        base + "/api/v1/generations/" + apiJob.id + "/image",
+        { headers: apiHeaders },
+      );
+      assert.equal(output.status, 200);
+      assert.ok(
+        Buffer.from(await output.arrayBuffer()).equals(png(posts * 20)),
+      );
+      await page
+        .locator("#api-log-rows")
+        .getByText(apiJob.id, { exact: true })
+        .first()
         .waitFor();
     } catch (error) {
       releaseAcks();

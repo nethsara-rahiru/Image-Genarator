@@ -46,7 +46,9 @@ export class DebugLog {
       typeof e.timestamp === "string" &&
       typeof e.message === "string" &&
       e.message.length <= 500 &&
-      ["server", "browser", "network", "viewer", "auth"].includes(e.source)
+      ["server", "browser", "network", "viewer", "auth", "api"].includes(
+        e.source,
+      )
     );
   }
   write(level, source, code, message, details = {}, dedupeMs = 0) {
@@ -56,6 +58,24 @@ export class DebugLog {
     this.last.set(key, now);
     if (this.last.size > 100) this.last.delete(this.last.keys().next().value);
     const safe = {};
+    if (
+      ["GET", "POST", "PATCH", "DELETE", "PUT", "HEAD", "OPTIONS"].includes(
+        details.method,
+      )
+    )
+      safe.method = details.method;
+    if (
+      typeof details.endpoint === "string" &&
+      /^(unmatched|\/api\/v1\/(health|browser\/(start|stop|status|gemini)|chats|generations(?:\/:id(?:\/(cancel|retry|recover|image|metadata))?)?))$/.test(
+        details.endpoint,
+      )
+    )
+      safe.endpoint = details.endpoint;
+    if (
+      typeof details.jobId === "string" &&
+      /^[a-f0-9-]{36}$/.test(details.jobId)
+    )
+      safe.jobId = details.jobId;
     if (
       [
         "PRIVATE_HOSTNAME",

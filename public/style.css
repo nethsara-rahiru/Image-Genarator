@@ -690,3 +690,22 @@ dialog .actions {
     scroll-behavior: auto;
   }
 }
+/* API diagnostics remain usable on narrow screens. */
+.api-log-scroll {
+  overflow-x: auto;
+}
+.api-log-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  text-align: left;
+}
+.api-log-table th,
+.api-log-table td {
+  padding: 0.65rem;
+  border-bottom: 1px solid #334155;
+  overflow-wrap: anywhere;
+}
+.api-log-table th {
+  white-space: nowrap;
+}

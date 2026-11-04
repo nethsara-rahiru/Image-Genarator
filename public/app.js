@@ -316,10 +316,44 @@ function receiveLogs(snapshot) {
       known.add(entry.id);
     }
   logEntries = logEntries.slice(-500);
+  renderApiLogs();
   $("debug-storage").hidden = !snapshot.storageError;
   $("debug-status").textContent =
     `${logEntries.length} retained entries${logsPaused ? " · paused" : ""}`;
   if (!logsPaused) renderLogs();
+}
+function renderApiLogs() {
+  const entries = logEntries
+    .filter((entry) => entry.source === "api")
+    .slice(-100)
+    .reverse();
+  const body = $("api-log-rows");
+  body.replaceChildren();
+  $("api-log-status").textContent = `${entries.length} recent requests`;
+  if (!entries.length) {
+    const cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.textContent = "No API requests yet.";
+    const row = document.createElement("tr");
+    row.append(cell);
+    body.append(row);
+  }
+  for (const entry of entries) {
+    const d = entry.details || {};
+    const row = document.createElement("tr");
+    for (const value of [
+      new Date(entry.timestamp).toLocaleTimeString(),
+      `${d.method || ""} ${d.endpoint || "unmatched"}`,
+      d.status,
+      `${d.durationMs ?? 0} ms`,
+      d.jobId || d.actionId,
+    ]) {
+      const cell = document.createElement("td");
+      cell.textContent = String(value ?? "—");
+      row.append(cell);
+    }
+    body.append(row);
+  }
 }
 function visibleLogs() {
   const level = $("debug-level").value,
