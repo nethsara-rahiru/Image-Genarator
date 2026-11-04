@@ -604,3 +604,11 @@ The same-origin, session-protected **WebSocket `/stream`** sends browser state,
 sanitized logs, manual sign-in steps and generation snapshots. It does not stream
 browser preview images and is not a bearer-token v1 WebSocket endpoint. Normal API
 clients poll job/status endpoints instead. See [dashboard API details](docs/api.md).
+
+### Live API request table
+
+The dashboard's **API requests** table shows response status, duration and
+job/request IDs without tokens or request bodies. For API generation, use
+**POST /api/v1/generations** and a unique `Idempotency-Key` header. `202` means
+accepted; poll the returned job ID for completion. Reusing a key returns the old
+job instead of starting another. See [API diagnostics](docs/client-api.md#api-request-diagnostics).

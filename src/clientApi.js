@@ -81,6 +81,12 @@ export function clientApi({ browser, generation, flow, action }) {
     if (flow.snapshot().active)
       return res.status(409).json({ error: "Finish manual sign-in first" });
     const { prompt, chatId = null } = req.body || {};
+    if (!/^[A-Za-z0-9_-]{8,128}$/.test(req.headers["idempotency-key"] || ""))
+      return res.status(400).json({
+        code: "GENERATION_IDEMPOTENCY_KEY_REQUIRED",
+        error:
+          "Set the Idempotency-Key header to 8–128 letters, digits, underscores or dashes. Use a new key for each new generation; reuse it only to safely repeat the same request.",
+      });
     if (chatId && !jobs(req).some((job) => job.chatId === chatId))
       return res
         .status(404)
@@ -89,11 +95,14 @@ export function clientApi({ browser, generation, flow, action }) {
       { prompt, chatId, idempotencyKey: req.headers["idempotency-key"] },
       req.apiClient.id,
     );
+    res.locals.apiJobId = job.id;
     res.status(202).location(`/api/v1/generations/${job.id}`).json(job);
   });
-  router.get("/generations/:id", scope("read"), (req, res) =>
-    res.json(generation.publicJob(owns(req, req.params.id))),
-  );
+  router.get("/generations/:id", scope("read"), (req, res) => {
+    const job = owns(req, req.params.id);
+    res.locals.apiJobId = job.id;
+    res.json(generation.publicJob(job));
+  });
   for (const operation of ["cancel", "retry", "recover"])
     router.post(
       "/generations/:id/" + operation,
@@ -120,7 +129,10 @@ export function clientApi({ browser, generation, flow, action }) {
       else res.type("application/json").sendFile(file.path);
     });
   router.use((req, res) =>
-    res.status(404).json({ error: "API endpoint not found" }),
+    res.status(404).json({
+      error:
+        "API endpoint not found. To generate an image, POST /api/v1/generations with a JSON prompt and Idempotency-Key header.",
+    }),
   );
   router.use((error, req, res, next) => {
     if (res.headersSent) return next(error);

@@ -112,11 +112,23 @@ test("API clients use revocable scoped bearer keys, own outputs and isolated ide
     (await request("/api/action", a.token, "POST", { type: "start" })).status,
     403,
   );
+  const missingKey = await request("/api/v1/generations", a.token, "POST", {
+    prompt: "image",
+  });
+  assert.equal(missingKey.status, 400);
   assert.equal(
-    (await request("/api/v1/generations", a.token, "POST", { prompt: "image" }))
-      .status,
-    400,
+    (await missingKey.json()).code,
+    "GENERATION_IDEMPOTENCY_KEY_REQUIRED",
   );
+  assert.ok(missingKey.headers.get("x-request-id"));
+  const misspelled = await request(
+    "/api/v1/genarations?secret=hidden",
+    a.token,
+    "POST",
+    { prompt: "secret prompt" },
+  );
+  assert.equal(misspelled.status, 404);
+  assert.match((await misspelled.json()).error, /POST \/api\/v1\/generations/);
   const submit = (key) =>
     request(
       "/api/v1/generations",
@@ -128,6 +140,25 @@ test("API clients use revocable scoped bearer keys, own outputs and isolated ide
   const response = await submit(a.token);
   assert.equal(response.status, 202);
   const first = await response.json();
+  const apiLogs = service.log
+    .snapshot()
+    .entries.filter((entry) => entry.source === "api");
+  assert.ok(apiLogs.some((entry) => entry.details.status === 401));
+  assert.ok(
+    apiLogs.some(
+      (entry) =>
+        entry.details.status === 400 &&
+        entry.details.endpoint === "/api/v1/generations",
+    ),
+  );
+  assert.ok(
+    apiLogs.some(
+      (entry) =>
+        entry.details.status === 202 && entry.details.jobId === first.id,
+    ),
+  );
+  assert.doesNotMatch(JSON.stringify(apiLogs), /secret prompt|secret=hidden/);
+  assert.ok(!JSON.stringify(apiLogs).includes(a.token));
   assert.equal((await (await submit(a.token)).json()).id, first.id);
   const second = await (await submit(b.token)).json();
   assert.notEqual(first.id, second.id);
