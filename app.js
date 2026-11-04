@@ -6,7 +6,22 @@ if (existsSync(".env")) process.loadEnvFile(".env");
 if (Number(process.versions.node.split(".")[0]) < 22)
   throw new Error("Node.js 22+ required");
 process.umask(0o077);
-if (process.argv.includes("--background")) {
+if (process.argv.includes("--lan")) {
+  try {
+    const { startLan } = await import("./scripts/lan.js");
+    await startLan();
+  } catch (error) {
+    console.error(
+      "LAN setup failed:",
+      error.code === "EADDRINUSE"
+        ? "Port already in use; stop the other app instance and retry."
+        : error.code === "ELOCKED"
+          ? "Another app or LAN setup owns this workspace. Stop it before retrying (an interrupted startup lock expires after 30 seconds)."
+          : error.message,
+    );
+    process.exitCode = 1;
+  }
+} else if (process.argv.includes("--background")) {
   await import("./scripts/background.js");
 } else {
   const config = configuration();

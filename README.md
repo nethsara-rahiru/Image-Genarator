@@ -167,3 +167,11 @@ Public access requires `AUTH_REQUIRED=true`, a configured HTTPS origin and a val
 TLS reverse proxy. Google sign-in stays manual on the host; clients share its
 browser/session and global queue. See [client API guide](docs/client-api.md) for
 HTTPS deployment, token revocation, endpoints and curl examples.
+
+## Use Postman from another PC on your LAN
+
+Run `node app.js --lan` on the host. The guided setup detects your network IP,
+sets up a managed HTTPS gateway and prints the API URL and certificate file.
+Create the administrator when prompted and import the public CA certificate into
+Postman on the second PC once. No domain, Homebrew, SSH tunnel or separate Caddy
+terminal is required. See [LAN setup](docs/lan.md).
