@@ -113,6 +113,9 @@ export class GenerationQueue {
     } = job;
     return {
       ...publicJob,
+      browserCleanupPending: !!(
+        this.active?.id === job.id && this.runner.downloadCleanupPending
+      ),
       canRecoverDownload:
         finalStates.has(job.state) &&
         job.state !== "completed" &&
@@ -138,6 +141,7 @@ export class GenerationQueue {
       version: this.version,
       busy: this.busy,
       activeJobId: this.active?.id || null,
+      cleanupError: this.runner.downloadCleanupError?.message || null,
       jobs: [...this.data.jobs]
         .reverse()
         .slice(0, 100)
@@ -182,6 +186,8 @@ export class GenerationQueue {
     { prompt, chatId = null, idempotencyKey } = {},
     apiClientId = null,
   ) {
+    if (this.runner.downloadCleanupError)
+      throw this.runner.downloadCleanupError;
     if (
       typeof prompt !== "string" ||
       !prompt.trim() ||
@@ -413,6 +419,23 @@ export class GenerationQueue {
         );
       } finally {
         clearTimeout(timeout);
+        // Publish validated output before any renderer-dependent cleanup wait.
+        if (!this.lost) {
+          await this.persist();
+          if (job.state === "completed")
+            this.log?.write(
+              "info",
+              "browser",
+              "GENERATION_OUTPUT_COMMITTED",
+              "Verified output and metadata committed; browser cleanup cannot delay downloads.",
+              { actionId: job.id },
+            );
+        }
+        try {
+          await this.runner.waitForDownloadCleanup?.();
+        } catch {
+          this.stopping = true;
+        }
         this.active = null;
         this.controller = null;
         if (!this.lost) await this.persist();
@@ -434,6 +457,8 @@ export class GenerationQueue {
     return this.publicJob(job);
   }
   async retryJob(id) {
+    if (this.runner.downloadCleanupError)
+      throw this.runner.downloadCleanupError;
     const job = this.get(id);
     if (
       !finalStates.has(job.state) ||
@@ -453,6 +478,8 @@ export class GenerationQueue {
     return this.publicJob(job);
   }
   async recoverDownload(id) {
+    if (this.runner.downloadCleanupError)
+      throw this.runner.downloadCleanupError;
     const job = this.get(id);
     if (
       !finalStates.has(job.state) ||

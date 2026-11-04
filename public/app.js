@@ -476,13 +476,19 @@ let generationRequestKey = crypto.randomUUID();
 function renderGeneration(data) {
   generationSnapshot = data;
   generationBusy = data.busy;
-  $("generation-status").textContent = data.busy
-    ? "A generation job is running. See its current stage below."
-    : "Ready · " +
-      data.jobs.filter((j) => j.state === "queued").length +
-      " queued · " +
-      data.jobs.filter((j) => j.state === "completed").length +
-      " completed in recent history";
+  $("generation-status").textContent = data.cleanupError
+    ? data.cleanupError
+    : data.busy
+      ? data.jobs.some(
+          (job) => job.browserCleanupPending && job.state === "completed",
+        )
+        ? "Image saved. Finishing browser cleanup; image downloads are available."
+        : "A generation job is running. See its current stage below."
+      : "Ready · " +
+        data.jobs.filter((j) => j.state === "queued").length +
+        " queued · " +
+        data.jobs.filter((j) => j.state === "completed").length +
+        " completed in recent history";
   const selected = $("generation-chat").value;
   $("generation-chat").replaceChildren(
     new Option("New chat (created by this job)", ""),
@@ -549,6 +555,7 @@ function renderGeneration(data) {
     const button = (label, operation) => {
       const control = document.createElement("button");
       control.textContent = label;
+      control.disabled = !!job.browserCleanupPending;
       control.onclick = async () => {
         control.disabled = true;
         try {
@@ -583,6 +590,7 @@ function renderGeneration(data) {
       if (job.canRecoverDownload) {
         const attach = document.createElement("button");
         attach.textContent = "Attach downloaded image";
+        attach.disabled = !!job.browserCleanupPending;
         const file = document.createElement("input");
         file.type = "file";
         file.hidden = true;
@@ -625,6 +633,7 @@ function renderGeneration(data) {
         button("Retry before submission", "retry");
       const remove = document.createElement("button");
       remove.textContent = "Remove local job/output";
+      remove.disabled = !!job.browserCleanupPending;
       remove.onclick = async () => {
         if (
           confirm(

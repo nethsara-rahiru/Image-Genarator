@@ -26,6 +26,44 @@ test(
   { skip: !enabled, timeout: 120000 },
   async (t) => {
     // Real Chrome must complete with named files even when its completion event is lost.
+    let releaseAcks,
+      acksReleased = false,
+      releaseSeen = false,
+      backgroundTarget;
+    const ackGate = new Promise((resolve) => {
+      releaseAcks = () => {
+        acksReleased = true;
+        resolve();
+      };
+    });
+    const originalSend = BrowserPipe.prototype.send;
+    BrowserPipe.prototype.send = function (method, params = {}, sessionId) {
+      const result = originalSend.call(this, method, params, sessionId);
+      if (
+        !releaseSeen &&
+        method === "Input.dispatchMouseEvent" &&
+        params.type === "mouseReleased"
+      ) {
+        releaseSeen = true;
+        return result.then(async (value) => {
+          const target = await originalSend.call(this, "Target.createTarget", {
+            url: "about:blank",
+          });
+          backgroundTarget = target.targetId;
+          await originalSend.call(this, "Target.activateTarget", {
+            targetId: backgroundTarget,
+          });
+          await ackGate;
+          return value;
+        });
+      }
+      if (!acksReleased && method === "Network.disable")
+        return result.then(async (value) => {
+          await ackGate;
+          return value;
+        });
+      return result;
+    };
     const originalEmit = BrowserPipe.prototype.emit;
     BrowserPipe.prototype.emit = function (name, ...args) {
       if (name === "Browser.downloadProgress" && args[0]?.state === "completed")
@@ -33,7 +71,9 @@ test(
       return originalEmit.call(this, name, ...args);
     };
     t.after(() => {
+      releaseAcks();
       BrowserPipe.prototype.emit = originalEmit;
+      BrowserPipe.prototype.send = originalSend;
     });
     let signedIn = true,
       account = "Synthetic A",
@@ -182,6 +222,7 @@ test(
     const base = `http://127.0.0.1:${service.port}`;
     config.origin = base;
     t.after(async () => {
+      releaseAcks();
       await service.close();
       await fs.rm(data, { recursive: true, force: true });
     });
@@ -278,6 +319,37 @@ test(
         ).arrayBuffer(),
       );
       assert.ok(bytes.equals(png(20)));
+      const stateBeforeAck = await (
+        await request("/api/generation/jobs/" + first.id)
+      ).json();
+      assert.equal(stateBeforeAck.state, "completed");
+      assert.equal(stateBeforeAck.browserCleanupPending, true);
+      assert.equal(service.generation.busy, true);
+      assert.ok(backgroundTarget);
+      const visibility = await originalSend.call(
+        service.browser.pipe,
+        "Runtime.evaluate",
+        { expression: "document.visibilityState", returnByValue: true },
+        service.browser.gemini.session,
+      );
+      assert.equal(
+        visibility.result.value,
+        "hidden",
+        "Gemini must remain in the background through file publication",
+      );
+      const stored = JSON.parse(
+        await fs.readFile(service.generation.file, "utf8"),
+      );
+      assert.equal(
+        stored.jobs.find((job) => job.id === first.id).state,
+        "completed",
+      );
+      releaseAcks();
+      await until(() => !service.generation.busy);
+      await originalSend.call(service.browser.pipe, "Target.closeTarget", {
+        targetId: backgroundTarget,
+      });
+
       assert.deepEqual(downloads, ["/img/1-0.png"]);
       assert.ok(
         service.log
@@ -471,6 +543,7 @@ test(
         )
         .waitFor();
     } catch (error) {
+      releaseAcks();
       await fs.mkdir("test-results", { recursive: true });
       if (service.browser.running)
         await fs.writeFile(
