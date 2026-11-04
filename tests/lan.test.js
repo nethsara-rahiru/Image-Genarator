@@ -16,7 +16,6 @@ import {
   caddyConfig,
   installCaddy,
 } from "../src/lan/setup.js";
-import { writeAdmin } from "../src/admin.js";
 import { createClient } from "../src/apiClients.js";
 test("LAN address selection permits only assigned private IPv4 addresses and safe ports", () => {
   const rows = lanAddresses({
@@ -113,10 +112,10 @@ test(
   async (t) => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), "lan-live-"));
     const data = path.join(dir, "runtime");
-    await writeAdmin(data, "admin", "synthetic LAN administrator password");
+    await fs.mkdir(data, { recursive: true });
     const client = await createClient(data, "test-client", ["read"]);
     const envFile =
-      "CUSTOM_SETTING=preserve\nAUTH_REQUIRED=false\nPUBLIC_ORIGIN=http://127.0.0.1:3030\n";
+      "CUSTOM_SETTING=preserve\nAUTH_REQUIRED=true\nPUBLIC_ORIGIN=http://127.0.0.1:3030\n";
     await fs.writeFile(path.join(dir, ".env"), envFile);
     const apiPort = await freePort("127.0.0.1"),
       tlsPort = await freePort(host);
@@ -184,7 +183,13 @@ test(
       ).status,
       200,
     );
-    assert.equal((await request(origin + "/api/generation", ca)).status, 401);
+    assert.equal((await request(origin + "/api/generation", ca)).status, 200);
+    const session = JSON.parse(
+      (await request(origin + "/api/session", ca)).body,
+    );
+    assert.equal(session.authRequired, false);
+    assert.equal(session.authenticated, true);
+    await assert.rejects(fs.access(path.join(data, "admin.json")));
     await assert.rejects(request(origin + "/api/v1/health", undefined));
     assert.equal(await fs.readFile(path.join(dir, ".env"), "utf8"), envFile);
     assert.ok(!output.includes(client.token));

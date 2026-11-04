@@ -419,3 +419,16 @@ this app does not bypass it or guarantee that Gemini will return an image.
 - Checked route and output field names against clientApi.js, server.js and the
   generation queue. Removed obsolete README claims of automated Groq Google login.
 - Documentation-only change; Markdown formatting/link checks are recorded in PR.
+
+## Open dashboard request
+
+- Removed administrator bootstrap/login from LAN mode, including overrides of
+  older AUTH_REQUIRED=true settings. Existing administrator hashes are preserved.
+- Allowed no-login HTTPS origins; plaintext network origins remain rejected.
+  Normal mode retains explicit optional AUTH_REQUIRED=true support.
+- API bearer tokens, scopes/ownership, HTTPS, exact Host/Origin and CSRF checks
+  remain. The open dashboard intentionally exposes the shared browser/jobs/outputs
+  to everyone who can reach it; it is not tenant-isolated.
+- LAN integration now starts without any admin file, verifies open dashboard/session
+  access despite old .env auth settings, and still requires a token for /api/v1.
+  Final checks and CI evidence are recorded in the follow-up PR.

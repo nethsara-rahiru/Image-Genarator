@@ -31,7 +31,7 @@ Open **http://127.0.0.1:3030**. There is no first-run username/password prompt a
 no database setup. Existing administrator files are preserved but ignored in the
 default local mode. No `.env` is necessary for defaults. If reusing an older
 `.env`, set `AUTH_REQUIRED=false` and
-`PUBLIC_ORIGIN=http://127.0.0.1:3030`; public origins are rejected in no-login mode.
+`PUBLIC_ORIGIN=http://127.0.0.1:3030`; HTTPS is still required for network access.
 
 The OS is detected automatically. Native Windows/macOS control can require the
 managed window to remain visible and can change desktop focus:
@@ -134,10 +134,10 @@ partial browser files and profiles can still consume disk, so use OS quotas.
 
 Back up the whole data directory only while the app is stopped; restore with the
 same private permissions. Never commit it, `.env`, logs or screenshots containing
-real user data. **No-login access is local/shared**: anyone with access to this
-PC or its trusted SSH tunnel can control the saved browser and read the workspace.
-The service binds to 127.0.0.1; use encrypted SSH forwarding from another device.
-Public anonymous access is not implemented.
+real user data. **The dashboard is shared and open by default**: anyone who can reach it can
+control the saved browser and read the workspace. Node binds to 127.0.0.1; use
+`node app.js --lan` for managed HTTPS access on your local network. HTTPS/Host/Origin
+and CSRF checks remain enabled. Bearer-token v1 APIs still require API credentials.
 
 Optional legacy protected access requires `AUTH_REQUIRED=true`, secure CLI setup
 with `npm run setup-admin`, and valid TLS for a public origin. This is opt-in and
@@ -169,8 +169,8 @@ on unattended operation; see [test report](docs/test-report.md).
 Use **`/api/v1`** for server-to-server clients and Postman. Every request requires
 an API bearer token, even when the local dashboard has no application login.
 The API controls one shared host browser/Google session and one global FIFO queue.
-Clients can list/read/control only their own API jobs and outputs; the dashboard
-administrator can see the shared workspace. `browser` permission is for trusted
+Clients can list/read/control only their own jobs through v1; the open dashboard
+exposes the shared workspace to everyone who can reach it. `browser` permission is for trusted
 operators of the shared browser, not isolated tenant browsers.
 
 ### Two PCs on the same LAN
@@ -183,8 +183,8 @@ npm ci
 node app.js --lan
 ```
 
-Follow the prompts to choose your Wi-Fi/Ethernet IP and provision the dashboard
-administrator if needed. The launcher manages HTTPS, leaves `.env` unchanged and
+Follow the prompts to choose your Wi-Fi/Ethernet IP. No administrator setup or
+dashboard password is required in LAN mode, including with older AUTH_REQUIRED settings. The launcher manages HTTPS, leaves `.env` unchanged and
 prints the actual API URL, CA certificate path/fingerprint and first API token if
 no active clients exist and the terminal is interactive. Keep this terminal open;
 Ctrl+C stops both services.
@@ -205,8 +205,9 @@ Allow incoming Caddy connections if the host firewall asks. Both PCs must be abl
 to reach each other on the same network. See [LAN setup](docs/lan.md).
 
 On the host alone, the default API base is `http://127.0.0.1:3030/api/v1`; no CA
-import is needed for loopback. Public internet access requires `AUTH_REQUIRED=true`,
-a configured HTTPS origin and a valid TLS gateway; see [client API deployment](docs/client-api.md).
+import is needed for loopback. Public internet access requires
+a configured HTTPS origin and a valid TLS gateway; `AUTH_REQUIRED=true` remains
+an optional administrator-login setting outside LAN mode; see [client API deployment](docs/client-api.md).
 LAN mode provides same-network access and does not make the PC publicly reachable.
 
 ### Create and manage API tokens
@@ -546,9 +547,9 @@ not make the job completed until the app validates and saves its metadata.
 ## Dashboard-only endpoint list
 
 These endpoints support the web dashboard. Prefer **`/api/v1` above** for Postman
-and integrations. A v1 bearer token does not authenticate these routes. Default
-loopback mode trusts local dashboard access; LAN/public protected mode additionally
-requires the administrator session. Dashboard data covers the shared workspace.
+and integrations. A v1 bearer token does not authenticate these routes. The dashboard is open by default, including LAN mode; everyone who reaches it
+can access the shared workspace. Explicit `AUTH_REQUIRED=true` outside LAN mode
+enables the optional administrator session.
 
 First call `GET /api/session` and retain its cookie. Every dashboard mutation
 (including login) needs the exact configured `Origin` and the returned

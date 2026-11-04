@@ -19,13 +19,13 @@ First launch:
 
 1. The app detects a private IPv4 address. If several are available, select the
    Wi-Fi/Ethernet interface connecting the two PCs, rather than a VPN interface.
-2. If no dashboard administrator exists, create it in the terminal. Password input
-   is hidden. This administrator protects the network dashboard.
+2. The dashboard opens without administrator setup or a password. Anyone who can
+   reach its address can use the shared browser and see jobs/outputs.
 3. If Caddy is missing, the app downloads the pinned official release and verifies
    its published checksum before extraction. No Homebrew, sudo or system service
    is needed. An installed Caddy is reused when available.
-4. Node stays on loopback behind a managed Caddy HTTPS gateway. LAN mode forces
-   dashboard authentication; it does not edit your .env.
+4. Node stays on loopback behind a managed Caddy HTTPS gateway. LAN mode disables
+   dashboard login, including older AUTH_REQUIRED=true settings; it does not edit your .env.
 5. The terminal prints the dashboard URL, API base URL, public CA certificate file
    and certificate fingerprint. The first API token is shown once in an interactive
    terminal if no active clients exist. Save it securely in Postman; never share it
@@ -115,6 +115,6 @@ checksum checks are never disabled. Normal `node app.js` behavior is unchanged;
 - API 401: supply a valid, unexpired bearer token. A dashboard password is not an
   API token. Noninteractive startup does not print/create secret tokens; use the CLI.
 
-Automated integration exercises actual Caddy, CA trust, authenticated API access,
+Automated integration exercises actual Caddy, CA trust, bearer-protected API access and open dashboard access,
 restart, unchanged .env and fail-closed startup. Target PC firewall, certificate
 import UI, browser permissions and live Google/Gemini require user validation.

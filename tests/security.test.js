@@ -8,6 +8,10 @@ import os from "node:os";
 import path from "node:path";
 test("only encrypted public origins or loopback tunnel origins are permitted", () => {
   assert.equal(configuration({}).port, 3030);
+  assert.equal(
+    configuration({ PUBLIC_ORIGIN: "https://192.168.1.50:3443" }).authRequired,
+    false,
+  );
   for (const origin of [
     "http://162.35.181.135:3030",
     "https://user:pass@example.com",
