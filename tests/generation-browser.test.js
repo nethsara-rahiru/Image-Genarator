@@ -212,6 +212,25 @@ test(
       await page.locator("#workspace").waitFor({ state: "visible" });
       assert.equal(await page.locator("#login-panel").isVisible(), false);
       assert.equal(await page.locator("#logout").isVisible(), false);
+      assert.equal(await page.locator("canvas, .screen").count(), 0);
+      assert.equal(
+        await page.locator("#browser-tools").getAttribute("open"),
+        null,
+      );
+      await page.getByRole("link", { name: "Create", exact: true }).focus();
+      assert.equal(await page.locator(":focus").textContent(), "Create");
+      await page.locator("#browser-tools > summary").click();
+      assert.equal(await page.locator("#navigation").isVisible(), true);
+      await page.locator("#browser-tools > summary").click();
+      assert.equal(await page.locator("#navigation").isVisible(), false);
+      await page.locator("#downloads-toggle").click();
+      assert.equal(
+        await page.locator("#downloads-toggle").getAttribute("aria-expanded"),
+        "true",
+      );
+      await page.locator("#downloads-toggle").click();
+      assert.equal(await page.locator("#downloads-panel").isVisible(), false);
+      await page.locator("#generation-prompt").scrollIntoViewIfNeeded();
       await page
         .locator("#generation-prompt")
         .fill("first multi-image response");
@@ -313,6 +332,14 @@ test(
             ?.querySelector("h3")
             ?.textContent.startsWith("cancelled"),
         slow.id,
+      );
+      await page.locator("#result-filter").selectOption("completed");
+      assert.equal(await page.locator(".generation-job").count(), 3);
+      assert.equal(
+        await page
+          .locator('.generation-job:not([data-state="completed"])')
+          .count(),
+        0,
       );
       await fs.mkdir("test-results", { recursive: true });
       await page.screenshot({
