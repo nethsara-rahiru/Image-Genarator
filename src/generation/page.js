@@ -280,8 +280,8 @@ export async function generationPage(request) {
     ].find((e) => id(e) === selected.buttonId);
     button.scrollIntoView({
       behavior: "instant",
-      block: "center",
-      inline: "center",
+      block: "nearest",
+      inline: "nearest",
     });
     const rect = button.getBoundingClientRect();
     const x = rect.x + rect.width / 2,

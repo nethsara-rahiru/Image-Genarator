@@ -110,3 +110,11 @@ IMAGE_DOWNLOAD_PREPARING, IMAGE_DOWNLOAD_REQUEST_FAILED and
 IMAGE_DOWNLOAD_WINDOW_OPENED. Timeout messages include sanitized activity counts,
 not URLs, cookies, credentials or request bodies. These changes address regression
 cases; live Google UI behavior still requires validation with the target account.
+
+The previous final-position check could reject a valid download button when
+Gemini moved or re-created it on hover. The app now reacquires the control for
+the same verified image and saved chat with bounded retries, then sends one
+click. It uses nearest scrolling so centering a toolbar button does not move the
+image away from the pointer. An image/chat change still stops the operation;
+GENERATION_DOWNLOAD_UNSTABLE means the control never settled, not that a new
+prompt should be submitted. Retry only the existing image download.

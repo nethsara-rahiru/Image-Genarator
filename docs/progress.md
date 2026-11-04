@@ -448,3 +448,16 @@ this app does not bypass it or guarantee that Gemini will return an image.
 - Regression tests cover delayed preparation, smooth-scroll pages, real browser
   manual attachment, metadata/source flags, no resubmission, invalid bytes/consent
   and unsafe output paths. Final CI/automated evidence is recorded in the PR.
+
+## Download-control movement regression
+
+- The last final-position guard was too strict: movement over one pixel or a
+  re-created toolbar button stopped a valid download before clicking. This was
+  introduced by the previous change, separate from the earlier unverified timeout.
+- Added bounded reacquisition of the same image fingerprint/account/saved chat,
+  accepting a new matching toolbar node. Uses nearest instant scrolling and
+  sends exactly one download click after the control settles; never resubmits.
+- Regression fixture moves and replaces the button on hover. Unit coverage also
+  checks continuously moving controls and real image/chat changes without clicks.
+- Earlier live Gemini timeout remains separately unverified. Final CI evidence
+  and commit/PR references are recorded in the PR.
