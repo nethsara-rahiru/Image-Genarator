@@ -6,8 +6,7 @@ website JavaScript, query strings, source control or chat. No CORS access is
 provided for external websites. Build a server-side integration instead.
 
 This is one shared browser, Google session and FIFO queue. API job/output/chat
-endpoints are scoped to the issuing client; the local administrator can see all
-jobs. The `browser` scope grants control of the shared browser to trusted operators,
+endpoints are scoped to the issuing client; everyone reaching the open dashboard can see all jobs. The `browser` scope grants control of the shared browser to trusted operators,
 not isolated tenant browsers. All clients generate using the host's signed-in
 Google account. Google login, MFA and security checks remain manual in Chrome.
 The PC must stay awake and the app must be running.
@@ -21,13 +20,15 @@ Choose a hostname with DNS pointing to the host or its authenticated gateway.
 Set these values in the host's private `.env`:
 
 ```dotenv
-AUTH_REQUIRED=true
+AUTH_REQUIRED=false
 PUBLIC_ORIGIN=https://images.example.com
 PORT=3030
 AUTO_OPEN=false
 ```
 
-Provision dashboard access with `npm run setup-admin` in an interactive terminal.
+No administrator bootstrap is required for the open dashboard. Set
+AUTH_REQUIRED=true and provision an administrator with npm run setup-admin only
+if you explicitly want optional protected access outside LAN mode.
 Keep Node bound to loopback. A Caddy HTTPS reverse proxy on the same machine can
 use the following configuration, replacing the example hostname with your domain:
 
@@ -40,11 +41,11 @@ images.example.com {
 ```
 
 Use a valid trusted certificate. Expose only the HTTPS proxy, not port 3030,
-Chromium debug ports, VNC or an unencrypted API. Public HTTP origins and public
-no-login dashboard configurations remain rejected. If Node/Chrome run on a PC
+Chromium debug ports, VNC or an unencrypted API. Public HTTP origins remain rejected. If Node/Chrome run on a PC
 behind NAT and the proxy is on a VPS, use the existing authenticated SSH gateway
 instructions in deployment.md; a local Node process is not automatically public.
-Dashboard authentication stays enabled even though API clients use bearer keys.
+The dashboard is open in default/LAN mode; v1 API requests still require bearer
+keys. Bearer ownership checks do not make the shared open dashboard tenant-isolated.
 No public DNS, certificate or live deployment is provisioned by these code changes.
 
 ## Issue, list and revoke client tokens

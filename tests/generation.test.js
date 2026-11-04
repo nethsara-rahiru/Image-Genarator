@@ -216,8 +216,9 @@ test("local no-login API works without an admin and retains Host/Origin/CSRF bou
     ).status,
     200,
   );
-  assert.throws(() =>
-    configuration({ PUBLIC_ORIGIN: "https://public.example" }),
+  assert.equal(
+    configuration({ PUBLIC_ORIGIN: "https://public.example" }).authRequired,
+    false,
   );
   const unexpectedHost = await new Promise((resolve, reject) => {
     const req = http.request(

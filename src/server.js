@@ -138,7 +138,7 @@ export async function startServer(config, options = {}) {
   });
   app.get("/api/session", async (req, res) => {
     req.session.csrf ||= token();
-    const a = await admin();
+    const a = config.authRequired ? await admin() : null;
     res.json({
       csrf: req.session.csrf,
       authRequired: !!config.authRequired,

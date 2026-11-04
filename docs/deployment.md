@@ -9,8 +9,7 @@ return no image. Use node app.js --background with Docker Desktop for an isolate
 Linux desktop; it also no longer prompts for an app administrator.
 
 For an existing .env set AUTH_REQUIRED=false and
-PUBLIC_ORIGIN=http://127.0.0.1:3030 (or the matching PORT). Public no-login origins
-are rejected. Use secure SSH forwarding for trusted remote access. Existing
+PUBLIC_ORIGIN=http://127.0.0.1:3030 (or the matching PORT). Network origins require HTTPS. Use secure SSH forwarding for trusted remote access. Existing
 admin files/profiles are not deleted. GENERATION_TIMEOUT_SECONDS defaults to 180
 and is forwarded into background mode. Protect generation/queue.json and outputs
 inside DATA_DIR; see operations.md and api.md for jobs, recovery and backups.
@@ -20,7 +19,7 @@ explicitly configured. They are not needed for normal local startup.
 
 ## Local startup
 
-Install Node.js 22+ and desktop Google Chrome (Edge fallback supported). Clone/download the reviewed main source. In a terminal in the project directory: npm ci, then node app.js. Startup detects the OS. No app password prompt is used in default local mode; provision the administrator explicitly when AUTH_REQUIRED=true. It opens the configured viewer URL. Later only node app.js is needed. Explicit CLI bootstrap/reset remain available. For service/noninteractive startup provision the administrator first.
+Install Node.js 22+ and desktop Google Chrome (Edge fallback supported). Clone/download the reviewed main source. In a terminal in the project directory: npm ci, then node app.js. Startup detects the OS. No app password prompt is used in default local mode; provision the administrator explicitly when AUTH_REQUIRED=true. It opens the configured viewer URL. Later only node app.js is needed. Explicit CLI bootstrap/reset remain available. For protected AUTH_REQUIRED=true service/noninteractive startup, provision the administrator first.
 
 Do not reuse the former VPS .env blindly. For local access the defaults need no .env: PORT=3030, PUBLIC_ORIGIN=http://127.0.0.1:3030, DATA_DIR=./runtime. Optional CHROME_PATH selects an installed executable; AUTO_OPEN=false disables opening a viewer. A stable DATA_DIR and project working directory are important for profile/admin continuity.
 
@@ -139,4 +138,4 @@ navigation steps, never login screenshots or credentials. If unconfigured or
 unavailable, the flow hands control to the user. Observe usage/errors in settings
 and the debug console. Real service acceptance needs target validation.
 
-For the public bearer-token API, follow [client-api.md](client-api.md). Public access requires AUTH_REQUIRED=true and a valid HTTPS gateway; the default local no-login mode is not suitable for public exposure.
+For the public bearer-token API, follow [client-api.md](client-api.md). Network access requires a valid HTTPS gateway. The dashboard is now open by default; optional AUTH_REQUIRED=true outside LAN mode enables administrator login. API clients still require bearer tokens.

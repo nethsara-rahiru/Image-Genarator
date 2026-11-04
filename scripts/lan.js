@@ -8,8 +8,6 @@ import { setTimeout as pause } from "node:timers/promises";
 import lockfile from "proper-lockfile";
 import { configuration } from "../src/config.js";
 import { startServer } from "../src/server.js";
-import { readAdmin } from "../src/admin.js";
-import { interactiveAdmin } from "./admin.js";
 import { createClient, readClients } from "../src/apiClients.js";
 import {
   lanAddresses,
@@ -131,25 +129,14 @@ export async function startLan() {
       ...process.env,
       DATA_DIR: data,
       PUBLIC_ORIGIN: origin,
-      AUTH_REQUIRED: "true",
+      AUTH_REQUIRED: "false",
       AUTO_OPEN: "false",
     });
     const storage = path.join(dir, "pki");
     const contents = caddyConfig(host, tlsPort, config.port, storage);
     console.log(
-      `LAN HTTPS setup: ${origin}\nDashboard authentication is required; your .env is unchanged.`,
+      `LAN HTTPS setup: ${origin}\nDashboard is open to everyone who can reach this address; API bearer tokens are still required. Your .env is unchanged.`,
     );
-    if (!(await readAdmin(data))) {
-      if (!process.stdin.isTTY)
-        throw new Error(
-          "First run requires a terminal for administrator setup. Run npm run setup-admin, then node app.js --lan.",
-        );
-      await interactiveAdmin(config);
-      if (!(await readAdmin(data)))
-        throw new Error(
-          "Administrator setup was not completed. No LAN listener was started.",
-        );
-    }
     if (stopping) return;
     const caddy = await ensureCaddy(dir, process.env.CADDY_PATH);
     if (stopping) return;
