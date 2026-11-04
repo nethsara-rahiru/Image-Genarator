@@ -458,11 +458,75 @@ export class GenerationRunner {
           ),
         );
     };
+    let clicked = false,
+      preparationCount = 0,
+      failedRequests = 0,
+      popupCount = 0;
+    const preparation = new Set();
+    const networkRequest = (event) => {
+      if (!clicked || finished || preparation.size >= 64) return;
+      try {
+        const url = new URL(event.request.url);
+        const testOrigin =
+          this.browser.options?.test &&
+          this.browser.options.automationOrigins?.gemini;
+        const allowed =
+          url.protocol === "https:" &&
+          (url.hostname === "gemini.google.com" ||
+            /(^|\.)googleusercontent\.com$/.test(url.hostname));
+        if (
+          !(allowed || (testOrigin && url.origin === testOrigin)) ||
+          !["Image", "Fetch", "XHR"].includes(event.type)
+        )
+          return;
+        preparation.add(event.requestId);
+        preparationCount++;
+        armTimeout(60000);
+        if (preparationCount === 1)
+          this.browser.log?.write(
+            "info",
+            "browser",
+            "IMAGE_DOWNLOAD_PREPARING",
+            "An image/service request was observed after the download click. Waiting for the provider to prepare the file.",
+          );
+      } catch {
+        /* URLs and request contents never leave this callback. */
+      }
+    };
+    const networkFinished = (event) => {
+      preparation.delete(event.requestId);
+    };
+    const networkFailed = (event) => {
+      if (preparation.delete(event.requestId)) {
+        failedRequests++;
+        this.browser.log?.write(
+          "warn",
+          "browser",
+          "IMAGE_DOWNLOAD_REQUEST_FAILED",
+          "A provider image/preparation request failed; no URL or request contents were recorded.",
+        );
+      }
+    };
+    const popup = () => {
+      if (clicked && !finished) {
+        popupCount++;
+        this.browser.log?.write(
+          "warn",
+          "browser",
+          "IMAGE_DOWNLOAD_WINDOW_OPENED",
+          "The download action opened another window. Inspect Chrome on the host if no file arrives.",
+        );
+      }
+    };
     const abort = () =>
       reject(
         signal.reason ||
           nativeError("GENERATION_CANCELLED", "Generation cancelled."),
       );
+    pipe.on("Network.requestWillBeSent", networkRequest);
+    pipe.on("Network.loadingFinished", networkFinished);
+    pipe.on("Network.loadingFailed", networkFailed);
+    pipe.on("Page.windowOpen", popup);
     pipe.on("Page.frameAttached", attached);
     pipe.on("Browser.downloadWillBegin", begin);
     pipe.on("Browser.downloadProgress", progress);
@@ -476,13 +540,13 @@ export class GenerationRunner {
               "GENERATION_DOWNLOAD_TIMEOUT",
               guid
                 ? "Chrome started the download but stopped transferring image bytes for 60 seconds. Use Download existing image; no prompt will be resubmitted."
-                : "Chrome reported no download after clicking the image control. Use Download existing image; no prompt will be resubmitted.",
+                : `No completed file arrived after the image click (preparation requests: ${preparationCount}, failed requests: ${failedRequests}, new windows: ${popupCount}). Retry Download existing image, or manually download from the saved chat and use Attach downloaded image. No prompt will be resubmitted.`,
             ),
           ),
         ms,
       );
     }
-    armTimeout(15000);
+    armTimeout(30000);
     try {
       signal.throwIfAborted();
       await pipe.send("Browser.setDownloadBehavior", {
@@ -491,10 +555,11 @@ export class GenerationRunner {
         eventsEnabled: true,
       });
       await pipe.send("Page.enable", {}, adapter.session);
+      await pipe.send("Network.enable", {}, adapter.session);
       pollTimer = setInterval(() => {
         void pollFile();
       }, 300);
-      const result = await this.evaluate(
+      let result = await this.evaluate(
         {
           operation: "download",
           selection,
@@ -514,6 +579,27 @@ export class GenerationRunner {
         { type: "mouseMoved", x: result.x, y: result.y },
         adapter.session,
       );
+      const checked = await this.evaluate(
+        {
+          operation: "download",
+          selection,
+          accountKey,
+          baseline,
+          baselineImages,
+        },
+        signal,
+      );
+      if (
+        !checked.ok ||
+        Math.abs(checked.x - result.x) > 1 ||
+        Math.abs(checked.y - result.y) > 1
+      )
+        throw nativeError(
+          "GENERATION_DOWNLOAD_CHANGED",
+          "The download control moved or changed before the click. No new prompt was submitted.",
+        );
+      result = checked;
+      clicked = true;
       await pipe.send(
         "Input.dispatchMouseEvent",
         {
@@ -547,6 +633,11 @@ export class GenerationRunner {
       finished = true;
       clearTimeout(timer);
       clearInterval(pollTimer);
+      pipe.off("Network.requestWillBeSent", networkRequest);
+      pipe.off("Network.loadingFinished", networkFinished);
+      pipe.off("Network.loadingFailed", networkFailed);
+      pipe.off("Page.windowOpen", popup);
+      await pipe.send("Network.disable", {}, adapter.session).catch(() => {});
       pipe.off("Page.frameAttached", attached);
       signal.removeEventListener("abort", abort);
       pipe.off("Browser.downloadWillBegin", begin);

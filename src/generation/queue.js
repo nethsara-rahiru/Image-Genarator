@@ -3,6 +3,7 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import lockfile from "proper-lockfile";
 import { nativeError } from "../native/common.js";
+import { imageInfo } from "./imageInfo.js";
 import { actionError } from "../actionErrors.js";
 const finalStates = new Set([
   "completed",
@@ -478,6 +479,103 @@ export class GenerationQueue {
     await this.persist();
     this.start();
     return this.publicJob(job);
+  }
+  importManual(id, bytes, confirmed) {
+    return this.mutate(async () => {
+      const job = this.get(id);
+      if (
+        this.stopping ||
+        this.lost ||
+        !confirmed ||
+        !this.publicJob(job).canRecoverDownload ||
+        this.active?.id === id ||
+        !uuid.test(id)
+      )
+        throw nativeError(
+          "GENERATION_IMPORT_UNAVAILABLE",
+          "Choose a failed download job and confirm that the original file belongs to its saved conversation.",
+        );
+      if (
+        !Buffer.isBuffer(bytes) ||
+        !bytes.length ||
+        bytes.length > 100 * 1024 * 1024
+      )
+        throw nativeError(
+          "GENERATION_INVALID_DOWNLOAD",
+          "Choose one complete PNG, JPEG or WebP image up to 100 MB.",
+        );
+      const output = { ...imageInfo(bytes), source: "manual_import" };
+      output.filename = "image." + output.format;
+      const root = await fs.realpath(this.outputs);
+      const directory = path.join(this.outputs, id);
+      await fs.mkdir(directory, { recursive: true, mode: 0o700 });
+      const stat = await fs.lstat(directory);
+      if (
+        !stat.isDirectory() ||
+        stat.isSymbolicLink() ||
+        (await fs.realpath(directory)) !== path.join(root, id)
+      )
+        throw nativeError(
+          "GENERATION_INVALID_DOWNLOAD",
+          "Unsafe output directory rejected.",
+        );
+      const completedAt = new Date().toISOString();
+      const metadata = {
+        jobId: id,
+        chatId: job.chatId,
+        chatUrl: job.chatUrl,
+        accountRef: job.accountKey,
+        prompt: job.prompt,
+        submittedPrompt: job.submittedPrompt,
+        inputAssetNames: [],
+        outputFilename: output.filename,
+        ...output,
+        createdAt: job.createdAt,
+        startedAt: job.startedAt,
+        completedAt,
+        retrievalMode: "manual_import",
+        association: "user_confirmed",
+        associationVerified: false,
+        selectionRule:
+          "User confirmed this file is the original image for this job's saved conversation; automatic image association was not verified.",
+      };
+      const imageTemp = path.join(directory, ".manual-" + randomUUID());
+      const metadataTemp = path.join(directory, ".metadata-" + randomUUID());
+      const before = { ...job };
+      try {
+        await fs.writeFile(imageTemp, bytes, { mode: 0o600, flag: "wx" });
+        await fs.writeFile(metadataTemp, JSON.stringify(metadata, null, 2), {
+          mode: 0o600,
+          flag: "wx",
+        });
+        await fs.rename(imageTemp, path.join(directory, output.filename));
+        await fs.rename(metadataTemp, path.join(directory, "metadata.json"));
+        Object.assign(job, {
+          output,
+          state: "completed",
+          progress: 100,
+          error: null,
+          completedAt,
+          updatedAt: completedAt,
+        });
+        await this.persist();
+      } catch (error) {
+        for (const key of Object.keys(job)) delete job[key];
+        Object.assign(job, before);
+        throw error;
+      } finally {
+        await fs.rm(imageTemp, { force: true });
+        await fs.rm(metadataTemp, { force: true });
+      }
+      this.log?.write(
+        "info",
+        "browser",
+        "IMAGE_MANUALLY_ATTACHED",
+        "User-confirmed image attached; automatic download association was not verified.",
+        { actionId: id },
+      );
+      return this.publicJob(job);
+    });
   }
   async removeJob(id) {
     const job = this.get(id);

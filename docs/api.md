@@ -30,6 +30,12 @@ configuration. Optional `AUTH_REQUIRED=true` enables the legacy protected API.
   the composer or submits a prompt. `canRecoverDownload` controls its dashboard action.
 - `POST /api/generation/jobs/:id/retry`: explicit retry only when submission
   could not have occurred. Submitted/ambiguous/completed prompts are not replayed.
+- `POST /api/generation/jobs/:id/import`: dashboard-only, existing session/CSRF
+  rules. Multipart `file` (PNG/JPEG/WebP bytes, maximum 100 MB) plus
+  `confirmed=true`. Only an eligible failed-download job accepts an attachment;
+  completed jobs cannot be overwritten. Returns the completed job with
+  `output.source=manual_import`. Metadata declares user-confirmed association,
+  not automatic verification. Does not submit a prompt. One upload at a time.
 - `DELETE /api/generation/jobs/:id`: remove a terminal local job/output, preserving
   the remote Google conversation. Cancel active work before removing it.
 - `PATCH /api/generation/chats/:id`: `{ "title": "Local title" }`, 1–100 chars.

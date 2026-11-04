@@ -253,7 +253,11 @@ export async function generationPage(request) {
     const image = [...response.querySelectorAll("img")].find(
       (e) => id(e) === selected.imageId,
     );
-    image.scrollIntoView({ block: "center", inline: "center" });
+    image.scrollIntoView({
+      behavior: "instant",
+      block: "center",
+      inline: "center",
+    });
     const rect = image.getBoundingClientRect();
     return {
       ok: true,
@@ -274,7 +278,11 @@ export async function generationPage(request) {
     const button = [
       ...response.querySelectorAll('button,[role="button"]'),
     ].find((e) => id(e) === selected.buttonId);
-    button.scrollIntoView({ block: "center", inline: "center" });
+    button.scrollIntoView({
+      behavior: "instant",
+      block: "center",
+      inline: "center",
+    });
     const rect = button.getBoundingClientRect();
     const x = rect.x + rect.width / 2,
       y = rect.y + rect.height / 2;
