@@ -12,6 +12,9 @@ not isolated tenant browsers. All clients generate using the host's signed-in
 Google account. Google login, MFA and security checks remain manual in Chrome.
 The PC must stay awake and the app must be running.
 
+For two PCs on the same LAN, use the guided **`node app.js --lan`** launcher
+and [LAN setup guide](lan.md) instead of configuring a public domain.
+
 ## Enable HTTPS
 
 Choose a hostname with DNS pointing to the host or its authenticated gateway.

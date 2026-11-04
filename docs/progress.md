@@ -389,3 +389,22 @@ this app does not bypass it or guarantee that Gemini will return an image.
 - Public DNS/TLS deployment and live Google/Gemini require target validation.
   docs/client-api.md contains provisioning, HTTPS deployment and curl examples.
   Automated results and final commit/PR references are recorded in the PR.
+
+## Guided LAN HTTPS startup
+
+- Added node app.js --lan: detects/chooses a private assigned IPv4 interface,
+  guides secure administrator bootstrap, manages the Node + Caddy lifecycle,
+  remembers LAN settings and prints the Postman API URL and CA-import instructions.
+- Reuses installed Caddy or downloads a pinned official platform release, checking
+  its published SHA-512/SHA-256 checksum before extracting only the executable.
+  Does not install system services, modify .env or globally trust a private CA.
+- LAN mode requires dashboard authentication, keeps Node on loopback, binds Caddy
+  to the selected LAN IP and disables its administration listener and HTTP redirects.
+  Private PKI/runtime files are never served. First bearer key is shown only in
+  an interactive terminal when no active API clients exist.
+- Integration uses real Caddy to verify TLS/CA trust, protected API/dashboard,
+  restart with the same CA, unchanged .env, managed shutdown and failed-bind cleanup.
+  CI prepares verified Caddy on all supported runner operating systems.
+- Physical second-PC certificate import, OS firewalls, macOS/Windows browser
+  permissions and live Google/Gemini remain UNVERIFIED until target validation.
+  Final automated evidence and PR references are recorded in the PR.

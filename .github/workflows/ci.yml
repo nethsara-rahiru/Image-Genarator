@@ -22,6 +22,8 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+      - name: Prepare verified Caddy for LAN HTTPS integration
+        run: node scripts/prepare-lan-test.js
       - run: npm run lint
       - run: npm audit --omit=dev --audit-level=high
       - if: runner.os == 'Linux'
