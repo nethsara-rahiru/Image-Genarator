@@ -12,11 +12,13 @@ export class GenerationRunner {
   async evaluate(request, signal) {
     signal.throwIfAborted();
     const adapter = this.browser.gemini;
+    request = { ...this.recoveryRequest, ...request };
     const result = await this.browser.pipe.send(
       "Runtime.evaluate",
       {
         expression: `(${generationPage.toString()})(${JSON.stringify({ ...request, ...(this.browser.options.test && this.browser.options.automationOrigins ? { origin: this.browser.options.automationOrigins.gemini } : {}) })})`,
         awaitPromise: true,
+        userGesture: true,
         returnByValue: true,
       },
       adapter.session,
@@ -43,9 +45,19 @@ export class GenerationRunner {
         "GENERATION_RESTRICTED",
         "Gemini reports an account or usage restriction. No retry or account-switch workaround will be attempted.",
       );
+    if (value.kind === "recovery_unverified")
+      throw nativeError(
+        "GENERATION_RECOVERY_UNVERIFIED",
+        "Could not uniquely associate an image with this job in the saved chat. Download manually from Gemini; no prompt was submitted.",
+      );
     return value;
   }
   async run(job, { signal, directory, phase, chat }) {
+    this.recoveryRequest = job.downloadOnly
+      ? job.downloadCheckpoint?.imageKey
+        ? { recoverImageKey: job.downloadCheckpoint.imageKey }
+        : { recoverPrompt: job.submittedPrompt }
+      : {};
     await this.action({ type: "start", automation: true });
     signal.throwIfAborted();
     const adapter = this.browser.gemini;
@@ -65,95 +77,116 @@ export class GenerationRunner {
         "GENERATION_CHAT_UNAVAILABLE",
         "Gemini did not open the requested saved chat. No prompt was submitted.",
       );
-    if (!job.chatId && (before.responseIds.length || before.chatId)) {
-      const result = await this.evaluate(
-        { operation: "new_chat", accountKey: before.accountKey },
-        signal,
-      );
-      if (!result.ok)
+    let selected, accountKey, baseline, baselineImages;
+    if (job.downloadOnly) {
+      accountKey = before.accountKey;
+      baseline = [];
+      baselineImages = [];
+      if (!before.selection || before.busy)
         throw nativeError(
-          "GENERATION_NEW_CHAT",
-          "Could not verify a new Gemini chat. No prompt was submitted.",
+          "GENERATION_RECOVERY_UNVERIFIED",
+          "The saved response has no completed, verified image to download. No prompt was submitted.",
         );
-      for (let n = 0; n < 20; n++) {
-        await pause(250, undefined, { signal });
-        before = await this.evaluate(
-          { operation: "inspect", accountKey: before.accountKey },
+      selected = before.selection;
+    } else {
+      if (!job.chatId && (before.responseIds.length || before.chatId)) {
+        const result = await this.evaluate(
+          { operation: "new_chat", accountKey: before.accountKey },
           signal,
         );
-        if (!before.chatId && !before.responseIds.length) break;
+        if (!result.ok)
+          throw nativeError(
+            "GENERATION_NEW_CHAT",
+            "Could not verify a new Gemini chat. No prompt was submitted.",
+          );
+        for (let n = 0; n < 20; n++) {
+          await pause(250, undefined, { signal });
+          before = await this.evaluate(
+            { operation: "inspect", accountKey: before.accountKey },
+            signal,
+          );
+          if (!before.chatId && !before.responseIds.length) break;
+        }
+        if (before.chatId || before.responseIds.length)
+          throw nativeError(
+            "GENERATION_NEW_CHAT",
+            "A fresh empty chat could not be verified. No prompt was submitted.",
+          );
       }
-      if (before.chatId || before.responseIds.length)
+      if (!before.editorReady)
         throw nativeError(
-          "GENERATION_NEW_CHAT",
-          "A fresh empty chat could not be verified. No prompt was submitted.",
+          "GENERATION_EDITOR",
+          "The Gemini prompt editor was not recognized. No prompt was submitted.",
         );
-    }
-    if (!before.editorReady)
-      throw nativeError(
-        "GENERATION_EDITOR",
-        "The Gemini prompt editor was not recognized. No prompt was submitted.",
-      );
-    const accountKey = before.accountKey,
-      baseline = before.responseIds,
+      accountKey = before.accountKey;
+      baseline = before.responseIds;
       baselineImages = before.imageKeys;
-    await phase("preparing_prompt", { accountKey });
-    const filled = await this.evaluate(
-      { operation: "fill_prompt", accountKey, prompt: job.submittedPrompt },
-      signal,
-    );
-    if (!filled.ok)
-      throw nativeError(
-        "GENERATION_EDITOR",
-        "The prompt editor changed. No prompt was submitted.",
-      );
-    let ready;
-    for (let n = 0; n < 20; n++) {
-      ready = await this.evaluate(
-        { operation: "inspect", accountKey, baseline, baselineImages },
+
+      await phase("preparing_prompt", { accountKey });
+      const filled = await this.evaluate(
+        { operation: "fill_prompt", accountKey, prompt: job.submittedPrompt },
         signal,
       );
-      if (ready.canSend) break;
-      await pause(150, undefined, { signal });
-    }
-    if (!ready?.canSend)
-      throw nativeError(
-        "GENERATION_SEND_UNAVAILABLE",
-        "The Send button was not available. No prompt was submitted.",
-      );
-    await phase("submitting_prompt", { submissionPossible: true });
-    const submitted = await this.evaluate(
-      { operation: "send", accountKey, prompt: job.submittedPrompt, baseline },
-      signal,
-    );
-    if (!submitted.ok) {
-      await phase("preparing_prompt", { submissionPossible: false });
-      throw nativeError(
-        "GENERATION_NOT_SUBMITTED",
-        "The editor, account or response baseline changed. No prompt was submitted.",
-      );
-    }
-    await phase("generating");
-    let selected;
-    while (true) {
-      signal.throwIfAborted();
-      const state = await this.evaluate(
-        { operation: "inspect", accountKey, baseline, baselineImages },
-        signal,
-      );
-      if (state.chatId) await chat(state.chatId, state.chatUrl, accountKey);
-      if (state.selection && !state.busy && state.chatId) {
-        selected = state.selection;
-        break;
-      }
-      if (state.textOnly)
+      if (!filled.ok)
         throw nativeError(
-          "GENERATION_NO_IMAGE",
-          "Gemini completed a text-only response: no valid generated image was returned.",
+          "GENERATION_EDITOR",
+          "The prompt editor changed. No prompt was submitted.",
         );
-      await pause(500, undefined, { signal });
+      let ready;
+      for (let n = 0; n < 20; n++) {
+        ready = await this.evaluate(
+          { operation: "inspect", accountKey, baseline, baselineImages },
+          signal,
+        );
+        if (ready.canSend) break;
+        await pause(150, undefined, { signal });
+      }
+      if (!ready?.canSend)
+        throw nativeError(
+          "GENERATION_SEND_UNAVAILABLE",
+          "The Send button was not available. No prompt was submitted.",
+        );
+      await phase("submitting_prompt", { submissionPossible: true });
+      const submitted = await this.evaluate(
+        {
+          operation: "send",
+          accountKey,
+          prompt: job.submittedPrompt,
+          baseline,
+        },
+        signal,
+      );
+      if (!submitted.ok) {
+        await phase("preparing_prompt", { submissionPossible: false });
+        throw nativeError(
+          "GENERATION_NOT_SUBMITTED",
+          "The editor, account or response baseline changed. No prompt was submitted.",
+        );
+      }
+      await phase("generating");
+
+      while (true) {
+        signal.throwIfAborted();
+        const state = await this.evaluate(
+          { operation: "inspect", accountKey, baseline, baselineImages },
+          signal,
+        );
+        if (state.chatId) await chat(state.chatId, state.chatUrl, accountKey);
+        if (state.selection && !state.busy && state.chatId) {
+          selected = state.selection;
+          break;
+        }
+        if (state.textOnly)
+          throw nativeError(
+            "GENERATION_NO_IMAGE",
+            "Gemini completed a text-only response: no valid generated image was returned.",
+          );
+        await pause(500, undefined, { signal });
+      }
     }
-    await phase("downloading");
+    await phase("downloading", {
+      downloadCheckpoint: { imageKey: selected.imageKey },
+    });
     const source = await this.download({
       selection: selected,
       accountKey,
@@ -177,6 +210,12 @@ export class GenerationRunner {
       info = imageInfo(data),
       filename = "image." + info.format;
     await fs.rename(source, path.join(directory, filename));
+    this.browser.log?.write(
+      "info",
+      "browser",
+      "IMAGE_DOWNLOAD_VERIFIED",
+      "Original image bytes and dimensions verified; output saved to this job.",
+    );
     return { ...info, filename };
   }
   async download({
@@ -248,22 +287,68 @@ export class GenerationRunner {
     };
     collect(frameTree);
     let guid, timer, resolve, reject;
-    let completed = false;
+    let completed = false,
+      finished = false;
     const completion = new Promise((yes, no) => {
       resolve = yes;
       reject = no;
     });
     completion.catch(() => {});
+    let pendingGuid, pendingProgress;
+    const accept = (event) => {
+      if (guid || finished) return;
+      guid = event.guid;
+      armTimeout(60000);
+      this.browser.log?.write(
+        "info",
+        "browser",
+        "IMAGE_DOWNLOAD_STARTED",
+        "Chrome reported an image download from the managed page.",
+      );
+      if (pendingProgress?.guid === guid) progress(pendingProgress);
+    };
     const begin = (event) => {
       if (
-        frames.has(event.frameId) &&
-        !guid &&
-        /^[a-f0-9-]{16,80}$/i.test(event.guid)
+        finished ||
+        guid ||
+        pendingGuid ||
+        !/^[a-f0-9-]{16,80}$/i.test(event.guid)
       )
-        guid = event.guid;
+        return;
+      if (frames.has(event.frameId)) {
+        accept(event);
+        return;
+      }
+      // Google can create its download iframe after the toolbar click.
+      pendingGuid = event.guid;
+      pipe
+        .send("Page.getFrameTree", {}, adapter.session)
+        .then(({ frameTree }) => {
+          collect(frameTree);
+          if (frames.has(event.frameId)) accept(event);
+          else
+            this.browser.log?.write(
+              "warn",
+              "browser",
+              "IMAGE_DOWNLOAD_FRAME_UNVERIFIED",
+              "Chrome reported a download outside the verified page frames; it was not accepted.",
+            );
+        })
+        .catch(() => {})
+        .finally(() => {
+          pendingGuid = null;
+        });
     };
+    let receivedBytes = 0;
     const progress = (event) => {
-      if (event.guid !== guid) return;
+      if (event.guid !== guid) {
+        if (event.guid === pendingGuid) pendingProgress = event;
+        return;
+      }
+      if (event.receivedBytes > receivedBytes) {
+        receivedBytes = event.receivedBytes;
+        armTimeout(60000);
+      }
       if (event.receivedBytes > 100 * 1024 * 1024) {
         reject(
           nativeError(
@@ -292,16 +377,22 @@ export class GenerationRunner {
     pipe.on("Browser.downloadWillBegin", begin);
     pipe.on("Browser.downloadProgress", progress);
     signal.addEventListener("abort", abort, { once: true });
-    timer = setTimeout(
-      () =>
-        reject(
-          nativeError(
-            "GENERATION_DOWNLOAD_TIMEOUT",
-            "The original image download did not complete. Inspect the saved chat before retrying.",
+    function armTimeout(ms) {
+      clearTimeout(timer);
+      timer = setTimeout(
+        () =>
+          reject(
+            nativeError(
+              "GENERATION_DOWNLOAD_TIMEOUT",
+              guid
+                ? "Chrome started the download but stopped transferring image bytes for 60 seconds. Use Download existing image; no prompt will be resubmitted."
+                : "Chrome reported no download after clicking the image control. Use Download existing image; no prompt will be resubmitted.",
+            ),
           ),
-        ),
-      45000,
-    );
+        ms,
+      );
+    }
+    armTimeout(15000);
     try {
       signal.throwIfAborted();
       await pipe.send("Browser.setDownloadBehavior", {
@@ -324,8 +415,42 @@ export class GenerationRunner {
           "GENERATION_DOWNLOAD_CHANGED",
           "The selected current-response image changed. No download was started.",
         );
+      await pipe.send(
+        "Input.dispatchMouseEvent",
+        { type: "mouseMoved", x: result.x, y: result.y },
+        adapter.session,
+      );
+      await pipe.send(
+        "Input.dispatchMouseEvent",
+        {
+          type: "mousePressed",
+          x: result.x,
+          y: result.y,
+          button: "left",
+          clickCount: 1,
+        },
+        adapter.session,
+      );
+      await pipe.send(
+        "Input.dispatchMouseEvent",
+        {
+          type: "mouseReleased",
+          x: result.x,
+          y: result.y,
+          button: "left",
+          clickCount: 1,
+        },
+        adapter.session,
+      );
+      this.browser.log?.write(
+        "info",
+        "browser",
+        "IMAGE_DOWNLOAD_CLICKED",
+        "Original-image download control clicked using browser input.",
+      );
       return await completion;
     } finally {
+      finished = true;
       clearTimeout(timer);
       signal.removeEventListener("abort", abort);
       pipe.off("Browser.downloadWillBegin", begin);

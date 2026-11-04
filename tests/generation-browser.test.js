@@ -89,7 +89,7 @@ test(
             }
             html += '<button aria-label="Copy response">Copy</button>';
           }
-          replies.push(html);
+          replies.push({ html, prompt: data.prompt });
           chats.set(id, replies);
           res.setHeader("Content-Type", "application/json");
           res.end(
@@ -109,13 +109,21 @@ test(
       }
       const id = url.pathname.match(/^\/app\/(.+)$/)?.[1] || "";
       const history = (chats.get(id) || [])
-        .map((html) => "<model-response>" + html + "</model-response>")
+        .map(
+          ({ html, prompt }) =>
+            '<user-query><span class="query-text">' +
+            prompt.replaceAll("&", "&amp;").replaceAll("<", "&lt;") +
+            "</span></user-query><model-response>" +
+            html +
+            "</model-response>",
+        )
         .join("");
       res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><div contenteditable="true" role="textbox" class="ql-editor"></div><button id="send" aria-label="Send message">Send</button><script>
-      function wire(){for(const b of document.querySelectorAll('[data-download]'))b.onclick=()=>{const a=document.createElement('a');a.href=b.dataset.download;a.download='original.png';document.body.append(a);a.click();a.remove();};}
+      function wire(){for(const b of document.querySelectorAll('[data-download]'))b.onclick=(event)=>{if(!event.isTrusted || !navigator.userActivation.isActive)return;const frame=document.createElement('iframe');frame.src=b.dataset.download;document.body.append(frame);};}
       wire();document.querySelector('#send').onclick=async()=>{
         const editor=document.querySelector('[contenteditable]'),prompt=editor.textContent;document.querySelector('#send').disabled=true;
         for(const old of document.querySelectorAll('model-response'))old.replaceWith(old.cloneNode(true));
+        const query=document.createElement('user-query');query.textContent=prompt;document.querySelector('#responses').append(query);
         const response=document.createElement('model-response');response.setAttribute('aria-busy','true');response.textContent='Generating';document.querySelector('#responses').append(response);
         const stop=document.createElement('button');stop.setAttribute('aria-label','Stop response');stop.textContent='Stop';document.body.append(stop);
         const data=await(await fetch('/mock/generate',{method:'POST',body:JSON.stringify({prompt,chatId:location.pathname.split('/')[2]||null})})).json();
@@ -333,8 +341,48 @@ test(
             ?.textContent.startsWith("cancelled"),
         slow.id,
       );
+      // Recover the existing response with and without a new-version checkpoint.
+      for (const target of [second, first]) {
+        const stored = service.generation.get(target.id);
+        stored.state = "needs_review";
+        stored.error = {
+          code: "GENERATION_DOWNLOAD_TIMEOUT",
+          message: "Synthetic lost download",
+        };
+        if (target.id === first.id) delete stored.downloadCheckpoint;
+        await service.generation.persist();
+        const beforeRecovery = posts;
+        assert.equal(
+          (
+            await request(
+              "/api/generation/jobs/" + target.id + "/recover",
+              "POST",
+            )
+          ).status,
+          200,
+        );
+        const recovered = await final(target.id);
+        assert.equal(
+          recovered.state,
+          "completed",
+          JSON.stringify(recovered.error),
+        );
+        assert.equal(
+          posts,
+          beforeRecovery,
+          "download recovery must never submit a prompt",
+        );
+        const output = Buffer.from(
+          await (
+            await request("/api/generation/jobs/" + target.id + "/image")
+          ).arrayBuffer(),
+        );
+        assert.ok(output.equals(png(target.id === first.id ? 20 : 40)));
+      }
       await page.locator("#result-filter").selectOption("completed");
-      assert.equal(await page.locator(".generation-job").count(), 3);
+      await page.waitForFunction(
+        () => document.querySelectorAll(".generation-job").length === 3,
+      );
       assert.equal(
         await page
           .locator('.generation-job:not([data-state="completed"])')
@@ -357,6 +405,20 @@ test(
         path: "test-results/image-generator-mobile.png",
         fullPage: true,
       });
+      const ambiguous = service.generation.get(first.id);
+      ambiguous.state = "needs_review";
+      ambiguous.error = {
+        code: "GENERATION_DOWNLOAD_TIMEOUT",
+        message: "Synthetic old job",
+      };
+      delete ambiguous.downloadCheckpoint;
+      const replies = chats.get(first.chatId);
+      replies.push(replies[0]);
+      const beforeAmbiguous = posts;
+      await request("/api/generation/jobs/" + first.id + "/recover", "POST");
+      const refused = await final(first.id);
+      assert.equal(refused.error.code, "GENERATION_RECOVERY_UNVERIFIED");
+      assert.equal(posts, beforeAmbiguous);
     } catch (error) {
       await fs.mkdir("test-results", { recursive: true });
       if (service.browser.running)

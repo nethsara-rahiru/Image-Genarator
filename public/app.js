@@ -579,6 +579,7 @@ function renderGeneration(data) {
     )
       button("Cancel job", "cancel");
     else {
+      if (job.canRecoverDownload) button("Download existing image", "recover");
       if (!job.submissionPossible && job.state !== "completed")
         button("Retry before submission", "retry");
       const remove = document.createElement("button");

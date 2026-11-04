@@ -330,3 +330,40 @@ test("corrupt storage is preserved and output symlinks are rejected", async (t) 
   await assert.rejects(reopened.init());
   assert.equal(await fs.readFile(q.file, "utf8"), "broken-journal");
 });
+
+test("download recovery preserves submission marker and is distinct from prompt retry", async (t) => {
+  let calls = 0;
+  const q = await queue(t, {
+    async run(job, context) {
+      calls++;
+      if (!job.downloadOnly) {
+        await context.phase("downloading", {
+          submissionPossible: true,
+          accountKey: "account-a",
+          downloadCheckpoint: { imageKey: "a".repeat(64) },
+        });
+        await context.chat(
+          "saved-chat",
+          "https://gemini.google.com/app/saved-chat",
+          "account-a",
+        );
+        throw nativeError("GENERATION_DOWNLOAD_TIMEOUT", "No download event");
+      }
+      assert.equal(job.submissionPossible, true);
+      await fs.mkdir(context.directory, { recursive: true });
+      await fs.writeFile(path.join(context.directory, "image.png"), png());
+      return { ...imageInfo(png()), filename: "image.png" };
+    },
+  });
+  const job = await q.create({
+    prompt: "image",
+    idempotencyKey: "recover-key",
+  });
+  await until(() => q.get(job.id).state === "needs_review");
+  assert.equal(q.publicJob(q.get(job.id)).canRecoverDownload, true);
+  await assert.rejects(q.retry(job.id), /already have been submitted/);
+  await q.recover(job.id);
+  await until(() => q.get(job.id).state === "completed");
+  assert.equal(calls, 2);
+  await assert.rejects(q.recover(job.id), /no verified download-stage/);
+});

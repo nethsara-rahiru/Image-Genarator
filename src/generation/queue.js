@@ -103,9 +103,27 @@ export class GenerationQueue {
     return result;
   }
   publicJob(job) {
-    const { accountKey, idempotencyKey, submittedPrompt, ...publicJob } = job;
+    const {
+      accountKey,
+      idempotencyKey,
+      submittedPrompt,
+      downloadCheckpoint,
+      ...publicJob
+    } = job;
     return {
       ...publicJob,
+      canRecoverDownload:
+        finalStates.has(job.state) &&
+        job.state !== "completed" &&
+        !!job.submissionPossible &&
+        !!job.chatId &&
+        !!accountKey &&
+        !!(
+          downloadCheckpoint ||
+          /^GENERATION_DOWNLOAD_|^GENERATION_INVALID_DOWNLOAD$|^INVALID_IMAGE$/.test(
+            job.error?.code || "",
+          )
+        ),
       queuePosition:
         job.state === "queued"
           ? this.data.jobs.filter(
@@ -149,6 +167,9 @@ export class GenerationQueue {
   }
   retry(id) {
     return this.mutate(() => this.retryJob(id));
+  }
+  recover(id) {
+    return this.mutate(() => this.recoverDownload(id));
   }
   remove(id) {
     return this.mutate(() => this.removeJob(id));
@@ -416,6 +437,34 @@ export class GenerationQueue {
         "GENERATION_REVIEW_REQUIRED",
         "This prompt may already have been submitted. Inspect its chat; automatic retry is disabled.",
       );
+    job.state = "queued";
+    job.sequence = Math.max(...this.data.jobs.map((j) => j.sequence)) + 1;
+    job.error = null;
+    job.updatedAt = new Date().toISOString();
+    await this.persist();
+    this.start();
+    return this.publicJob(job);
+  }
+  async recoverDownload(id) {
+    const job = this.get(id);
+    if (
+      !finalStates.has(job.state) ||
+      job.state === "completed" ||
+      !job.submissionPossible ||
+      !job.chatId ||
+      !job.accountKey ||
+      !(
+        job.downloadCheckpoint ||
+        /^GENERATION_DOWNLOAD_|^GENERATION_INVALID_DOWNLOAD$|^INVALID_IMAGE$/.test(
+          job.error?.code || "",
+        )
+      )
+    )
+      throw nativeError(
+        "GENERATION_RECOVERY_UNAVAILABLE",
+        "This job has no verified download-stage response. Inspect its saved chat manually; no prompt will be resubmitted.",
+      );
+    job.downloadOnly = true;
     job.state = "queued";
     job.sequence = Math.max(...this.data.jobs.map((j) => j.sequence)) + 1;
     job.error = null;

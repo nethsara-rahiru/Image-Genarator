@@ -21,6 +21,10 @@ configuration. Optional `AUTH_REQUIRED=true` enables the legacy protected API.
   null until Gemini's real conversation URL is observed.
 - `POST /api/generation/jobs/:id/cancel`: cancel queued/running work. A submitted
   Google prompt cannot be undone; cancellation never silently resubmits it.
+- `POST /api/generation/jobs/:id/recover`: download-only recovery for an existing
+  download-stage failure. Opens the same chat/account and requires a unique image
+  fingerprint or, for older jobs, a unique exact prompt/response pair. Never fills
+  the composer or submits a prompt. `canRecoverDownload` controls its dashboard action.
 - `POST /api/generation/jobs/:id/retry`: explicit retry only when submission
   could not have occurred. Submitted/ambiguous/completed prompts are not replayed.
 - `DELETE /api/generation/jobs/:id`: remove a terminal local job/output, preserving
