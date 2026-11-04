@@ -66,3 +66,17 @@ Chrome window. The existing Linux driver and Docker background mode use a privat
 virtual display. With preview streaming removed, those modes require separate
 trusted desktop access to complete a new sign-in; the dashboard no longer provides
 that access. An existing saved signed-in profile can still be used for generation.
+
+## Generated image did not download
+
+Update the app, restart Node, and select **Download existing image** on the failed
+job. This opens its saved chat and retries only the original-image download. The
+app verifies the original account and image fingerprint; older jobs require an
+unambiguous exact prompt/response match. If matching fails, download manually from
+Gemini rather than creating another generation. Do not delete the old job first.
+
+The debug console reports IMAGE_DOWNLOAD_CLICKED, IMAGE_DOWNLOAD_STARTED and
+IMAGE_DOWNLOAD_VERIFIED. A timeout distinguishes no Chrome download event from a
+transfer that stalled. The download starts with a trusted browser mouse click;
+new child frames are checked against the managed page before accepting a file.
+No image URLs, cookies, tokens or prompt content are included in these events.

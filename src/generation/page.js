@@ -127,9 +127,47 @@ export async function generationPage(request) {
     send[0].click();
     return { ok: true };
   }
-  const fresh = responses.filter(
+  let fresh = responses.filter(
     (e) => !(request.baseline || []).includes(id(e)),
   );
+  if (request.recoverImageKey) {
+    const matching = [];
+    for (const r of responses)
+      for (const image of r.querySelectorAll("img"))
+        if ((await imageKey(image)) === request.recoverImageKey)
+          matching.push(r);
+    fresh = [...new Set(matching)];
+    if (fresh.length !== 1) return { ...base, kind: "recovery_unverified" };
+  } else if (request.recoverPrompt) {
+    const normalize = (text) =>
+      text
+        .replace(/^You said\s*/i, "")
+        .replace(/\s+/g, " ")
+        .trim();
+    const turns = all('user-query,[data-message-author-role="user"]').filter(
+      (e) => !responses.some((r) => r.contains(e)),
+    );
+    const matches = turns.filter(
+      (e) =>
+        normalize((e.querySelector(".query-text") || e).textContent) ===
+        normalize(request.recoverPrompt),
+    );
+    if (matches.length !== 1) return { ...base, kind: "recovery_unverified" };
+    const user = matches[0];
+    const following = (e) =>
+      !!(user.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING);
+    const nextUser = turns.find((e) => e !== user && following(e));
+    fresh = responses.filter(
+      (r) =>
+        following(r) &&
+        (!nextUser ||
+          !!(
+            r.compareDocumentPosition(nextUser) &
+            Node.DOCUMENT_POSITION_FOLLOWING
+          )),
+    );
+    if (fresh.length !== 1) return { ...base, kind: "recovery_unverified" };
+  }
   const response = fresh.at(-1);
   const busy =
     controls.some((e) =>
@@ -179,7 +217,13 @@ export async function generationPage(request) {
       if (!(request.baselineImages || []).includes(await imageKey(image)))
         allowedImages.push(image);
     images = allowedImages;
-    const image = images[0];
+    const image = request.recoverImageKey
+      ? (
+          await Promise.all(
+            images.map(async (e) => ({ e, key: await imageKey(e) })),
+          )
+        ).find((entry) => entry.key === request.recoverImageKey)?.e
+      : images[0];
     if (image) {
       let container = image.parentElement,
         download;
@@ -198,6 +242,7 @@ export async function generationPage(request) {
       selected = {
         responseId: id(response),
         imageId: id(image),
+        imageKey: await imageKey(image),
         buttonId: download ? id(download) : null,
       };
     }
@@ -229,8 +274,13 @@ export async function generationPage(request) {
     const button = [
       ...response.querySelectorAll('button,[role="button"]'),
     ].find((e) => id(e) === selected.buttonId);
-    button.click();
-    return { ok: true };
+    button.scrollIntoView({ block: "center", inline: "center" });
+    const rect = button.getBoundingClientRect();
+    const x = rect.x + rect.width / 2,
+      y = rect.y + rect.height / 2;
+    if (!visible(button) || !button.contains(document.elementFromPoint(x, y)))
+      return { ok: false };
+    return { ok: true, x, y };
   }
   const pendingImage =
     !!response &&

@@ -377,12 +377,16 @@ export async function startServer(config, options = {}) {
       jobError(res, error);
     }
   });
-  for (const operation of ["cancel", "retry"])
+  for (const operation of ["cancel", "retry", "recover"])
     app.post(
       "/api/generation/jobs/:id/" + operation,
       auth,
       async (req, res) => {
         try {
+          if (operation === "recover" && flow.snapshot().active)
+            return res.status(409).json({
+              error: "Finish manual sign-in before recovering a download.",
+            });
           res.json(await generation[operation](req.params.id));
         } catch (error) {
           jobError(res, error);

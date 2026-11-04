@@ -332,3 +332,19 @@ this app does not bypass it or guarantee that Gemini will return an image.
   fixture screenshots are CI artifacts, not committed runtime data.
 - Live Google/Gemini integration remains separately UNVERIFIED; this change does
   not alter account sessions, automation or output storage.
+
+## Original-image download timeout repair
+
+- Replaced JavaScript element.click with validated hit-tested CDP mouse input and
+  user activation. Added dynamic child-frame verification and safe buffering of
+  download progress while verifying a new frame.
+- Added download-only recovery for new and older failed jobs. New jobs persist an
+  image fingerprint; older jobs require a unique exact prompt/response match.
+  The same account/chat is required. The recovery path cannot fill or send prompts.
+- Added sanitized click/start/verified download events and separate no-start vs
+  stalled-transfer timeout messages. Original image signature/size checks remain.
+- Regression fixtures require trusted click/user activation, start downloads in
+  new iframes, verify exact original bytes, recover both checkpoint/legacy jobs
+  with unchanged submission counts, and reject ambiguous response associations.
+- Live Gemini behavior remains UNVERIFIED until tested with the user's account.
+  Final automated evidence and CI links are recorded in the follow-up PR.
