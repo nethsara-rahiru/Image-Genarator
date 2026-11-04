@@ -81,7 +81,8 @@ test(
       posts = 0;
     const chats = new Map(),
       images = new Map(),
-      downloads = [];
+      downloads = [],
+      receivedReferences = [];
     const fixture = http.createServer((req, res) => {
       const url = new URL(req.url, "http://fixture");
       if (url.pathname.startsWith("/img/")) {
@@ -126,6 +127,7 @@ test(
         req.on("end", () => {
           const data = JSON.parse(Buffer.concat(chunks).toString());
           posts++;
+          receivedReferences.push(data.references || []);
           const id = data.chatId || "fixture-chat-" + posts;
           const replies = chats.get(id) || [];
           let html;
@@ -178,17 +180,23 @@ test(
             "</model-response>",
         )
         .join("");
-      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>html{scroll-behavior:smooth}body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><div contenteditable="true" role="textbox" class="ql-editor"></div><button id="send" aria-label="Send message">Send</button><script>
+      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>html{scroll-behavior:smooth}body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><form><div id="attachments"></div><input type="file" accept="image/*" multiple hidden><div contenteditable="true" role="textbox" class="ql-editor"></div><button type="button" id="send" aria-label="Send message">Send</button></form><script>
       function wire(){for(const b of document.querySelectorAll('[data-download]')){b.onmouseenter=()=>{if(b.dataset.rebound)return;b.dataset.rebound='yes';const clone=b.cloneNode(true);clone.style.marginLeft='24px';b.replaceWith(clone);wire();};b.onclick=async(event)=>{if(!event.isTrusted || !navigator.userActivation.isActive)return;const prepared=await(await fetch('/prepare?file='+encodeURIComponent(b.dataset.download))).json();const frame=document.createElement('iframe');frame.src=prepared.url;document.body.append(frame);};}}
+      document.querySelector('input[type=file]').onchange=(event)=>{
+        const attachments=document.querySelector('#attachments');attachments.setAttribute('aria-busy','true');attachments.textContent='Uploading';
+        setTimeout(()=>{attachments.textContent=[...event.target.files].map(file=>file.name).join(' ');attachments.removeAttribute('aria-busy');},200);
+      };
       wire();document.querySelector('#send').onclick=async()=>{
+        if(document.querySelector('#attachments').getAttribute('aria-busy')==='true')throw Error('Sent before upload completion');
+        const references=await Promise.all([...document.querySelector('input[type=file]').files].map(async(file)=>({name:file.name,bytes:[...new Uint8Array(await file.arrayBuffer())]})));
         const editor=document.querySelector('[contenteditable]'),prompt=editor.textContent;document.querySelector('#send').disabled=true;
         for(const old of document.querySelectorAll('model-response'))old.replaceWith(old.cloneNode(true));
         const query=document.createElement('user-query');query.textContent=prompt;document.querySelector('#responses').append(query);
         const response=document.createElement('model-response');response.setAttribute('aria-busy','true');response.textContent='Generating';document.querySelector('#responses').append(response);
         const stop=document.createElement('button');stop.setAttribute('aria-label','Stop response');stop.textContent='Stop';document.body.append(stop);
-        const data=await(await fetch('/mock/generate',{method:'POST',body:JSON.stringify({prompt,chatId:location.pathname.split('/')[2]||null})})).json();
+        const data=await(await fetch('/mock/generate',{method:'POST',body:JSON.stringify({prompt,references,chatId:location.pathname.split('/')[2]||null})})).json();
         history.replaceState({},'', '/app/'+data.id);
-        setTimeout(()=>{response.innerHTML=data.html;response.removeAttribute('aria-busy');stop.remove();document.querySelector('#send').disabled=false;editor.textContent='';wire();},data.delay);
+        setTimeout(()=>{response.innerHTML=data.html;response.removeAttribute('aria-busy');stop.remove();document.querySelector('#send').disabled=false;editor.textContent='';document.querySelector('#attachments').textContent='';document.querySelector('input[type=file]').value='';wire();},data.delay);
       };
     </script></body></html>`);
     });
@@ -303,6 +311,12 @@ test(
       await page
         .locator("#generation-prompt")
         .fill("first multi-image response");
+      await page.locator("#generation-references").setInputFiles({
+        name: "dashboard-logo.png",
+        mimeType: "image/png",
+        buffer: png(17),
+      });
+      assert.equal(await page.locator("#reference-previews img").count(), 1);
       await page.locator("#generate").click();
       await until(() => service.generation.data.jobs.length === 1);
       const first = await final(service.generation.data.jobs[0].id);
@@ -352,6 +366,11 @@ test(
       });
 
       assert.deepEqual(downloads, ["/img/1-0.png"]);
+      assert.deepEqual(Buffer.from(receivedReferences[0][0].bytes), png(17));
+      const firstMetadata = await (
+        await request("/api/generation/jobs/" + first.id + "/metadata")
+      ).json();
+      assert.deepEqual(firstMetadata.inputAssetNames, ["dashboard-logo.png"]);
       assert.ok(
         service.log
           .snapshot()
@@ -548,13 +567,24 @@ test(
       const apiClient = await createClient(data, "Browser fixture API");
       const apiHeaders = {
         Authorization: "Bearer " + apiClient.token,
-        "Content-Type": "application/json",
         "Idempotency-Key": "browser-api-generation-0001",
       };
+      const apiForm = new FormData();
+      apiForm.set("prompt", "API image generation");
+      apiForm.append(
+        "references",
+        new Blob([png(19)], { type: "image/png" }),
+        "api-logo.png",
+      );
+      apiForm.append(
+        "references",
+        new Blob([png(21)], { type: "image/png" }),
+        "api-reference.png",
+      );
       const accepted = await fetch(base + "/api/v1/generations", {
         method: "POST",
         headers: apiHeaders,
-        body: JSON.stringify({ prompt: "API image generation" }),
+        body: apiForm,
       });
       assert.equal(accepted.status, 202);
       const apiJob = await accepted.json();
@@ -566,6 +596,23 @@ test(
       ).json();
       assert.equal(status.state, "completed");
       assert.ok(status.chatId);
+      assert.deepEqual(
+        Buffer.from(receivedReferences.at(-1)[0].bytes),
+        png(19),
+      );
+      assert.deepEqual(
+        Buffer.from(receivedReferences.at(-1)[1].bytes),
+        png(21),
+      );
+      const apiMetadata = await (
+        await fetch(base + "/api/v1/generations/" + apiJob.id + "/metadata", {
+          headers: apiHeaders,
+        })
+      ).json();
+      assert.deepEqual(apiMetadata.inputAssetNames, [
+        "api-logo.png",
+        "api-reference.png",
+      ]);
       const output = await fetch(
         base + "/api/v1/generations/" + apiJob.id + "/image",
         { headers: apiHeaders },

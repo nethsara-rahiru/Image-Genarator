@@ -22,6 +22,7 @@ import { GenerationRunner } from "./generation/runner.js";
 import { nativeError } from "./native/common.js";
 import { clientAuthentication } from "./apiClients.js";
 import { clientApi } from "./clientApi.js";
+import { referenceUpload } from "./generation/references.js";
 import { RemoteBrowser } from "./browser.js";
 const publicDir = fileURLToPath(new URL("../public", import.meta.url));
 class SessionStore extends session.Store {
@@ -395,14 +396,20 @@ export async function startServer(config, options = {}) {
   app.get("/api/generation", auth, (req, res) =>
     res.json(generation.snapshot()),
   );
-  app.post("/api/generation/jobs", auth, async (req, res) => {
+  app.post("/api/generation/jobs", auth, referenceUpload, async (req, res) => {
     if (flow.snapshot().active)
       return res.status(409).json({
         error:
           "Finish or cancel the sign-in assistant before starting generation.",
       });
     try {
-      res.status(202).json(await generation.create(req.body));
+      res.status(202).json(
+        await generation.create({
+          ...req.body,
+          chatId: req.body?.chatId || null,
+          referenceImages: req.files || [],
+        }),
+      );
     } catch (error) {
       jobError(res, error);
     }

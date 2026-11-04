@@ -1,5 +1,6 @@
 import express from "express";
 import { actionError } from "./actionErrors.js";
+import { referenceUpload } from "./generation/references.js";
 export function clientApi({ browser, generation, flow, action }) {
   const router = express.Router();
   const scope = (name) => (req, res, next) =>
@@ -77,27 +78,38 @@ export function clientApi({ browser, generation, flow, action }) {
         .map((job) => generation.publicJob(job)),
     });
   });
-  router.post("/generations", scope("generate"), async (req, res) => {
-    if (flow.snapshot().active)
-      return res.status(409).json({ error: "Finish manual sign-in first" });
-    const { prompt, chatId = null } = req.body || {};
-    if (!/^[A-Za-z0-9_-]{8,128}$/.test(req.headers["idempotency-key"] || ""))
-      return res.status(400).json({
-        code: "GENERATION_IDEMPOTENCY_KEY_REQUIRED",
-        error:
-          "Set the Idempotency-Key header to 8–128 letters, digits, underscores or dashes. Use a new key for each new generation; reuse it only to safely repeat the same request.",
-      });
-    if (chatId && !jobs(req).some((job) => job.chatId === chatId))
-      return res
-        .status(404)
-        .json({ error: "Chat not found for this API client" });
-    const job = await generation.create(
-      { prompt, chatId, idempotencyKey: req.headers["idempotency-key"] },
-      req.apiClient.id,
-    );
-    res.locals.apiJobId = job.id;
-    res.status(202).location(`/api/v1/generations/${job.id}`).json(job);
-  });
+  router.post(
+    "/generations",
+    scope("generate"),
+    referenceUpload,
+    async (req, res) => {
+      if (flow.snapshot().active)
+        return res.status(409).json({ error: "Finish manual sign-in first" });
+      const { prompt } = req.body || {};
+      const chatId = req.body?.chatId || null;
+      if (!/^[A-Za-z0-9_-]{8,128}$/.test(req.headers["idempotency-key"] || ""))
+        return res.status(400).json({
+          code: "GENERATION_IDEMPOTENCY_KEY_REQUIRED",
+          error:
+            "Set the Idempotency-Key header to 8–128 letters, digits, underscores or dashes. Use a new key for each new generation; reuse it only to safely repeat the same request.",
+        });
+      if (chatId && !jobs(req).some((job) => job.chatId === chatId))
+        return res
+          .status(404)
+          .json({ error: "Chat not found for this API client" });
+      const job = await generation.create(
+        {
+          prompt,
+          chatId,
+          idempotencyKey: req.headers["idempotency-key"],
+          referenceImages: req.files || [],
+        },
+        req.apiClient.id,
+      );
+      res.locals.apiJobId = job.id;
+      res.status(202).location(`/api/v1/generations/${job.id}`).json(job);
+    },
+  );
   router.get("/generations/:id", scope("read"), (req, res) => {
     const job = owns(req, req.params.id);
     res.locals.apiJobId = job.id;

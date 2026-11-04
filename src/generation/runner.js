@@ -56,6 +56,105 @@ export class GenerationRunner {
     await this.downloadCleanup;
     if (this.downloadCleanupError) throw this.downloadCleanupError;
   }
+  async uploadReferences(job, directory, signal, accountKey) {
+    const references = job.references || [];
+    if (!Array.isArray(references) || references.length > 4)
+      throw nativeError(
+        "GENERATION_REFERENCES",
+        "Reference image list is invalid.",
+      );
+    if (!references.length) return;
+    const inputs = path.join(directory, "inputs");
+    const inputStat = await fs.lstat(inputs);
+    if (!inputStat.isDirectory() || inputStat.isSymbolicLink())
+      throw nativeError(
+        "GENERATION_REFERENCES",
+        "Reference image storage is unsafe.",
+      );
+    const files = [];
+    for (const reference of references) {
+      if (
+        !/^reference-[1-4]-[a-f0-9]{8}\.(png|jpg|webp)$/.test(
+          reference.filename,
+        )
+      )
+        throw nativeError(
+          "GENERATION_REFERENCES",
+          "Reference image storage is invalid.",
+        );
+      const file = path.join(inputs, reference.filename);
+      const stat = await fs.lstat(file);
+      if (
+        !stat.isFile() ||
+        stat.isSymbolicLink() ||
+        stat.size > 10 * 1024 * 1024
+      )
+        throw nativeError(
+          "GENERATION_REFERENCES",
+          "Reference image storage is invalid.",
+        );
+      if (imageInfo(await fs.readFile(file)).checksum !== reference.checksum)
+        throw nativeError(
+          "GENERATION_REFERENCES",
+          "A reference image changed. No prompt was submitted.",
+        );
+      files.push(file);
+    }
+    let prepared = false;
+    for (let n = 0; n < 20; n++) {
+      if (
+        (
+          await this.evaluate(
+            { operation: "prepare_attachments", accountKey },
+            signal,
+          )
+        ).ok
+      ) {
+        prepared = true;
+        break;
+      }
+      await pause(250, undefined, { signal });
+    }
+    if (!prepared)
+      throw nativeError(
+        "GENERATION_UPLOAD_UNAVAILABLE",
+        "Gemini's image upload control was not uniquely recognized. No prompt was submitted.",
+      );
+    const pipe = this.browser.pipe,
+      session = this.browser.gemini.session;
+    const { root } = await pipe.send("DOM.getDocument", {}, session);
+    const { nodeId } = await pipe.send(
+      "DOM.querySelector",
+      { nodeId: root.nodeId, selector: '[data-local-reference-input="true"]' },
+      session,
+    );
+    if (!nodeId)
+      throw nativeError(
+        "GENERATION_UPLOAD_UNAVAILABLE",
+        "Gemini's upload input changed. No prompt was submitted.",
+      );
+    await pipe.send("DOM.setFileInputFiles", { nodeId, files }, session);
+    for (let n = 0; n < 120; n++) {
+      if (
+        (
+          await this.evaluate(
+            {
+              operation: "attachments_ready",
+              accountKey,
+              referenceNames: references.map((reference) => reference.filename),
+            },
+            signal,
+          )
+        ).ok
+      )
+        return;
+      await pause(250, undefined, { signal });
+    }
+    throw nativeError(
+      "GENERATION_UPLOAD_UNCONFIRMED",
+      "Gemini did not confirm all reference attachments within 30 seconds. No prompt was submitted.",
+    );
+  }
   async run(job, { signal, directory, phase, chat }) {
     await this.waitForDownloadCleanup();
     this.recoveryRequest = job.downloadOnly
@@ -127,6 +226,11 @@ export class GenerationRunner {
       baseline = before.responseIds;
       baselineImages = before.imageKeys;
 
+      if (job.references?.length) {
+        await phase("uploading_assets", { accountKey });
+        await this.uploadReferences(job, directory, signal, accountKey);
+      }
+
       await phase("preparing_prompt", { accountKey });
       const filled = await this.evaluate(
         { operation: "fill_prompt", accountKey, prompt: job.submittedPrompt },
@@ -158,6 +262,9 @@ export class GenerationRunner {
           accountKey,
           prompt: job.submittedPrompt,
           baseline,
+          referenceNames: (job.references || []).map(
+            (reference) => reference.filename,
+          ),
         },
         signal,
       );

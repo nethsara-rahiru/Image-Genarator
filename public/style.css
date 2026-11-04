@@ -709,3 +709,20 @@ dialog .actions {
 .api-log-table th {
   white-space: nowrap;
 }
+.reference-previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.reference-previews > div {
+  display: grid;
+  gap: 6px;
+  width: 140px;
+  overflow-wrap: anywhere;
+}
+.reference-previews img {
+  width: 140px;
+  height: 100px;
+  object-fit: contain;
+  border-radius: 8px;
+}
