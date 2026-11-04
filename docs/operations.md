@@ -145,3 +145,14 @@ Regression coverage withholds Chrome input/frame/cleanup acknowledgements, drops
 completion events and leaves the real Gemini-like tab in the background. This
 verifies the independent handoff; physical macOS App Nap/occlusion and live Google
 behavior still require target testing.
+
+## Reference input storage
+
+Reference images remain under each job's private outputs/<job-id>/inputs folder,
+not the static web directory. Back up runtime storage as usual to preserve queued
+jobs and safe retries; reference bytes are sensitive user assets. Removing a local
+terminal job deletes its input files too. Signature/size/checksum failures stop
+before prompt submission. If Gemini no longer exposes a unique upload input or
+attachment confirmation, inspect the job's GENERATION_UPLOAD_* error and host
+browser. Never force-send an unconfirmed attachment. Live provider UI changes can
+require adapter updates; fixture tests do not certify live Gemini.

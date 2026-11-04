@@ -5,6 +5,7 @@ import lockfile from "proper-lockfile";
 import { nativeError } from "../native/common.js";
 import { imageInfo } from "./imageInfo.js";
 import { actionError } from "../actionErrors.js";
+import { prepareReferences } from "./references.js";
 const finalStates = new Set([
   "completed",
   "failed",
@@ -183,7 +184,7 @@ export class GenerationQueue {
     return this.mutate(() => this.renameSavedChat(id, title));
   }
   async createJob(
-    { prompt, chatId = null, idempotencyKey } = {},
+    { prompt, chatId = null, idempotencyKey, referenceImages = [] } = {},
     apiClientId = null,
   ) {
     if (this.runner.downloadCleanupError)
@@ -202,16 +203,29 @@ export class GenerationQueue {
         "GENERATION_INPUT",
         "Enter a prompt (up to 8000 characters), a valid chat selection and an idempotency key.",
       );
+    const references = prepareReferences(referenceImages);
     const prior = this.data.jobs.find(
       (j) =>
         j.idempotencyKey === idempotencyKey &&
         (j.apiClientId || null) === apiClientId,
     );
     if (prior) {
-      if (prior.prompt !== prompt.trim() || prior.requestedChatId !== chatId)
+      if (
+        prior.prompt !== prompt.trim() ||
+        prior.requestedChatId !== chatId ||
+        JSON.stringify(
+          (prior.references || []).map(({ checksum, name }) => ({
+            checksum,
+            name,
+          })),
+        ) !==
+          JSON.stringify(
+            references.map(({ checksum, name }) => ({ checksum, name })),
+          )
+      )
         throw nativeError(
           "GENERATION_CONFLICT",
-          "This request key was already used for a different prompt/chat.",
+          "This request key was already used for a different prompt, chat or reference images.",
         );
       return this.publicJob(prior);
     }
@@ -233,6 +247,7 @@ export class GenerationQueue {
     const job = {
       id: randomUUID(),
       idempotencyKey,
+      references: references.map(({ buffer, ...reference }) => reference),
       apiClientId,
       sequence: Math.max(0, ...this.data.jobs.map((j) => j.sequence)) + 1,
       prompt: prompt.trim(),
@@ -251,6 +266,16 @@ export class GenerationQueue {
     };
     this.data.jobs.push(job);
     try {
+      if (references.length) {
+        const inputs = path.join(this.outputs, job.id, "inputs");
+        await fs.mkdir(inputs, { recursive: true, mode: 0o700 });
+        for (const reference of references)
+          await fs.writeFile(
+            path.join(inputs, reference.filename),
+            reference.buffer,
+            { mode: 0o600, flag: "wx" },
+          );
+      }
       if (Buffer.byteLength(JSON.stringify(this.data)) > 19 * 1024 * 1024)
         throw nativeError(
           "GENERATION_STORAGE_FULL",
@@ -259,6 +284,10 @@ export class GenerationQueue {
       await this.persist();
     } catch (error) {
       this.data.jobs.splice(this.data.jobs.indexOf(job), 1);
+      await fs.rm(path.join(this.outputs, job.id), {
+        recursive: true,
+        force: true,
+      });
       throw error;
     }
     this.start();
@@ -308,6 +337,7 @@ export class GenerationQueue {
           progress:
             {
               running: 10,
+              uploading_assets: 20,
               preparing_prompt: 25,
               submitting_prompt: 40,
               generating: 60,
@@ -363,7 +393,9 @@ export class GenerationQueue {
           accountRef: job.accountKey,
           prompt: job.prompt,
           submittedPrompt: job.submittedPrompt,
-          inputAssetNames: [],
+          inputAssetNames: (job.references || []).map(
+            (reference) => reference.name,
+          ),
           outputFilename: output.filename,
           ...output,
           createdAt: job.createdAt,
@@ -554,7 +586,9 @@ export class GenerationQueue {
         accountRef: job.accountKey,
         prompt: job.prompt,
         submittedPrompt: job.submittedPrompt,
-        inputAssetNames: [],
+        inputAssetNames: (job.references || []).map(
+          (reference) => reference.name,
+        ),
         outputFilename: output.filename,
         ...output,
         createdAt: job.createdAt,

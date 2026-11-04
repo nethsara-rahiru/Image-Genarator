@@ -612,3 +612,12 @@ job/request IDs without tokens or request bodies. For API generation, use
 **POST /api/v1/generations** and a unique `Idempotency-Key` header. `202` means
 accepted; poll the returned job ID for completion. Reusing a key returns the old
 job instead of starting another. See [API diagnostics](docs/client-api.md#api-request-diagnostics).
+
+### Generate with reference images
+
+Select up to four reference images in the generator (PNG/JPEG/WebP, 10 MB each).
+Previews and Remove controls let you review them before submission. Gemini must
+confirm every attachment before the prompt is sent. API clients can submit
+`multipart/form-data` to `/api/v1/generations` with `prompt` text and repeated
+`references` file fields. JSON without files remains supported. See
+[reference upload examples and Postman instructions](docs/client-api.md#reference-images).

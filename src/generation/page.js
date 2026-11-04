@@ -83,6 +83,62 @@ export async function generationPage(request) {
   const send = controls.filter(
     (e) => /^(send|send message|submit prompt)$/i.test(label(e)) && !e.disabled,
   );
+  const composer =
+    editor?.closest(
+      "input-area-v2,input-area,form,.input-area-container,.input-container",
+    ) || editor?.parentElement;
+  const attachmentsReady = (names) => {
+    if (!names?.length) return true;
+    if (
+      !composer ||
+      [
+        ...composer.querySelectorAll(
+          '[role="progressbar"],[aria-busy="true"],mat-progress-spinner,mat-progress-bar,.uploading,[data-upload-state="uploading"]',
+        ),
+      ].some(visible)
+    )
+      return false;
+    const text = `${composer.innerText} ${[
+      ...composer.querySelectorAll("[aria-label],img[alt],[title]"),
+    ]
+      .filter(visible)
+      .map(
+        (node) =>
+          `${node.getAttribute("aria-label") || ""} ${node.getAttribute("alt") || ""} ${node.getAttribute("title") || ""}`,
+      )
+      .join(" ")}`;
+    return names.every((name) => text.includes(name));
+  };
+  if (request.operation === "prepare_attachments") {
+    const inputs = [...document.querySelectorAll('input[type="file"]')].filter(
+      (input) =>
+        !responses.some((response) => response.contains(input)) &&
+        (!input.accept || /image|\.png|\.jpe?g|\.webp/i.test(input.accept)),
+    );
+    if (inputs.length === 1) {
+      for (const marked of document.querySelectorAll(
+        "[data-local-reference-input]",
+      ))
+        marked.removeAttribute("data-local-reference-input");
+      inputs[0].setAttribute("data-local-reference-input", "true");
+      return { ok: true };
+    }
+    if (!inputs.length) {
+      let upload = controls.filter((node) =>
+        /^upload files?$/i.test(label(node)),
+      );
+      if (!upload.length)
+        upload = controls.filter((node) =>
+          /^(add files?|add photos?(?: and files)?|upload photos?(?: and files)?)$/i.test(
+            label(node),
+          ),
+        );
+      if (upload.length === 1) upload[0].click();
+    }
+    return { ok: false };
+  }
+  if (request.operation === "attachments_ready")
+    return { ok: attachmentsReady(request.referenceNames) };
   if (request.operation === "new_chat") {
     const buttons = controls.filter((e) =>
       /^(new chat|start new chat)$/i.test(label(e)),
@@ -121,7 +177,8 @@ export async function generationPage(request) {
       !editor ||
       (editor.value ?? editor.textContent) !== request.prompt ||
       send.length !== 1 ||
-      ids.join(",") !== (request.baseline || []).join(",")
+      ids.join(",") !== (request.baseline || []).join(",") ||
+      !attachmentsReady(request.referenceNames)
     )
       return { ok: false };
     send[0].click();

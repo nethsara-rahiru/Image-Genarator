@@ -495,3 +495,24 @@ this app does not bypass it or guarantee that Gemini will return an image.
   polls completion, downloads exact original bytes and checks the live table.
 - Final test/CI evidence and PR references are recorded in the PR. Live target-PC
   request reproduction and live Google generation remain UNVERIFIED.
+
+## Reference-image generation uploads
+
+- Dashboard supports multi-select image previews/removal; both dashboard and bearer
+  API accept multipart generation with repeated references file fields. Existing
+  JSON-only requests remain supported.
+- Enforce four files / 10 MB each, two concurrent multipart uploads, signature
+  validation, randomized private storage, checksum verification before upload and
+  bounded attachment confirmation. No prompt is sent for unconfirmed attachments.
+- References persist with queued jobs and pre-submission retries; idempotency
+  compares input names/checksums as well as prompt/chat. Job deletion removes
+  inputs. Generated and manually imported metadata preserve inputAssetNames.
+- Browser uses a uniquely recognized file input and composer-scoped attachment
+  confirmation, then rechecks attachments during send. Download-only recovery
+  never uploads or resubmits. Unsupported/changed Gemini UI fails explicitly.
+- Tests cover validation, limits, redaction/storage, changed-reference request
+  conflicts, corrupted local inputs, cancelled confirmation and file cleanup.
+  Real Chromium fixture tests dashboard previews/upload and multipart API upload,
+  exact reference bytes, confirmation before send, metadata and image download.
+- Live Gemini attachment integration remains UNVERIFIED until tested on the host
+  PC. Final CI/test evidence and commit/PR references are recorded in the PR.

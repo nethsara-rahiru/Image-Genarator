@@ -612,6 +612,7 @@ function renderGeneration(data) {
       [
         "queued",
         "running",
+        "uploading_assets",
         "preparing_prompt",
         "submitting_prompt",
         "generating",
@@ -774,16 +775,76 @@ async function refreshGeneration() {
   }
 }
 
+let referenceFiles = [];
+let referencePreviewUrls = [];
+function renderReferences() {
+  referencePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
+  referencePreviewUrls = [];
+  const previews = $("reference-previews");
+  previews.replaceChildren();
+  referenceFiles.forEach((file, index) => {
+    const card = document.createElement("div");
+    const image = document.createElement("img");
+    const url = URL.createObjectURL(file);
+    referencePreviewUrls.push(url);
+    image.src = url;
+    image.alt = file.name;
+    const name = document.createElement("span");
+    name.textContent = file.name;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "Remove";
+    remove.setAttribute("aria-label", "Remove " + file.name);
+    remove.onclick = () => {
+      referenceFiles.splice(index, 1);
+      renderReferences();
+    };
+    card.append(image, name, remove);
+    previews.append(card);
+  });
+}
+$("generation-references").onchange = (event) => {
+  const selected = [...event.target.files];
+  event.target.value = "";
+  if (
+    referenceFiles.length + selected.length > 4 ||
+    selected.some(
+      (file) =>
+        file.size > 10 * 1024 * 1024 ||
+        !["image/png", "image/jpeg", "image/webp"].includes(file.type),
+    )
+  )
+    return report(
+      "Choose up to four PNG, JPEG or WebP images, at most 10 MB each.",
+    );
+  referenceFiles.push(...selected);
+  renderReferences();
+  report("");
+};
 $("generator-form").onsubmit = async (event) => {
   event.preventDefault();
   $("generate").disabled = true;
+  $("generation-references").disabled = true;
+  $("generation-status").textContent = referenceFiles.length
+    ? "Uploading reference images…"
+    : "Submitting job…";
   try {
-    const job = await api("/api/generation/jobs", "POST", {
+    const input = {
       prompt: $("generation-prompt").value,
       chatId: $("generation-chat").value || null,
       idempotencyKey: generationRequestKey,
-    });
+    };
+    let body = input;
+    if (referenceFiles.length) {
+      body = new FormData();
+      for (const [key, value] of Object.entries(input))
+        body.set(key, value || "");
+      for (const file of referenceFiles) body.append("references", file);
+    }
+    const job = await api("/api/generation/jobs", "POST", body);
     generationRequestKey = crypto.randomUUID();
+    referenceFiles = [];
+    renderReferences();
     report("");
     $("generation-status").textContent = "Accepted job " + job.id;
     await refreshGeneration();
@@ -791,6 +852,7 @@ $("generator-form").onsubmit = async (event) => {
     report(error.message);
   } finally {
     $("generate").disabled = false;
+    $("generation-references").disabled = false;
   }
 };
 setInterval(() => {

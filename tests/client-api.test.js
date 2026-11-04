@@ -206,6 +206,85 @@ test("API clients use revocable scoped bearer keys, own outputs and isolated ide
     await request(`/api/v1/generations/${first.id}/metadata`)
   ).json();
   assert.equal(metadata.jobId, first.id);
+  const referenceForm = () => {
+    const form = new FormData();
+    form.set("prompt", "Use this reference");
+    form.append(
+      "references",
+      new Blob([png(33)], { type: "application/octet-stream" }),
+      "logo-without-extension",
+    );
+    return form;
+  };
+  const multipart = (body, key = "reference-api-request", client = a.token) =>
+    fetch(base + "/api/v1/generations", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + client, "Idempotency-Key": key },
+      body,
+    });
+  const uploaded = await multipart(referenceForm());
+  assert.equal(uploaded.status, 202);
+  const referencedJob = await uploaded.json();
+  assert.equal(
+    (await (await multipart(referenceForm())).json()).id,
+    referencedJob.id,
+  );
+  const storedReference = service.generation.get(referencedJob.id)
+    .references[0];
+  assert.deepEqual(
+    await fs.readFile(
+      path.join(
+        service.generation.outputs,
+        referencedJob.id,
+        "inputs",
+        storedReference.filename,
+      ),
+    ),
+    png(33),
+  );
+  for (
+    let n = 0;
+    n < 100 && service.generation.get(referencedJob.id).state !== "completed";
+    n++
+  )
+    await pause(20);
+  const referenceMetadata = await (
+    await request(`/api/v1/generations/${referencedJob.id}/metadata`)
+  ).json();
+  assert.deepEqual(referenceMetadata.inputAssetNames, [
+    "logo-without-extension",
+  ]);
+  assert.equal(
+    (await multipart(referenceForm(), "scope-reference-key", read.token))
+      .status,
+    403,
+  );
+  const invalid = new FormData();
+  invalid.set("prompt", "bad reference");
+  invalid.append(
+    "references",
+    new Blob(["<svg>unsafe</svg>"], { type: "image/png" }),
+    "fake.png",
+  );
+  assert.equal((await multipart(invalid, "invalid-reference-key")).status, 400);
+  const tooMany = referenceForm();
+  for (let i = 0; i < 4; i++)
+    tooMany.append("references", new Blob([png()]), "image.png");
+  assert.equal(
+    (await multipart(tooMany, "too-many-reference-key")).status,
+    400,
+  );
+  const oversized = new FormData();
+  oversized.set("prompt", "large reference");
+  oversized.append(
+    "references",
+    new Blob([Buffer.alloc(10 * 1024 * 1024 + 1)]),
+    "large.png",
+  );
+  assert.equal(
+    (await multipart(oversized, "oversized-reference-key")).status,
+    413,
+  );
   assert.equal((await request("/api/v1/generations?limit=999")).status, 400);
   assert.equal((await request("/api/v1/unknown")).status, 404);
   const oldToken = a.token;

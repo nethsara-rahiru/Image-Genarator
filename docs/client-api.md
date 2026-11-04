@@ -184,3 +184,43 @@ If no automation starts, check the request row first:
 A missing API table row suggests the request did not reach this running app
 (e.g. a wrong port, unavailable tunnel, or TLS failure). Google sign-in remains
 manual in the host browser. Live Gemini generation requires target-PC validation.
+
+## Reference images
+
+The generator accepts up to **4 PNG, JPEG or WebP images, 10 MB each**. Select
+Reference images in the dashboard, review the previews, remove any unwanted files,
+and submit the prompt. The server checks actual file bytes, stores randomized
+private filenames with the durable job, uploads them to Gemini and confirms all
+attachment names in the composer before submitting. A missing/ambiguous upload
+control or unconfirmed attachment stops the job without sending a prompt.
+
+For the API, use the existing `POST /api/v1/generations` endpoint with
+`multipart/form-data`. Repeat the **references** file field for each image. Keep
+`prompt` as text; omit `chatId` for a new chat. JSON requests without files still
+work. Do not manually set Content-Type: your client must include its multipart
+boundary. Bearer scopes, ownership and idempotency rules still apply.
+
+```bash
+curl --fail-with-body "$IMAGE_API_BASE/api/v1/generations" \
+  -H "Authorization: Bearer $IMAGE_API_TOKEN" \
+  -H "Idempotency-Key: reference-request-0001" \
+  -F 'prompt=Create a product poster using this logo and reference style' \
+  -F 'references=@/path/to/logo.png' \
+  -F 'references=@/path/to/style.jpg'
+```
+
+In Postman select **Body → form-data**: `prompt` = Text, `references` = File
+(repeat for more images). Set Authorization to Bearer Token and supply a fresh
+Idempotency-Key for each new generation. Repeating a request with the same key
+must include the same prompt, chat and ordered reference names/bytes; changed
+references produce a conflict. Do not use a fresh key merely to retry an ambiguous
+submitted prompt.
+
+Job JSON includes reference descriptors (sanitized input name, checksum, format,
+size and randomized filename), never server paths or file contents. Output
+metadata includes `inputAssetNames`. Images are retained with their job for safe
+pre-submission retries and restart recovery, included in runtime backups, and
+deleted with the local job/output. Inputs have no public download endpoint.
+Download-only recovery does not upload references or resubmit a prompt. Manual
+Google sign-in remains unchanged. Real Chromium fixture uploads are tested; live
+Google/Gemini attachment behavior is **UNVERIFIED** until tested on the host PC.

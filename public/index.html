@@ -123,6 +123,25 @@
                 required
                 placeholder="Describe the image you want to create…"
               ></textarea>
+              <label for="generation-references"
+                >Reference images (optional)</label
+              >
+              <input
+                id="generation-references"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                multiple
+                aria-describedby="reference-help"
+              />
+              <p id="reference-help" class="muted">
+                Up to 4 PNG, JPEG or WebP images, 10 MB each. Gemini receives
+                these with your prompt.
+              </p>
+              <div
+                id="reference-previews"
+                class="reference-previews"
+                aria-live="polite"
+              ></div>
               <div class="actions">
                 <button id="generate" class="primary">Generate image</button>
               </div>
