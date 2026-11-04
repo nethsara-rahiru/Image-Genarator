@@ -294,6 +294,10 @@ async function downloads() {
 }
 $("downloads-toggle").onclick = () => {
   $("downloads-panel").hidden = !$("downloads-panel").hidden;
+  $("downloads-toggle").setAttribute(
+    "aria-expanded",
+    String(!$("downloads-panel").hidden),
+  );
   if (!$("downloads-panel").hidden) downloads();
 };
 $("refresh-downloads").onclick = downloads;
@@ -390,8 +394,17 @@ let geminiFlow = { state: "idle", active: false };
 
 function renderFlow(value) {
   geminiFlow = value;
+  const ready = ["signed_in", "already_signed_in"].includes(value.state);
+  $("session-badge").textContent = ready
+    ? "Signed in"
+    : ["awaiting_user", "needs_review"].includes(value.state)
+      ? "Action needed"
+      : value.active
+        ? "Checking…"
+        : "Not checked";
+  $("session-badge").dataset.state = ready ? "ready" : "pending";
   $("gemini-status").textContent =
-    value.message || "Start automation to inspect Gemini before sign-in.";
+    value.message || "Open Gemini in Chrome, then check your sign-in here.";
   $("gemini-start").disabled = !!value.active;
   $("gemini-proceed").hidden = ![
     "awaiting_user",
@@ -479,13 +492,29 @@ function renderGeneration(data) {
   );
   if (data.chats.some((chat) => chat.id === selected))
     $("generation-chat").value = selected;
+  $("generation-jobs").setAttribute("aria-busy", "false");
   $("generation-jobs").replaceChildren();
-  for (const job of data.jobs) {
+  const filter = $("result-filter").value;
+  const visibleJobs = data.jobs.filter((job) =>
+    filter === "completed"
+      ? job.state === "completed"
+      : filter === "attention"
+        ? ["failed", "needs_login", "needs_review"].includes(job.state)
+        : true,
+  );
+  for (const job of visibleJobs) {
     const card = document.createElement("article");
     card.className = "generation-job";
     card.dataset.jobId = job.id;
+    card.dataset.state = job.state;
     const heading = document.createElement("h3");
-    heading.textContent = job.state.replaceAll("_", " ") + " · " + job.id;
+    const badge = document.createElement("span");
+    badge.className = "job-state";
+    badge.textContent = job.state.replaceAll("_", " ");
+    const jobId = document.createElement("span");
+    jobId.className = "job-id";
+    jobId.textContent = job.id;
+    heading.append(badge, jobId);
     const prompt = document.createElement("p");
     prompt.textContent = job.promptPreview;
     const progress = document.createElement("progress");
@@ -601,8 +630,20 @@ function renderGeneration(data) {
     card.append(actions);
     $("generation-jobs").append(card);
   }
-  if (!data.jobs.length)
-    $("generation-jobs").textContent = "No generation jobs yet.";
+  if (!visibleJobs.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state";
+    const title = document.createElement("strong");
+    title.textContent = data.jobs.length
+      ? "No matching jobs"
+      : "Your next image starts here";
+    const hint = document.createElement("p");
+    hint.textContent = data.jobs.length
+      ? "Choose another filter to see your jobs."
+      : "Describe an image and select Generate image. Progress and original downloads will appear here.";
+    empty.append(title, hint);
+    $("generation-jobs").append(empty);
+  }
   $("generation-chats").replaceChildren();
   for (const chat of data.chats) {
     const row = document.createElement("div");
@@ -640,7 +681,7 @@ async function refreshGeneration() {
     report(error.message);
   }
 }
-$("refresh-generation").onclick = refreshGeneration;
+
 $("generator-form").onsubmit = async (event) => {
   event.preventDefault();
   $("generate").disabled = true;
@@ -664,3 +705,7 @@ setInterval(() => {
   if (loggedIn && ws?.readyState !== WebSocket.OPEN) refreshGeneration();
 }, 3000);
 boot();
+
+$("refresh-results").onclick = refreshGeneration;
+
+$("result-filter").onchange = () => renderGeneration(generationSnapshot);

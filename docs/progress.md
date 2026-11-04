@@ -314,3 +314,21 @@ this app does not bypass it or guarantee that Gemini will return an image.
   bytes and a loaded image in the dashboard. Real Google/Gemini remains unverified.
 - Host tests: 46 passed, 3 environment skips. Full native Linux suite: 48 passed, 1 OS helper skip. CI results are
   recorded in the follow-up pull request. No Google security bypass is added.
+
+## Studio UI / UX reorganization
+
+- Replaced the browser-first layout with a responsive image workspace: session
+  connection, prompt composer, jobs/results and saved conversations.
+- Added section navigation, result filters (all jobs/images/needs attention),
+  readable job status badges, empty states, keyboard focus and a skip link.
+- Browser controls and AI settings are collapsed secondary tools. Diagnostics
+  and browser downloads remain available. Manual Google sign-in is unchanged.
+- Removed all remaining browser preview canvas/empty-screen styles. Generated
+  image previews and original-image/JSON downloads remain available.
+- Validation: host suite 46 passed / 3 environment skips; native Linux suite
+  48 passed / 1 OS helper skip; lint passed. Chromium fixture verifies keyboard
+  focus, collapsed browser controls, downloads expansion, real image downloads,
+  result filtering and no horizontal overflow at 390px. Desktop/mobile synthetic
+  fixture screenshots are CI artifacts, not committed runtime data.
+- Live Google/Gemini integration remains separately UNVERIFIED; this change does
+  not alter account sessions, automation or output storage.
