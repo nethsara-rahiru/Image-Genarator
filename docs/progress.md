@@ -408,3 +408,14 @@ this app does not bypass it or guarantee that Gemini will return an image.
 - Physical second-PC certificate import, OS firewalls, macOS/Windows browser
   permissions and live Google/Gemini remain UNVERIFIED until target validation.
   Final automated evidence and PR references are recorded in the PR.
+
+## README API and output reference
+
+- Expanded README with every v1 route, required scopes, request headers/bodies,
+  Postman/LAN/TLS/token setup, curl workflow, job polling and original-image/JSON
+  output behavior. Response excerpts are explicitly illustrative, not live results.
+- Added complete dashboard route inventory and separate session/CSRF requirements,
+  plus WebSocket scope, error/status guidance, limits and recovery behavior.
+- Checked route and output field names against clientApi.js, server.js and the
+  generation queue. Removed obsolete README claims of automated Groq Google login.
+- Documentation-only change; Markdown formatting/link checks are recorded in PR.
