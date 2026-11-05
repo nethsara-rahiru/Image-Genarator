@@ -230,7 +230,21 @@ poll once per second and log changes plus ten-second heartbeats. Confirmation
 snapshots show expectedCount, matchedCount, previewCount, busyCount, composerFound
 and reason. matchedCount=0 with previewCount>0 and busyCount=0 suggests an
 unrecognized filename/widget layout rather than merely slow upload. busyCount>0
-means a visible upload indicator still exists. Only matched names with no busy
-indicator pass; a thumbnail alone is insufficient proof. Shortened filenames can
+means a visible upload indicator still exists. Only matching filename metadata or verified local attachment bytes, with no busy
+indicator, pass; an arbitrary thumbnail alone is insufficient proof. Shortened filenames can
 match safe title/tooltip/data-filename metadata near the composer, excluding chat
 history. Send checks again after the pacing delay. No prompt is sent on failure.
+
+### Blob-only reference previews
+
+Gemini can display an img with class gem-attachment-style-img, alt="attachment"
+and a local blob URL instead of a filename. For this exact widget near the
+composer, the adapter can verify the blob's original SHA-256 against each expected
+reference. nameMatchedCount and blobMatchedCount show which evidence matched;
+no image bytes, blob URLs or hashes are logged. Busy indicators still block Send.
+
+A resized/re-encoded, revoked, unreadable or unrelated blob may not match. Such
+previews remain unconfirmed (preview_bytes_unverified); do not force-send them.
+The check reads only bounded same-origin blob data, never remote preview URLs,
+chat-history images, screenshots or model vision input. Live Gemini variants
+still require host-PC validation.

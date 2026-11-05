@@ -630,3 +630,23 @@ this app does not bypass it or guarantee that Gemini will return an image.
   outside the editor with busy indicators. Full browser fixture retains actual
   first-job pacing; fixture-only later jobs run faster. Final CI evidence is in
   the PR. Live Gemini attachment readiness remains UNVERIFIED.
+
+## Blob-only Gemini attachment confirmation
+
+- User supplied the real thumbnail markup: img.gem-attachment-style-img with
+  alt="attachment" and a same-origin blob URL, exposing no filename metadata.
+- Keep filename confirmation and add bounded local blob SHA-256 verification for
+  loaded, visible instances of this widget near the composer. Compare against
+  the original validated reference checksums one-to-one; previews in chat history,
+  unrelated bytes, remote URLs and duplicate counts cannot establish a match.
+- Read at most 10 MB per preview and at most eight candidates, with local fetch
+  timeouts and per-image/source weak caching. No screenshot/image analysis,
+  remote model call, blob URL, image bytes or hash is returned in debug logs.
+- Keep busy indicators and disabled-send guards; recheck account/editor/chat and
+  response baseline after asynchronous verification before clicking Send.
+- Logs expose nameMatchedCount and blobMatchedCount. Transformed/unreadable blob
+  bytes remain unconfirmed rather than bypassing the guard. Live user PC remains
+  UNVERIFIED after code updates; final CI/test evidence and PR links are in PR.
+- Real browser fixture now uses filename-free blob previews for dashboard/API
+  reference generation. Widget tests cover matching/mismatched bytes, busy state,
+  duplicate counts, privacy and exclusion of historical response thumbnails.

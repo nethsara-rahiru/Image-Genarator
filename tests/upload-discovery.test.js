@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import { chromium } from "playwright";
 import { generationPage } from "../src/generation/page.js";
+import { createHash } from "node:crypto";
+import { png } from "./fixtures/png.js";
 
 test(
   "upload discovery scopes inputs, rejects ambiguity and opens a lazy portalled menu once",
@@ -159,5 +161,82 @@ test(
     });
     assert.equal(status.ok, true);
     assert.equal(status.expectedCount, 1);
+    const bytes = png(39);
+    const checksum = createHash("sha256").update(bytes).digest("hex");
+    await page.evaluate(
+      (data) => {
+        document.querySelector("[data-filename]").remove();
+        const image = document.createElement("img");
+        image.id = "blob-attachment";
+        image.alt = "attachment";
+        image.className = "gem-attachment-style-img ng-star-inserted";
+        image.src = URL.createObjectURL(
+          new Blob([new Uint8Array(data)], { type: "image/png" }),
+        );
+        document.querySelector("form").append(image);
+      },
+      [...bytes],
+    );
+    await page.waitForFunction(
+      () => document.querySelector("#blob-attachment").naturalWidth > 0,
+    );
+    const checkBlob = (checksums = [checksum], names = [referenceName]) =>
+      page.evaluate(generationPage, {
+        origin,
+        operation: "attachments_ready",
+        referenceNames: names,
+        referenceChecksums: checksums,
+      });
+    status = await checkBlob();
+    assert.equal(status.ok, true);
+    assert.equal(status.nameMatchedCount, 0);
+    assert.equal(status.blobMatchedCount, 1);
+    assert.doesNotMatch(
+      JSON.stringify(status),
+      /blob:|reference-1-|[a-f0-9]{64}/,
+    );
+    assert.equal((await checkBlob(["0".repeat(64)])).ok, false);
+    assert.equal(
+      (
+        await checkBlob(
+          [checksum, checksum],
+          [referenceName, "reference-2.png"],
+        )
+      ).ok,
+      false,
+    );
+    await page.locator("#blob-attachment").evaluate((image) => {
+      const clone = image.cloneNode();
+      clone.id = "duplicate-preview";
+      image.after(clone);
+    });
+    await page.waitForFunction(
+      () => document.querySelector("#duplicate-preview").naturalWidth > 0,
+    );
+    assert.equal(
+      (
+        await checkBlob(
+          [checksum, checksum],
+          [referenceName, "reference-2.png"],
+        )
+      ).ok,
+      false,
+    );
+    await page
+      .locator("#duplicate-preview")
+      .evaluate((image) => image.remove());
+    await page
+      .locator("form")
+      .evaluate((form) => form.setAttribute("aria-busy", "true"));
+    assert.equal((await checkBlob()).ok, false);
+    await page
+      .locator("form")
+      .evaluate((form) => form.removeAttribute("aria-busy"));
+    await page
+      .locator("#blob-attachment")
+      .evaluate((image) =>
+        document.querySelector("model-response").append(image),
+      );
+    assert.equal((await checkBlob()).ok, false);
   },
 );
