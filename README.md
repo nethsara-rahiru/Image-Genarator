@@ -616,8 +616,8 @@ job instead of starting another. See [API diagnostics](docs/client-api.md#api-re
 ### Generate with reference images
 
 Select up to four reference images in the generator (PNG/JPEG/WebP, 10 MB each).
-Previews and Remove controls let you review them before submission. Gemini must
-confirm every attachment before the prompt is sent. API clients can submit
+Previews and Remove controls let you review them before submission. The app currently waits 15 seconds after file delivery, then enters the prompt
+without provider attachment confirmation. Jobs and metadata mark this unverified. API clients can submit
 `multipart/form-data` to `/api/v1/generations` with `prompt` text and repeated
 `references` file fields. JSON without files remains supported. See
 [reference upload examples and Postman instructions](docs/client-api.md#reference-images).
@@ -652,3 +652,11 @@ Filename-free Gemini attachment thumbnails can now be confirmed by matching thei
 local blob bytes to the uploaded reference checksum. Live automation shows
 `nameMatchedCount` and `blobMatchedCount`. Upload-busy and final-send checks remain
 required; transformed/unreadable previews can still need an adapter update.
+
+### Current temporary reference mode
+
+After Chrome acknowledges reference file delivery, the dashboard shows a
+**15-second countdown**, then continues to prompt entry without confirming
+Gemini's attachments. Jobs and metadata report `timed_unverified`. You can cancel
+throughout the countdown. The previous attachment-confirmation timeout does not
+apply to this mode. Account, enabled Send and duplicate-submission checks remain.

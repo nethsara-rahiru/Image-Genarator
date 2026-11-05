@@ -650,3 +650,26 @@ this app does not bypass it or guarantee that Gemini will return an image.
 - Real browser fixture now uses filename-free blob previews for dashboard/API
   reference generation. Widget tests cover matching/mismatched bytes, busy state,
   duplicate counts, privacy and exclusion of historical response thumbnails.
+
+## Temporary timed reference continuation (user override)
+
+- User explicitly requested skipping attachment confirmation and entering the
+  prompt after a visible 15-second countdown. This supersedes the strict reference
+  confirmation gate for the current generation flow.
+- Require successful Chrome file-delivery acknowledgement, then persist
+  waiting_for_attachments with a deadline and timed_unverified mode. A cancellable
+  fifteen-second timer precedes prompt preparation; no filename/blob confirmation
+  is required for Send in this mode. Keep account, editor, enabled Send, baseline,
+  cancellation and ambiguous-submission guards.
+- Dashboard shows a live countdown from server remaining duration using a monotonic
+  client clock, and retains an unverified reference label on job cards. REST job
+  responses include attachmentWaitUntil/attachmentWaitRemainingMs; generated and
+  manually imported metadata include attachmentConfirmation.
+- Restart during this pre-submission stage fails safely for explicit retry. No
+  prompt is automatically resubmitted, and failed local file delivery never starts
+  the timer. Strict blob/filename diagnostic helpers remain available but do not
+  gate this timed flow; the legacy confirmation timeout setting is inactive here.
+- Tests cover the real 15-second countdown decreasing on screen, no prompt before
+  expiry, continuation despite an unrecognized preview, unverified metadata,
+  cancellation and file-ack validation. Final automated/CI evidence is in PR.
+- Actual Gemini use of the intended attachments is deliberately UNVERIFIED.

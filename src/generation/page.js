@@ -451,10 +451,11 @@ export async function generationPage(request) {
       (editor.value ?? editor.textContent) !== request.prompt ||
       send.length !== 1 ||
       ids.join(",") !== (request.baseline || []).join(",") ||
-      !(await attachmentsReady(
-        request.referenceNames,
-        request.referenceChecksums,
-      ))
+      (!request.skipAttachmentConfirmation &&
+        !(await attachmentsReady(
+          request.referenceNames,
+          request.referenceChecksums,
+        )))
     )
       return { ok: false };
     // Attachment hashing is asynchronous: recheck input identity/state after it.

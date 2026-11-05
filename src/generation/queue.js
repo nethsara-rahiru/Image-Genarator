@@ -114,6 +114,10 @@ export class GenerationQueue {
     } = job;
     return {
       ...publicJob,
+      attachmentWaitRemainingMs:
+        job.state === "waiting_for_attachments"
+          ? Math.max(0, Date.parse(job.attachmentWaitUntil) - Date.now()) || 0
+          : 0,
       browserCleanupPending: !!(
         this.active?.id === job.id && this.runner.downloadCleanupPending
       ),
@@ -340,6 +344,7 @@ export class GenerationQueue {
               waiting_for_page: 12,
               settling_page: 14,
               uploading_assets: 20,
+              waiting_for_attachments: 22,
               preparing_prompt: 25,
               submitting_prompt: 40,
               generating: 60,
@@ -395,6 +400,7 @@ export class GenerationQueue {
           accountRef: job.accountKey,
           prompt: job.prompt,
           submittedPrompt: job.submittedPrompt,
+          attachmentConfirmation: job.attachmentConfirmation || "not_recorded",
           inputAssetNames: (job.references || []).map(
             (reference) => reference.name,
           ),
@@ -588,6 +594,7 @@ export class GenerationQueue {
         accountRef: job.accountKey,
         prompt: job.prompt,
         submittedPrompt: job.submittedPrompt,
+        attachmentConfirmation: job.attachmentConfirmation || "not_recorded",
         inputAssetNames: (job.references || []).map(
           (reference) => reference.name,
         ),

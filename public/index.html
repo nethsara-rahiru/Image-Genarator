@@ -134,8 +134,9 @@
                 aria-describedby="reference-help"
               />
               <p id="reference-help" class="muted">
-                Up to 4 PNG, JPEG or WebP images, 10 MB each. Gemini receives
-                these with your prompt.
+                Up to 4 PNG, JPEG or WebP images, 10 MB each. After file
+                delivery, a 15-second countdown runs before prompt entry. Gemini
+                attachment confirmation is currently skipped.
               </p>
               <div
                 id="reference-previews"
@@ -170,6 +171,12 @@
                 ><button id="refresh-results" type="button">Refresh</button>
               </div>
             </div>
+            <p
+              id="attachment-countdown"
+              class="status-line"
+              role="status"
+              hidden
+            ></p>
             <p id="generation-status" class="status-line" role="status">
               Loading saved jobs…
             </p>
