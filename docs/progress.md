@@ -694,3 +694,8 @@ this app does not bypass it or guarantee that Gemini will return an image.
   Prettier CI. No runtime data, credentials or test databases are committed.
 - Run with the Marketing Agent README instructions and open Menu → AI Agent.
   Deployment and real social/AI integrations are not part of this composer feature.
+- Implementation commit: `b3a546f`; review and CI:
+  [PR #36](https://github.com/nethsara-rahiru/Image-Genarator/pull/36).
+  Local final checks: lint passed; root suite 77 passed / 5 explicitly skipped /
+  0 failed; new Marketing Agent suite 2 passed / 0 skipped / 0 failed using
+  MongoDB 8 and Chromium, including the full API and browser workflow.
