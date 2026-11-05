@@ -535,3 +535,22 @@ this app does not bypass it or guarantee that Gemini will return an image.
   disabled inputs and single-open behavior. Confirmation-before-send is retained.
 - Exact live Gemini verification remains UNVERIFIED. CI and merge references are
   recorded in the PR; failed jobs remain safe to retry before submission.
+
+## Gemini page readiness and false login failures
+
+- Generation previously mapped every non-signed_in result after an eight-second
+  observation to LOGIN_REQUIRED, including unknown/loading during app hydration.
+- Wait up to GENERATION_READY_TIMEOUT_SECONDS (default 45, maximum 120) for loaded
+  signed-in account/editor evidence and generation-page readiness before inputs.
+  Retry transient page changes/sign-in flashes through this observation window.
+- Only observed sign-in UI at expiry yields LOGIN_REQUIRED; an incomplete or
+  unrecognized app yields PAGE_NOT_READY. Account mismatches and security blocks
+  remain guarded. Waiting is cancellable and within the overall job deadline.
+- Added waiting_for_page progress and cancel support. Fresh-chat transitions use
+  the readiness bound while preserving the original account guard. No credentials
+  are filled, prompts retried or login/security checks bypassed.
+- Unit cases cover loading/unknown/sign-in flashes, incomplete editor, cancellation,
+  real sign-out classification and bounded configuration. Real browser fixture
+  delays the first account/editor hydration for nine seconds (beyond the old
+  eight-second check) before dashboard/API generation.
+- Live Google behavior remains UNVERIFIED; final test/CI evidence is in the PR.

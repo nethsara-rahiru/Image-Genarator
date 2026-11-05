@@ -56,6 +56,57 @@ export class GenerationRunner {
     await this.downloadCleanup;
     if (this.downloadCleanupError) throw this.downloadCleanupError;
   }
+  async waitForPageReady(job, signal) {
+    const deadline =
+      Date.now() + (this.browser.config?.generationReadyTimeoutMs || 45000);
+    let last;
+    while (Date.now() < deadline) {
+      signal.throwIfAborted();
+      last = await this.browser.gemini.observe({
+        signal,
+        timeout: Math.min(1500, deadline - Date.now()),
+      });
+      if (last.kind === "signed_in") {
+        try {
+          const page = await this.evaluate(
+            { operation: "inspect", accountKey: job.accountKey },
+            signal,
+          );
+          if (page.kind === "ready" && page.editorReady) return page;
+        } catch (error) {
+          if (
+            !["GENERATION_LOGIN_REQUIRED", "GENERATION_PAGE_CHANGED"].includes(
+              error.code,
+            )
+          )
+            throw error;
+        }
+      }
+      await pause(200, undefined, { signal });
+    }
+    if (
+      [
+        "signed_out",
+        "email",
+        "password",
+        "verification",
+        "account_chooser",
+      ].includes(last?.kind)
+    )
+      throw nativeError(
+        "GENERATION_LOGIN_REQUIRED",
+        "The loaded page requires Google sign-in. Sign in manually in Chrome, then retry. No prompt was submitted.",
+      );
+    if (["security_check", "blocked"].includes(last?.kind))
+      throw nativeError(
+        "GENERATION_RESTRICTED",
+        "The page reports a security restriction or blocked destination. Inspect Chrome manually. No prompt was submitted.",
+      );
+    throw nativeError(
+      "GENERATION_PAGE_NOT_READY",
+      "Gemini did not finish loading its signed-in prompt editor within the readiness timeout. Check the page/network and retry. No prompt was submitted.",
+    );
+  }
   async uploadReferences(job, directory, signal, accountKey) {
     const references = job.references || [];
     if (!Array.isArray(references) || references.length > 4)
@@ -182,16 +233,8 @@ export class GenerationRunner {
     signal.throwIfAborted();
     const adapter = this.browser.gemini;
     await adapter.open("gemini", job.chatId);
-    const login = await adapter.observe({ signal });
-    if (login.kind !== "signed_in")
-      throw nativeError(
-        "GENERATION_LOGIN_REQUIRED",
-        "Sign in manually in the opened Chrome window, then retry this job. No prompt was submitted.",
-      );
-    let before = await this.evaluate(
-      { operation: "inspect", accountKey: job.accountKey },
-      signal,
-    );
+    await phase("waiting_for_page");
+    let before = await this.waitForPageReady(job, signal);
     if (job.chatId && before.chatId !== job.chatId)
       throw nativeError(
         "GENERATION_CHAT_UNAVAILABLE",
@@ -219,15 +262,38 @@ export class GenerationRunner {
             "GENERATION_NEW_CHAT",
             "Could not verify a new Gemini chat. No prompt was submitted.",
           );
-        for (let n = 0; n < 20; n++) {
+        const newChatDeadline =
+          Date.now() + (this.browser.config?.generationReadyTimeoutMs || 45000);
+        const newChatAccountKey = before.accountKey;
+        while (Date.now() < newChatDeadline) {
           await pause(250, undefined, { signal });
-          before = await this.evaluate(
-            { operation: "inspect", accountKey: before.accountKey },
-            signal,
-          );
-          if (!before.chatId && !before.responseIds.length) break;
+          try {
+            before = await this.evaluate(
+              { operation: "inspect", accountKey: newChatAccountKey },
+              signal,
+            );
+          } catch (error) {
+            if (
+              ["GENERATION_LOGIN_REQUIRED", "GENERATION_PAGE_CHANGED"].includes(
+                error.code,
+              )
+            )
+              continue;
+            throw error;
+          }
+          if (
+            before.kind === "ready" &&
+            before.editorReady &&
+            !before.chatId &&
+            !before.responseIds.length
+          )
+            break;
         }
-        if (before.chatId || before.responseIds.length)
+        if (
+          before.kind !== "ready" ||
+          before.chatId ||
+          before.responseIds.length
+        )
           throw nativeError(
             "GENERATION_NEW_CHAT",
             "A fresh empty chat could not be verified. No prompt was submitted.",

@@ -621,3 +621,11 @@ confirm every attachment before the prompt is sent. API clients can submit
 `multipart/form-data` to `/api/v1/generations` with `prompt` text and repeated
 `references` file fields. JSON without files remains supported. See
 [reference upload examples and Postman instructions](docs/client-api.md#reference-images).
+
+### Waiting for Gemini to load
+
+Jobs show `waiting_for_page` until Gemini's document and signed-in prompt editor
+are ready. Set `GENERATION_READY_TIMEOUT_SECONDS=45` in .env to adjust the bounded
+wait (1–120 seconds). A slow/unrecognized page reports `GENERATION_PAGE_NOT_READY`
+instead of assuming the Google session expired. The total job timeout still
+applies. Actual Google sign-in remains manual.

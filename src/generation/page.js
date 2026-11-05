@@ -3,6 +3,7 @@ export async function generationPage(request) {
   const current = new URL(location.href);
   const origin = request.origin || "https://gemini.google.com";
   if (current.origin !== origin) return { kind: "needs_login" };
+  if (document.readyState !== "complete") return { kind: "loading" };
   const visible = (e) =>
     !!e &&
     !!e.getClientRects().length &&
@@ -23,8 +24,9 @@ export async function generationPage(request) {
   const account = controls.find((e) =>
     /^Google Account\s*:/i.test(e.getAttribute("aria-label") || ""),
   );
-  if (!account || controls.some((e) => /^sign in$/i.test(label(e))))
+  if (controls.some((e) => /^sign in$/i.test(label(e))))
     return { kind: "needs_login" };
+  if (!account) return { kind: "loading" };
   const keyBytes = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(account.getAttribute("aria-label")),

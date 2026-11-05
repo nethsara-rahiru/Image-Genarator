@@ -337,6 +337,7 @@ export class GenerationQueue {
           progress:
             {
               running: 10,
+              waiting_for_page: 12,
               uploading_assets: 20,
               preparing_prompt: 25,
               submitting_prompt: 40,

@@ -166,3 +166,17 @@ inputs still stop safely. No prompt is sent for this error; use Retry job after
 updating (the stored reference files are reused). If it persists, report the exact
 attachment menu labels and sanitized job error. Do not provide account credentials
 or private screenshots. Live provider layouts can still require adapter updates.
+
+### Page readiness versus Google login
+
+Generation shows waiting_for_page after opening Gemini. It waits for document
+load plus recognizable signed-in account and prompt-editor UI, rather than assuming
+that a slow/unknown page means the session expired. GENERATION_READY_TIMEOUT_SECONDS
+in .env defaults to 45 (range 1–120); the overall GENERATION_TIMEOUT_SECONDS still
+bounds the entire job. Continuous background network requests need not stop.
+
+GENERATION_PAGE_NOT_READY means the page did not become usable in time (slow
+network, changed UI or app loading); inspect Chrome and retry the pre-submission
+job. GENERATION_LOGIN_REQUIRED means sign-in UI was observed after the readiness
+window; sign in manually and retry. Existing reference files are retained. No
+passwords are collected or entered automatically.
