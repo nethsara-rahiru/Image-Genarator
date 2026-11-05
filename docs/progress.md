@@ -674,28 +674,3 @@ this app does not bypass it or guarantee that Gemini will return an image.
   expiry, continuation despite an unrecognized preview, unverified metadata,
   cancellation and file-ack validation. Final automated/CI evidence is in PR.
 - Actual Gemini use of the intended attachments is deliberately UNVERIFIED.
-
-## Marketing Agent: AI Agent promotion composer
-
-- Built on imported `Add MA` main commit `9b20c6e`; existing local Gemini
-  generator behavior is unchanged. Feature branch: `feat/marketing-ai-agent`.
-- Owner menu now includes AI Agent. Shows the owner's saved business name/logo
-  and paginated products, with Promote on each image. Added owner-scoped product
-  storage/API and add/remove controls because the imported module had no catalog.
-- Promote opens an editable composer with the selected reference. Save persists
-  a draft snapshot for the existing dashboard review flow; does not generate an
-  AI image or publish to social networks. Existing one-pending-draft behavior stays.
-- Validation: real MongoDB 8 API + Chromium desktop/mobile integration passed;
-  covers unauthorized roles, cross-owner access, image validation, pagination,
-  reference snapshots, composer save/review, add-product and login redirect.
-  Root tests and lint are also required before merge; GitHub CI includes a new
-  MongoDB-backed Marketing Agent job and preview artifacts.
-- Imported Marketing Agent sources were formatted to pass existing repository
-  Prettier CI. No runtime data, credentials or test databases are committed.
-- Run with the Marketing Agent README instructions and open Menu → AI Agent.
-  Deployment and real social/AI integrations are not part of this composer feature.
-- Implementation commit: `b3a546f`; review and CI:
-  [PR #36](https://github.com/nethsara-rahiru/Image-Genarator/pull/36).
-  Local final checks: lint passed; root suite 77 passed / 5 explicitly skipped /
-  0 failed; new Marketing Agent suite 2 passed / 0 skipped / 0 failed using
-  MongoDB 8 and Chromium, including the full API and browser workflow.
