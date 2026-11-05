@@ -183,7 +183,7 @@ test(
             "</model-response>",
         )
         .join("");
-      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>html{scroll-behavior:smooth}body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><form><div id="attachments"></div><button type="button" id="upload-menu" aria-expanded="false">+</button><div contenteditable="true" role="textbox" class="ql-editor"></div><button type="button" id="send" aria-label="Send message">Send</button></form><script>
+      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>html{scroll-behavior:smooth}body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><form><div id="attachments"></div><button type="button" id="upload-menu" class="mdc-icon-button mat-mdc-icon-button mat-mdc-button-base" aria-label="Upload &amp; tools" aria-expanded="false" aria-haspopup="menu" aria-disabled="false"><gem-icon><mat-icon aria-hidden="true" data-mat-icon-name="plus" fonticon="plus"></mat-icon></gem-icon><span class="mat-mdc-button-touch-target"></span></button><div contenteditable="true" role="textbox" class="ql-editor"></div><button type="button" id="send" aria-label="Send message">Send</button></form><script>
       const accountControl=document.querySelector('[aria-label^="Google Account:"]');
       const accountLabel=accountControl.getAttribute('aria-label');accountControl.removeAttribute('aria-label');
       const promptEditor=document.querySelector('[contenteditable]');promptEditor.setAttribute('contenteditable','false');
@@ -413,7 +413,7 @@ test(
       assert.ok(
         automationEvents.some(
           (entry) =>
-            entry.details.target === "composer_plus" &&
+            entry.details.target === "attachment_opener" &&
             entry.details.outcome === "started",
         ),
       );
