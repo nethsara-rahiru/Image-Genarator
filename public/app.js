@@ -564,9 +564,34 @@ $("groq-form").onsubmit = async (event) => {
 };
 let generationBusy = false;
 let generationSnapshot = { jobs: [], chats: [] };
+let generationReceivedAt = performance.now();
+function updateAttachmentCountdown() {
+  const job = generationSnapshot.jobs.find(
+    (job) => job.state === "waiting_for_attachments",
+  );
+  const element = $("attachment-countdown");
+  element.hidden = !job;
+  if (!job) return;
+  const seconds = Math.max(
+    0,
+    Math.ceil(
+      (job.attachmentWaitRemainingMs -
+        (performance.now() - generationReceivedAt)) /
+        1000,
+    ),
+  );
+  const message =
+    seconds > 0
+      ? `Reference images: continuing to prompt entry in ${seconds}s · attachments unverified`
+      : "Reference wait finished · waiting for worker update · attachments unverified";
+  if (element.textContent !== message) element.textContent = message;
+}
+setInterval(updateAttachmentCountdown, 250);
 let generationRequestKey = crypto.randomUUID();
 function renderGeneration(data) {
   generationSnapshot = data;
+  generationReceivedAt = performance.now();
+  updateAttachmentCountdown();
   generationBusy = data.busy;
   $("generation-status").textContent = data.cleanupError
     ? data.cleanupError
@@ -625,6 +650,13 @@ function renderGeneration(data) {
       ? "FIFO queue position: " + job.queuePosition
       : "Attempts: " + job.attempts;
     card.append(heading, prompt, progress, info);
+    if (job.attachmentConfirmation === "timed_unverified") {
+      const verification = document.createElement("p");
+      verification.className = "muted";
+      verification.textContent =
+        "Reference attachments: timed wait · unverified";
+      card.append(verification);
+    }
     if (job.chatId) {
       const text = document.createElement("p");
       text.textContent = "Chat ID: " + job.chatId;
@@ -673,6 +705,7 @@ function renderGeneration(data) {
         "waiting_for_page",
         "settling_page",
         "uploading_assets",
+        "waiting_for_attachments",
         "preparing_prompt",
         "submitting_prompt",
         "generating",
@@ -916,7 +949,7 @@ $("generator-form").onsubmit = async (event) => {
   }
 };
 setInterval(() => {
-  if (loggedIn && ws?.readyState !== WebSocket.OPEN) refreshGeneration();
+  if (loggedIn) refreshGeneration();
 }, 3000);
 let logPolling = false;
 setInterval(async () => {

@@ -70,6 +70,7 @@ export class DebugLog {
       "upload_click",
       "upload_files",
       "attachment_confirmation",
+      "waiting_for_attachments",
     ];
     if (traceStages.includes(details.stage)) safe.stage = details.stage;
     if (
@@ -81,6 +82,7 @@ export class DebugLog {
         "confirmed",
         "failed",
         "changed",
+        "unverified",
       ].includes(details.outcome)
     )
       safe.outcome = details.outcome;

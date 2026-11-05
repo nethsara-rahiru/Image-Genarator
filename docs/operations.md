@@ -248,3 +248,18 @@ previews remain unconfirmed (preview_bytes_unverified); do not force-send them.
 The check reads only bounded same-origin blob data, never remote preview URLs,
 chat-history images, screenshots or model vision input. Live Gemini variants
 still require host-PC validation.
+
+### Current override: timed reference continuation
+
+The current generation path deliberately bypasses reference confirmation, as
+requested by the user. After Chrome acknowledges file delivery it waits 15 seconds
+with a visible cancellable countdown before prompt entry. The job/output metadata
+is marked timed_unverified. Strict filename/blob helpers and prior documentation
+explain diagnostic evidence, but do not block this temporary mode; the previous
+GENERATION_UPLOAD_TIMEOUT_SECONDS setting is inactive for this flow.
+
+If Chrome does not accept the files, generation still stops. If Send remains
+disabled or the account/editor/chat baseline changes, the final safety checks
+still prevent submission. Actual provider reference association is unverified.
+After a restart during the countdown, retry the failed pre-submission job rather
+than automatically resubmitting. Saved reference files remain with that job.

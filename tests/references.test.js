@@ -73,12 +73,29 @@ test("reference inputs persist with a queued job, affect idempotency and are rem
   runner.evaluate = async ({ operation }) => ({
     ok: operation === "prepare_attachments",
   });
+  const deliveredAt = await runner.uploadReferences(
+    queue.get(first.id),
+    path.dirname(path.dirname(file)),
+    AbortSignal.timeout(1000),
+    "account",
+  );
+  assert.ok(Number.isFinite(deliveredAt));
   await assert.rejects(
-    runner.uploadReferences(
+    runner.waitAfterUpload(
       queue.get(first.id),
-      path.dirname(path.dirname(file)),
-      AbortSignal.timeout(200),
-      "account",
+      undefined,
+      AbortSignal.timeout(1000),
+      async () =>
+        assert.fail("Countdown requires file delivery acknowledgement"),
+    ),
+    { code: "GENERATION_REFERENCES" },
+  );
+  await assert.rejects(
+    runner.waitAfterUpload(
+      queue.get(first.id),
+      deliveredAt,
+      AbortSignal.timeout(20),
+      async (state, extra) => Object.assign(queue.get(first.id), extra),
     ),
   );
   assert.ok(sent.some(({ method }) => method === "DOM.setFileInputFiles"));
@@ -122,7 +139,19 @@ test("reference inputs persist with a queued job, affect idempotency and are rem
     timeline.indexOf("actual_click") <
       timeline.indexOf("upload_click:dispatched"),
   );
-  assert.ok(timeline.includes("attachment_confirmation:confirmed"));
+  runner.browser.options = { test: true, attachmentWaitMs: 30 };
+  const countdownStarted = Date.now();
+  await runner.waitAfterUpload(
+    queue.get(first.id),
+    Date.now(),
+    AbortSignal.timeout(1000),
+    async (state, extra) =>
+      Object.assign(queue.get(first.id), { state, ...extra }),
+  );
+  assert.ok(Date.now() - countdownStarted >= 25);
+  assert.equal(queue.get(first.id).attachmentConfirmation, "timed_unverified");
+  assert.ok(timeline.includes("waiting_for_attachments:unverified"));
+  assert.ok(!timeline.includes("attachment_confirmation:confirmed"));
   const original = await fs.readFile(file);
   await fs.writeFile(file, png(91));
   await assert.rejects(

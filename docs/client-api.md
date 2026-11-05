@@ -247,3 +247,16 @@ for reference confirmation (`AUTOMATION_STEP_DELAY_MS` and
 UPLOAD_UNCONFIRMED means the provider's attachment readiness was not verified,
 even if a thumbnail is visible. Inspect Live automation expected/matched/preview/
 busy counts; do not resubmit an ambiguous already-sent prompt.
+
+## Current timed reference mode
+
+By explicit user preference, reference jobs currently skip filename/blob
+confirmation. After Chrome acknowledges file delivery they enter
+`waiting_for_attachments` for 15 seconds, then prepare the prompt. Poll
+`attachmentWaitUntil` (ISO timestamp), `attachmentWaitRemainingMs` (server-derived)
+and `attachmentConfirmation:"timed_unverified"`. The dashboard shows a live
+countdown. Cancel remains available before submission; the overall job deadline
+still applies. Final Send retains account/editor/baseline/enabled-state checks.
+Generated image/metadata availability does not prove Gemini used the references;
+metadata records the unverified mode. The old confirmation timeout setting is
+inactive in this mode. Reference-free jobs do not wait 15 seconds.

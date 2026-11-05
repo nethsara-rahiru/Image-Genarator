@@ -118,13 +118,16 @@ test("settling waits after readiness, rechecks a reload and keeps its account gu
     documentId: 2,
     chatId: null,
   });
-  const started = Date.now();
+  const started = performance.now();
   await instance.waitForStablePage(
     {},
     AbortSignal.timeout(2000),
     async (phase) => phases.push(phase),
   );
-  assert.ok(Date.now() - started >= 60);
+  assert.ok(
+    performance.now() - started >= 50,
+    "Both 30 ms settling windows should elapse, allowing timer resolution tolerance",
+  );
   assert.equal(reads, 2);
   assert.deepEqual(phases, [
     "settling_page",

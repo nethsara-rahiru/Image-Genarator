@@ -24,7 +24,7 @@ const enabled =
   process.platform === "linux" && process.env.RUN_NATIVE_TESTS === "1";
 test(
   "real local no-login generator: new/resumed chats, current image download, no-image/login/account/cancel failures",
-  { skip: !enabled, timeout: 120000 },
+  { skip: !enabled, timeout: 180000 },
   async (t) => {
     // Real Chrome must complete with named files even when its completion event is lost.
     let releaseAcks,
@@ -84,7 +84,8 @@ test(
       images = new Map(),
       downloads = [],
       receivedReferences = [],
-      uploadWaits = [];
+      uploadWaits = [],
+      postUploadWaits = [];
     const fixture = http.createServer((req, res) => {
       const url = new URL(req.url, "http://fixture");
       if (url.pathname.startsWith("/img/")) {
@@ -131,6 +132,7 @@ test(
           posts++;
           receivedReferences.push(data.references || []);
           uploadWaits.push(data.uploadWaitMs);
+          postUploadWaits.push(data.postUploadWaitMs);
           const id = data.chatId || "fixture-chat-" + posts;
           const replies = chats.get(id) || [];
           let html;
@@ -197,8 +199,8 @@ test(
         item.onclick=()=>{
           menu.remove();const input=document.createElement('input');input.type='file';input.accept='image/*,.pdf';input.multiple=true;input.hidden=true;input.dataset.fixtureReference='true';document.querySelector('form').append(input);
           input.onchange=(event)=>{
-        window.fixtureUploadAt=Date.now();const attachments=document.querySelector('#attachments');attachments.setAttribute('aria-busy','true');attachments.textContent='Uploading';
-        setTimeout(()=>{attachments.replaceChildren();for(const file of event.target.files){const image=document.createElement('img');image.alt='attachment';image.className='gem-attachment-style-img ng-star-inserted';image.src=URL.createObjectURL(file);attachments.append(image);}attachments.removeAttribute('aria-busy');},200);
+        window.fixtureUploadAt=Date.now();document.querySelector('#send').disabled=true;const attachments=document.querySelector('#attachments');attachments.setAttribute('aria-busy','true');attachments.textContent='Uploading';
+        setTimeout(()=>{attachments.replaceChildren();for(const file of event.target.files){const image=document.createElement('img');image.alt='attachment';image.className='unrecognized-provider-thumbnail';image.src=URL.createObjectURL(file);attachments.append(image);}attachments.removeAttribute('aria-busy');document.querySelector('#send').disabled=false;},200);
           };
         };
       };
@@ -210,7 +212,7 @@ test(
         const query=document.createElement('user-query');query.textContent=prompt;document.querySelector('#responses').append(query);
         const response=document.createElement('model-response');response.setAttribute('aria-busy','true');response.textContent='Generating';document.querySelector('#responses').append(response);
         const stop=document.createElement('button');stop.setAttribute('aria-label','Stop response');stop.textContent='Stop';document.body.append(stop);
-        const data=await(await fetch('/mock/generate',{method:'POST',body:JSON.stringify({prompt,references,uploadWaitMs:window.fixtureUploadAt-window.fixtureReadyAt,chatId:location.pathname.split('/')[2]||null})})).json();
+        const data=await(await fetch('/mock/generate',{method:'POST',body:JSON.stringify({prompt,references,uploadWaitMs:window.fixtureUploadAt-window.fixtureReadyAt,postUploadWaitMs:Date.now()-window.fixtureUploadAt,chatId:location.pathname.split('/')[2]||null})})).json();
         history.replaceState({},'', '/app/'+data.id);
         setTimeout(()=>{response.innerHTML=data.html;response.removeAttribute('aria-busy');stop.remove();document.querySelector('#send').disabled=false;editor.textContent='';document.querySelector('#attachments').textContent='';if(document.querySelector('[data-fixture-reference]'))document.querySelector('[data-fixture-reference]').value='';wire();},data.delay);
       };
@@ -231,7 +233,7 @@ test(
     const config = {
       ...configuration({ DATA_DIR: data, AUTO_OPEN: "false" }),
       port: 0,
-      generationTimeoutMs: 45000,
+      generationTimeoutMs: 60000,
       generationReadyTimeoutMs: 12000,
     };
     const service = await startServer(config, {
@@ -302,16 +304,16 @@ test(
       const page = await client.newPage({
         viewport: { width: 1400, height: 1000 },
       });
-      // Drop log frames to prove the diagnostic table refreshes independently
+      // Drop log/generation frames to prove the diagnostic table and countdown refresh independently
       // of browser/viewer WebSocket observation.
-      let droppedLogFrames = 0;
+      let droppedDiagnosticFrames = 0;
       await page.routeWebSocket("**/stream", (socket) => {
         const upstream = socket.connectToServer();
         upstream.onMessage((message) => {
           if (typeof message === "string") {
             try {
-              if (JSON.parse(message).type === "logs") {
-                droppedLogFrames++;
+              if (["logs", "generation"].includes(JSON.parse(message).type)) {
+                droppedDiagnosticFrames++;
                 return;
               }
             } catch {}
@@ -353,6 +355,46 @@ test(
       assert.equal(await page.locator("#reference-previews img").count(), 1);
       await page.locator("#generate").click();
       await until(() => service.generation.data.jobs.length === 1);
+      await until(
+        () =>
+          service.generation.data.jobs[0].state === "waiting_for_attachments",
+        60000,
+      );
+      const waiting = service.generation.publicJob(
+        service.generation.data.jobs[0],
+      );
+      assert.ok(waiting.attachmentWaitRemainingMs > 0);
+      await page.locator("#attachment-countdown").waitFor({ state: "visible" });
+      const secondsBefore = Number(
+        (await page.locator("#attachment-countdown").textContent()).match(
+          /(\d+)s/,
+        )[1],
+      );
+      assert.ok(secondsBefore > 0 && secondsBefore <= 15);
+      await until(
+        async () =>
+          Number(
+            (await page.locator("#attachment-countdown").textContent()).match(
+              /(\d+)s/,
+            )?.[1],
+          ) < secondsBefore,
+        5000,
+      );
+      assert.equal(posts, 0, "Prompt must not submit during countdown");
+      const editorDuringCountdown = await originalSend.call(
+        service.browser.pipe,
+        "Runtime.evaluate",
+        {
+          expression: "document.querySelector('.ql-editor').textContent",
+          returnByValue: true,
+        },
+        service.browser.gemini.session,
+      );
+      assert.equal(
+        editorDuringCountdown.result.value,
+        "",
+        "Prompt must not be entered during countdown",
+      );
       const first = await final(service.generation.data.jobs[0].id);
       assert.equal(first.state, "completed", JSON.stringify(first.error));
       assert.equal(await page.locator("#screen").count(), 0);
@@ -401,9 +443,11 @@ test(
 
       config.generationReadyTimeoutMs = 3000;
       service.browser.options.pageSettleMs = 0;
+      service.browser.options.attachmentWaitMs = 0;
       config.generationTimeoutMs = 15000;
       config.automationStepDelayMs = 0;
       assert.deepEqual(downloads, ["/img/1-0.png"]);
+      assert.ok(postUploadWaits[0] >= 15000);
       const automationEvents = service.log
         .snapshot()
         .entries.filter(
@@ -428,9 +472,8 @@ test(
       assert.ok(
         automationEvents.some(
           (entry) =>
-            entry.details.stage === "attachment_confirmation" &&
-            entry.details.blobMatchedCount === 1 &&
-            entry.details.outcome === "confirmed",
+            entry.details.stage === "waiting_for_attachments" &&
+            entry.details.outcome === "unverified",
         ),
       );
       await page.locator("#automation-log-filter").fill(first.id);
@@ -440,7 +483,7 @@ test(
         .first()
         .waitFor();
       assert.ok(
-        droppedLogFrames > 0,
+        droppedDiagnosticFrames > 0,
         "Log frames must be dropped to verify the independent HTTP refresh",
       );
       await page.locator("#automation-log-filter").fill("");
@@ -453,6 +496,7 @@ test(
         await request("/api/generation/jobs/" + first.id + "/metadata")
       ).json();
       assert.deepEqual(firstMetadata.inputAssetNames, ["dashboard-logo.png"]);
+      assert.equal(firstMetadata.attachmentConfirmation, "timed_unverified");
       assert.ok(
         service.log
           .snapshot()
@@ -670,7 +714,8 @@ test(
       });
       assert.equal(accepted.status, 202);
       const apiJob = await accepted.json();
-      assert.equal((await final(apiJob.id)).state, "completed");
+      const apiFinal = await final(apiJob.id);
+      assert.equal(apiFinal.state, "completed", JSON.stringify(apiFinal.error));
       const status = await (
         await fetch(base + "/api/v1/generations/" + apiJob.id, {
           headers: apiHeaders,
