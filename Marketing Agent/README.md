@@ -31,8 +31,9 @@ and your existing Image-Genarator API for image creation.
 
    Keep the generated JWT_SECRET. Never paste keys into the frontend or commit
    them. Backend loads this file relative to its own directory, independent of
-   your working directory. Node must trust any private HTTPS certificate used
-   by the image API; do not disable TLS verification.
+   your working directory. For a private HTTPS image API, configure its public
+   CA certificate below; Marketing Agent loads it directly, so normal `npm start`
+   and `npm run dev` work without extra Node startup flags.
 
 3. Run the existing Image-Genarator application separately. Its API must support
    `POST /generations`, multipart `references`, job polling and binary image
@@ -193,3 +194,65 @@ Errors now identify browser start, submission, status or download and recognize
 known scope/Host/TLS errors. Arbitrary upstream response text is not exposed.
 After resolving the configuration, start a new promotion; inspect any existing
 remote job before repeating a promotion that had already submitted an image.
+
+## Private HTTPS certificates (Postman, Mac and other PCs)
+
+Postman has its own certificate settings. A CA trusted only inside Postman is
+not automatically trusted by Node. Export or locate the **public CA certificate**
+you selected in Postman; no private key or Google credentials are needed. If the
+CA is already trusted in the operating system (for example macOS Keychain),
+Marketing Agent also includes system roots on Node versions that expose them.
+On older Node 22 releases, use the explicit file or PEM setting below.
+
+Choose one option in `backend/.env`:
+
+```dotenv
+# Recommended: the same public CA file you imported into Postman.
+IMAGE_API_CA_FILE="/Users/nethsara/certificates/image-generator-root.crt"
+```
+
+Paths may be absolute, start with `~/`, or be relative to `backend/` (including
+when launched from another working directory). Multiple CA certificates in one
+PEM bundle are supported. Existing `NODE_EXTRA_CA_CERTS=/path/to/root.crt` settings
+in `.env` are supported as a fallback; `IMAGE_API_CA_FILE` takes precedence.
+
+Alternatively paste the public PEM directly in `.env`, inside double quotes:
+
+```dotenv
+IMAGE_API_CA_CERT="-----BEGIN CERTIFICATE-----
+PASTE_THE_REAL_PUBLIC_CA_CERTIFICATE_BASE64_HERE
+-----END CERTIFICATE-----"
+```
+
+The text above is a placeholder, not a working certificate. Use the entire
+exported PEM. Literal `\n` escapes between PEM lines also work. File and inline
+certificates can be combined. Never paste a private key. Local copies can go in
+`backend/certificates/`, which is ignored by Git; `.env` remains ignored too.
+
+Restart Marketing Agent after changing the certificate, then run in `backend/`:
+
+```sh
+npm run check-image-api
+npm run dev
+```
+
+The check uses the same TLS trust and authentication as generation. It reads
+health/browser status only: no browser start, prompt submission or image charge.
+It prints static diagnostics, never keys or arbitrary upstream response text.
+
+Custom CAs apply only to image-API connections; Groq's global TLS trust is
+unchanged. TLS chain, hostname/IP and expiry verification remain enabled. Do
+not set `NODE_TLS_REJECT_UNAUTHORIZED=0` or turn off SSL verification in Postman.
+If Postman worked only because verification was disabled, obtain the correct
+public CA instead. A CA cannot fix an expired certificate or hostname mismatch;
+use the HTTPS hostname/IP listed in the image server's certificate.
+
+Missing/invalid PEM gives `PROMOTION_TLS_CONFIG`; issuer/name/expiry problems give
+`UPSTREAM_TLS`; connection refused, DNS and timeout failures have distinct guidance.
+This change does not modify the image generator, its Caddy settings or certificates.
+
+Certificate tests use a real local HTTPS service and generated test CA. They
+verify custom trust for start/submission/status/original download, inline/file
+PEM, late dotenv loading, rejection of unknown issuers/wrong hostnames, isolation
+from Groq trust and redaction. Actual macOS Keychain/Postman export and your
+specific live certificate remain unverified until checked on your laptop.

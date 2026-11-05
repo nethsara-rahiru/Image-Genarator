@@ -1,2 +1,5 @@
 node_modules
 .env
+
+# Local copies of exported public CA certificates (never private keys).
+certificates/

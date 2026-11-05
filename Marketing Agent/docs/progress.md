@@ -29,3 +29,27 @@
 - Continuation: inspect PR/CI for feat/marketing-promotion-generation. Merge to
   main only after checks pass (already authorized by the user). Do not modify
   files outside Marketing Agent/ for this task.
+
+## Image API HTTPS certificate support
+
+- Only Marketing Agent files changed. Image-generator application, Caddy,
+  browser code and certificates are untouched.
+- Load IMAGE_API_CA_FILE (absolute, ~/ or backend-relative), inline PEM through
+  IMAGE_API_CA_CERT, or existing NODE_EXTRA_CA_CERTS directly into a scoped
+  image-API TLS agent. Works after dotenv loading with normal npm start/dev.
+- Include public/default and available OS trust roots; Postman's private trust
+  settings remain separate. No TLS verification bypass. Close agents after each
+  promotion and retain chain, hostname/IP and expiry checks.
+- npm run check-image-api checks HTTPS/authentication and browser status without
+  starting Chrome or submitting an image. Classify issuer, hostname, expiry,
+  refusal, DNS and timeout errors; redact raw errors and all credentials.
+- Validation: full backend suite 22 passed, zero skips on MongoDB 8/Chromium;
+  real HTTPS certificate suite 9 passed on Node 22. Includes late dotenv CA path,
+  file and inline PEM, multipart generation/poll/download, read-only diagnostic,
+  wrong hostname, untrusted issuer, private-key rejection and Groq trust isolation.
+  Production dependency audit: zero vulnerabilities. Root lint required before
+  merge; root source files must stay unchanged.
+- Real macOS Keychain/Postman certificate and the user's live image API remain
+  UNVERIFIED until npm run check-image-api is run on the laptop.
+- Continue in PR #38 (fix/marketing-upstream-diagnostics), now including TLS fix.
+  Merge only after current checks pass; user has already authorized main merges.

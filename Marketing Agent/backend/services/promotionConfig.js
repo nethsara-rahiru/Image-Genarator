@@ -1,3 +1,4 @@
+const { imageCertificates } = require("./imageApiTls");
 const fail = (code, message) => Object.assign(new Error(message), { code });
 function base(value, name) {
   let url;
@@ -42,6 +43,7 @@ function config(env = process.env) {
     model: env.GROQ_MODEL || "llama-3.3-70b-versatile",
     imageBase: base(env.IMAGE_API_BASE_URL, "IMAGE_API_BASE_URL"),
     imageKey: env.IMAGE_API_KEY,
+    imageCa: imageCertificates(env),
     pollMs: number(env, "PROMOTION_POLL_MS", 3000, 1000, 30000),
     timeoutMs: number(
       env,

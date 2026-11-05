@@ -1,3 +1,5 @@
+const { Agent } = require("undici");
+const { trustRoots, connectionError } = require("./imageApiTls");
 const { fail } = require("./promotionConfig");
 async function bodyBytes(response, max) {
   if (Number(response.headers.get("content-length")) > max)
@@ -24,6 +26,13 @@ async function bodyBytes(response, max) {
   return Buffer.concat(chunks);
 }
 function clients(c, parentSignal) {
+  // Scoped trust: custom/system CAs apply to the image service only. Never disable
+  // certificate-chain, hostname or expiry verification.
+  const imageAgent = c.imageBase.startsWith("https:")
+    ? new Agent({
+        connect: { ca: trustRoots(c.imageCa), rejectUnauthorized: true },
+      })
+    : null;
   async function request(
     url,
     key,
@@ -39,6 +48,7 @@ function clients(c, parentSignal) {
     try {
       response = await fetch(url, {
         ...options,
+        ...(diagnostic.scope && imageAgent ? { dispatcher: imageAgent } : {}),
         redirect: "error",
         signal,
         headers: { Authorization: `Bearer ${key}`, ...options.headers },
@@ -103,23 +113,25 @@ function clients(c, parentSignal) {
         )
       )
         throw error;
-      throw fail(
-        "UPSTREAM_UNAVAILABLE",
-        "External service request failed or timed out. Check connectivity and server configuration.",
-      );
+      throw connectionError(error, diagnostic.label, Boolean(diagnostic.scope));
     }
   }
   const image = (path, options, binary) => {
     const start = path === "/browser/start",
       submit = path === "/generations";
     return request(c.imageBase + path, c.imageKey, options, binary, {
-      label: start
-        ? "Image API browser start"
-        : submit
-          ? "Image API generation submission"
-          : binary
-            ? "Image API image download"
-            : "Image API job status",
+      label:
+        path === "/health"
+          ? "Image API health"
+          : path === "/browser/status"
+            ? "Image API browser status"
+            : start
+              ? "Image API browser start"
+              : submit
+                ? "Image API generation submission"
+                : binary
+                  ? "Image API image download"
+                  : "Image API job status",
       keyName: "IMAGE_API_KEY",
       scope: start ? "browser" : submit ? "generate" : "read",
     });
@@ -133,6 +145,9 @@ function clients(c, parentSignal) {
     return encodeURIComponent(id);
   };
   return {
+    health: () => image("/health"),
+    browserStatus: () => image("/browser/status"),
+    close: () => (imageAgent ? imageAgent.close() : Promise.resolve()),
     async prompt(context, index, previous) {
       const themes = [
         "clean studio product hero",
