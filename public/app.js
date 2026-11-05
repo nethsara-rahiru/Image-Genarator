@@ -613,6 +613,7 @@ function renderGeneration(data) {
         "queued",
         "running",
         "waiting_for_page",
+        "settling_page",
         "uploading_assets",
         "preparing_prompt",
         "submitting_prompt",

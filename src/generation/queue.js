@@ -338,6 +338,7 @@ export class GenerationQueue {
             {
               running: 10,
               waiting_for_page: 12,
+              settling_page: 14,
               uploading_assets: 20,
               preparing_prompt: 25,
               submitting_prompt: 40,

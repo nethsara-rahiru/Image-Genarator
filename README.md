@@ -629,3 +629,7 @@ are ready. Set `GENERATION_READY_TIMEOUT_SECONDS=45` in .env to adjust the bound
 wait (1–120 seconds). A slow/unrecognized page reports `GENERATION_PAGE_NOT_READY`
 instead of assuming the Google session expired. The total job timeout still
 applies. Actual Google sign-in remains manual.
+
+After Gemini becomes ready, jobs show `settling_page` for five seconds, then
+recheck the page before uploading references or entering a prompt. A reload during
+this pause repeats the readiness gate. You can cancel while waiting.

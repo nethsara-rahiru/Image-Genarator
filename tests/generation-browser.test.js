@@ -83,7 +83,8 @@ test(
     const chats = new Map(),
       images = new Map(),
       downloads = [],
-      receivedReferences = [];
+      receivedReferences = [],
+      uploadWaits = [];
     const fixture = http.createServer((req, res) => {
       const url = new URL(req.url, "http://fixture");
       if (url.pathname.startsWith("/img/")) {
@@ -129,6 +130,7 @@ test(
           const data = JSON.parse(Buffer.concat(chunks).toString());
           posts++;
           receivedReferences.push(data.references || []);
+          uploadWaits.push(data.uploadWaitMs);
           const id = data.chatId || "fixture-chat-" + posts;
           const replies = chats.get(id) || [];
           let html;
@@ -185,7 +187,7 @@ test(
       const accountControl=document.querySelector('[aria-label^="Google Account:"]');
       const accountLabel=accountControl.getAttribute('aria-label');accountControl.removeAttribute('aria-label');
       const promptEditor=document.querySelector('[contenteditable]');promptEditor.setAttribute('contenteditable','false');
-      setTimeout(()=>{accountControl.setAttribute('aria-label',accountLabel);promptEditor.setAttribute('contenteditable','true');},${++hydrations === 1 ? 9000 : 600});
+      setTimeout(()=>{accountControl.setAttribute('aria-label',accountLabel);promptEditor.setAttribute('contenteditable','true');window.fixtureReadyAt=Date.now();},${++hydrations === 1 ? 9000 : 600});
       function wire(){for(const b of document.querySelectorAll('[data-download]')){b.onmouseenter=()=>{if(b.dataset.rebound)return;b.dataset.rebound='yes';const clone=b.cloneNode(true);clone.style.marginLeft='24px';b.replaceWith(clone);wire();};b.onclick=async(event)=>{if(!event.isTrusted || !navigator.userActivation.isActive)return;const prepared=await(await fetch('/prepare?file='+encodeURIComponent(b.dataset.download))).json();const frame=document.createElement('iframe');frame.src=prepared.url;document.body.append(frame);};}}
       const unrelated=document.createElement('input');unrelated.type='file';unrelated.accept='audio/*';unrelated.hidden=true;document.body.append(unrelated);
       document.querySelector('#upload-menu').onclick=()=>{
@@ -195,7 +197,7 @@ test(
         item.onclick=()=>{
           menu.remove();const input=document.createElement('input');input.type='file';input.accept='image/*,.pdf';input.multiple=true;input.hidden=true;input.dataset.fixtureReference='true';document.querySelector('form').append(input);
           input.onchange=(event)=>{
-        const attachments=document.querySelector('#attachments');attachments.setAttribute('aria-busy','true');attachments.textContent='Uploading';
+        window.fixtureUploadAt=Date.now();const attachments=document.querySelector('#attachments');attachments.setAttribute('aria-busy','true');attachments.textContent='Uploading';
         setTimeout(()=>{attachments.textContent=[...event.target.files].map(file=>file.name).join(' ');attachments.removeAttribute('aria-busy');},200);
           };
         };
@@ -208,7 +210,7 @@ test(
         const query=document.createElement('user-query');query.textContent=prompt;document.querySelector('#responses').append(query);
         const response=document.createElement('model-response');response.setAttribute('aria-busy','true');response.textContent='Generating';document.querySelector('#responses').append(response);
         const stop=document.createElement('button');stop.setAttribute('aria-label','Stop response');stop.textContent='Stop';document.body.append(stop);
-        const data=await(await fetch('/mock/generate',{method:'POST',body:JSON.stringify({prompt,references,chatId:location.pathname.split('/')[2]||null})})).json();
+        const data=await(await fetch('/mock/generate',{method:'POST',body:JSON.stringify({prompt,references,uploadWaitMs:window.fixtureUploadAt-window.fixtureReadyAt,chatId:location.pathname.split('/')[2]||null})})).json();
         history.replaceState({},'', '/app/'+data.id);
         setTimeout(()=>{response.innerHTML=data.html;response.removeAttribute('aria-busy');stop.remove();document.querySelector('#send').disabled=false;editor.textContent='';document.querySelector('#attachments').textContent='';if(document.querySelector('[data-fixture-reference]'))document.querySelector('[data-fixture-reference]').value='';wire();},data.delay);
       };
@@ -381,8 +383,13 @@ test(
       });
 
       config.generationReadyTimeoutMs = 3000;
+      service.browser.options.pageSettleMs = 0;
       config.generationTimeoutMs = 15000;
       assert.deepEqual(downloads, ["/img/1-0.png"]);
+      assert.ok(
+        uploadWaits[0] >= 5000,
+        "References were uploaded before the five-second post-load wait",
+      );
       assert.deepEqual(Buffer.from(receivedReferences[0][0].bytes), png(17));
       const firstMetadata = await (
         await request("/api/generation/jobs/" + first.id + "/metadata")
