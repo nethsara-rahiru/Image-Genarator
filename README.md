@@ -633,3 +633,11 @@ applies. Actual Google sign-in remains manual.
 After Gemini becomes ready, jobs show `settling_page` for five seconds, then
 recheck the page before uploading references or entering a prompt. A reload during
 this pause repeats the readiness gate. You can cancel while waiting.
+
+### Live automation logs
+
+Use the dashboard's **Live automation** table to see generation phases, upload
+candidate counts, attempted targets/viewport rectangles, file delivery and
+attachment confirmation. Filter by job ID and export the debug JSON. It refreshes
+independently of browser observation and omits prompts, credentials, filenames
+and page content. See [diagnostic interpretation](docs/operations.md#live-automation-diagnostics).

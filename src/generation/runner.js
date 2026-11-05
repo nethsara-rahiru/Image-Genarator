@@ -9,6 +9,15 @@ export class GenerationRunner {
     this.browser = browser;
     this.action = action;
   }
+  trace(job, stage, outcome, message, details = {}) {
+    this.browser.log?.write(
+      outcome === "failed" ? "warn" : "info",
+      "browser",
+      "AUTOMATION_TRACE",
+      message,
+      { ...details, jobId: job.id, stage, outcome },
+    );
+  }
   async evaluate(request, signal) {
     signal.throwIfAborted();
     const adapter = this.browser.gemini;
@@ -198,6 +207,13 @@ export class GenerationRunner {
     }
     const pipe = this.browser.pipe,
       session = this.browser.gemini.session;
+    this.trace(
+      job,
+      "upload_discovery",
+      "started",
+      "Searching the prompt composer for an image input or attachment menu.",
+      { fileCount: files.length },
+    );
     await pipe.send(
       "Page.setInterceptFileChooserDialog",
       { enabled: true },
@@ -211,19 +227,80 @@ export class GenerationRunner {
           { operation: "prepare_attachments", accountKey },
           signal,
         );
+        this.trace(
+          job,
+          "upload_discovery",
+          lastDiscovery.ok ? "selected" : "waiting",
+          "Upload discovery snapshot; counts and viewport geometry only.",
+          { ...lastDiscovery, attempt: n + 1 },
+        );
+        if (lastDiscovery.reason === "click_required") {
+          this.trace(
+            job,
+            "upload_click",
+            "started",
+            "About to activate the identified upload control at the recorded viewport rectangle.",
+            lastDiscovery,
+          );
+          let activated;
+          try {
+            activated = await this.evaluate(
+              {
+                operation: "activate_upload_control",
+                accountKey,
+                targetToken: lastDiscovery.targetToken,
+                documentId: lastDiscovery.documentId,
+              },
+              signal,
+            );
+          } catch (error) {
+            this.trace(
+              job,
+              "upload_click",
+              "failed",
+              "Upload control activation did not acknowledge; inspect the job error. The click is not blindly retried.",
+              lastDiscovery,
+            );
+            throw error;
+          }
+          this.trace(
+            job,
+            "upload_click",
+            activated.ok
+              ? "selected"
+              : activated.reason === "upload_menu_opened"
+                ? "dispatched"
+                : "changed",
+            activated.ok
+              ? "An image input appeared before a click was needed."
+              : activated.reason === "upload_menu_opened"
+                ? "Click dispatched; waiting for the menu or image input to appear."
+                : "The target changed before activation; discovery will recheck it.",
+            activated,
+          );
+          lastDiscovery = activated;
+        }
         if (lastDiscovery.ok) {
           prepared = true;
           break;
         }
         await pause(250, undefined, { signal });
       }
-      if (!prepared)
+      if (!prepared) {
+        this.trace(
+          job,
+          "upload_discovery",
+          "failed",
+          "No unique usable image input appeared before the discovery deadline.",
+          lastDiscovery || {},
+        );
         throw nativeError(
           "GENERATION_UPLOAD_UNAVAILABLE",
           lastDiscovery?.reason === "ambiguous_inputs"
             ? "Several eligible Gemini image upload inputs remain. No prompt was submitted."
             : "Gemini's image upload input did not appear after checking its attachment menu. No prompt was submitted.",
         );
+      }
       const { root } = await pipe.send("DOM.getDocument", {}, session);
       const { nodeId } = await pipe.send(
         "DOM.querySelector",
@@ -233,12 +310,33 @@ export class GenerationRunner {
         },
         session,
       );
-      if (!nodeId)
+      if (!nodeId) {
+        this.trace(
+          job,
+          "upload_files",
+          "failed",
+          "The selected image input disappeared before file delivery.",
+        );
         throw nativeError(
           "GENERATION_UPLOAD_UNAVAILABLE",
           "Gemini's upload input changed. No prompt was submitted.",
         );
+      }
+      this.trace(
+        job,
+        "upload_files",
+        "started",
+        "Delivering validated reference files to the selected input.",
+        { target: "file_input", fileCount: files.length },
+      );
       await pipe.send("DOM.setFileInputFiles", { nodeId, files }, session);
+      this.trace(
+        job,
+        "upload_files",
+        "dispatched",
+        "Chrome acknowledged file delivery; Gemini attachment confirmation is still required.",
+        { fileCount: files.length },
+      );
     } finally {
       await pipe.send(
         "Page.setInterceptFileChooserDialog",
@@ -246,6 +344,13 @@ export class GenerationRunner {
         session,
       );
     }
+    this.trace(
+      job,
+      "attachment_confirmation",
+      "started",
+      "Waiting for all reference attachments to be confirmed in the composer.",
+      { fileCount: files.length },
+    );
     for (let n = 0; n < 120; n++) {
       if (
         (
@@ -258,25 +363,56 @@ export class GenerationRunner {
             signal,
           )
         ).ok
-      )
+      ) {
+        this.trace(
+          job,
+          "attachment_confirmation",
+          "confirmed",
+          "All expected reference attachments are confirmed.",
+          { fileCount: files.length },
+        );
         return;
+      }
       await pause(250, undefined, { signal });
     }
+    this.trace(
+      job,
+      "attachment_confirmation",
+      "failed",
+      "Gemini did not confirm every expected attachment within the upload wait.",
+      { fileCount: files.length },
+    );
     throw nativeError(
       "GENERATION_UPLOAD_UNCONFIRMED",
       "Gemini did not confirm all reference attachments within 30 seconds. No prompt was submitted.",
     );
   }
-  async run(job, { signal, directory, phase, chat }) {
+  async run(job, { signal, directory, phase: persistPhase, chat }) {
+    const phase = async (stage, extra) => {
+      await persistPhase(stage, extra);
+      this.trace(job, stage, "started", "Generation phase entered.");
+    };
     await this.waitForDownloadCleanup();
     this.recoveryRequest = job.downloadOnly
       ? job.downloadCheckpoint?.imageKey
         ? { recoverImageKey: job.downloadCheckpoint.imageKey }
         : { recoverPrompt: job.submittedPrompt }
       : {};
+    this.trace(
+      job,
+      "waiting_for_page",
+      "started",
+      "Starting or reusing the managed browser.",
+    );
     await this.action({ type: "start", automation: true });
     signal.throwIfAborted();
     const adapter = this.browser.gemini;
+    this.trace(
+      job,
+      "waiting_for_page",
+      "started",
+      "Opening Gemini in the managed browser; navigation has not acknowledged yet.",
+    );
     await adapter.open("gemini", job.chatId);
     await phase("waiting_for_page");
     let before = await this.waitForStablePage(job, signal, phase);

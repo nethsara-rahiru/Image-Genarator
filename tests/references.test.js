@@ -82,13 +82,46 @@ test("reference inputs persist with a queued job, affect idempotency and are rem
   );
   assert.ok(sent.some(({ method }) => method === "DOM.setFileInputFiles"));
   assert.ok(!sent.some(({ method }) => /click|send_prompt/i.test(method)));
-  runner.evaluate = async () => ({ ok: true });
+  const timeline = [];
+  let clicked = false;
+  runner.browser.log = {
+    write(level, source, code, message, details) {
+      timeline.push(`${details.stage}:${details.outcome}`);
+    },
+  };
+  runner.evaluate = async ({ operation }) => {
+    if (operation === "prepare_attachments" && !clicked)
+      return {
+        ok: false,
+        reason: "click_required",
+        target: "composer_plus",
+        targetToken: "e1",
+      };
+    if (operation === "activate_upload_control") {
+      timeline.push("actual_click");
+      clicked = true;
+      return {
+        ok: false,
+        reason: "upload_menu_opened",
+        target: "composer_plus",
+      };
+    }
+    return { ok: true };
+  };
   await runner.uploadReferences(
     queue.get(first.id),
     path.dirname(path.dirname(file)),
     AbortSignal.timeout(1000),
     "account",
   );
+  assert.ok(
+    timeline.indexOf("upload_click:started") < timeline.indexOf("actual_click"),
+  );
+  assert.ok(
+    timeline.indexOf("actual_click") <
+      timeline.indexOf("upload_click:dispatched"),
+  );
+  assert.ok(timeline.includes("attachment_confirmation:confirmed"));
   const original = await fs.readFile(file);
   await fs.writeFile(file, png(91));
   await assert.rejects(

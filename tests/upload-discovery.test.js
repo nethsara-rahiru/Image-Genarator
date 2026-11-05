@@ -29,11 +29,21 @@ test(
       page.setContent(
         `<button aria-label="Google Account: Fixture">Account</button>${content}`,
       );
-    const discover = () =>
+    const inspect = () =>
       page.evaluate(generationPage, {
         origin,
         operation: "prepare_attachments",
       });
+    const discover = async () => {
+      const found = await inspect();
+      if (found.reason !== "click_required") return found;
+      return page.evaluate(generationPage, {
+        origin,
+        operation: "activate_upload_control",
+        targetToken: found.targetToken,
+        documentId: found.documentId,
+      });
+    };
     await render(
       '<input id="outside" type="file" accept="image/*"><form><textarea></textarea><input id="wanted" type="file" accept="image/*" hidden></form><model-response><input type="file" accept="image/*"></model-response>',
     );
@@ -78,6 +88,18 @@ test(
         };
       };
     });
+    const candidate = await inspect();
+    assert.equal(candidate.reason, "click_required");
+    assert.equal(candidate.target, "attachment_opener");
+    assert.equal(await page.evaluate(() => window.uploadClicks), 0);
+    const staleDocument = await page.evaluate(generationPage, {
+      origin,
+      operation: "activate_upload_control",
+      targetToken: candidate.targetToken,
+      documentId: 0,
+    });
+    assert.equal(staleDocument.reason, "target_changed");
+    assert.equal(await page.evaluate(() => window.uploadClicks), 0);
     assert.equal((await discover()).reason, "upload_menu_opened");
     await discover();
     assert.equal(await page.evaluate(() => window.uploadClicks), 1);

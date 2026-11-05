@@ -302,6 +302,23 @@ test(
       const page = await client.newPage({
         viewport: { width: 1400, height: 1000 },
       });
+      // Drop log frames to prove the diagnostic table refreshes independently
+      // of browser/viewer WebSocket observation.
+      let droppedLogFrames = 0;
+      await page.routeWebSocket("**/stream", (socket) => {
+        const upstream = socket.connectToServer();
+        upstream.onMessage((message) => {
+          if (typeof message === "string") {
+            try {
+              if (JSON.parse(message).type === "logs") {
+                droppedLogFrames++;
+                return;
+              }
+            } catch {}
+          }
+          socket.send(message);
+        });
+      });
       await page.goto(base);
       await page.locator("#workspace").waitFor({ state: "visible" });
       assert.equal(await page.locator("#login-panel").isVisible(), false);
@@ -386,6 +403,45 @@ test(
       service.browser.options.pageSettleMs = 0;
       config.generationTimeoutMs = 15000;
       assert.deepEqual(downloads, ["/img/1-0.png"]);
+      const automationEvents = service.log
+        .snapshot()
+        .entries.filter(
+          (entry) =>
+            entry.code === "AUTOMATION_TRACE" &&
+            entry.details.jobId === first.id,
+        );
+      assert.ok(
+        automationEvents.some(
+          (entry) =>
+            entry.details.target === "composer_plus" &&
+            entry.details.outcome === "started",
+        ),
+      );
+      assert.ok(
+        automationEvents.some(
+          (entry) =>
+            entry.details.target === "upload_menu_item" &&
+            entry.details.outcome === "dispatched",
+        ),
+      );
+      assert.ok(
+        automationEvents.some(
+          (entry) =>
+            entry.details.stage === "attachment_confirmation" &&
+            entry.details.outcome === "confirmed",
+        ),
+      );
+      await page.locator("#automation-log-filter").fill(first.id);
+      await page
+        .locator("#automation-log-rows")
+        .getByText("Upload files menu item", { exact: true })
+        .first()
+        .waitFor();
+      assert.ok(
+        droppedLogFrames > 0,
+        "Log frames must be dropped to verify the independent HTTP refresh",
+      );
+      await page.locator("#automation-log-filter").fill("");
       assert.ok(
         uploadWaits[0] >= 5000,
         "References were uploaded before the five-second post-load wait",

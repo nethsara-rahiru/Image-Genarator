@@ -315,13 +315,71 @@ function receiveLogs(snapshot) {
       logEntries.push(entry);
       known.add(entry.id);
     }
+  logEntries.sort((a, b) => {
+    const [aBoot, aSequence] = a.id.split(":"),
+      [bBoot, bSequence] = b.id.split(":");
+    return aBoot === bBoot
+      ? Number(aSequence) - Number(bSequence)
+      : a.timestamp.localeCompare(b.timestamp);
+  });
   logEntries = logEntries.slice(-500);
   renderApiLogs();
+  renderAutomationLogs();
   $("debug-storage").hidden = !snapshot.storageError;
   $("debug-status").textContent =
     `${logEntries.length} retained entries${logsPaused ? " · paused" : ""}`;
   if (!logsPaused) renderLogs();
 }
+function renderAutomationLogs() {
+  const query = $("automation-log-filter").value.trim().toLowerCase();
+  const entries = logEntries
+    .filter(
+      (entry) =>
+        entry.source === "browser" &&
+        (/^(AUTOMATION_|GENERATION_|IMAGE_DOWNLOAD)/.test(entry.code) ||
+          entry.level === "error") &&
+        (!query || JSON.stringify(entry).toLowerCase().includes(query)),
+    )
+    .slice(-100)
+    .reverse();
+  const body = $("automation-log-rows");
+  body.replaceChildren();
+  $("automation-log-status").textContent = entries.length
+    ? `${entries.length} recent events · latest: ${entries[0].details?.stage || entries[0].code}`
+    : "No automation events yet.";
+  const targets = {
+    composer_plus: "Composer + button",
+    attachment_opener: "Attachment menu button",
+    upload_menu_item: "Upload files menu item",
+    file_input: "Image file input",
+  };
+  if (!entries.length) {
+    const row = document.createElement("tr"),
+      cell = document.createElement("td");
+    cell.colSpan = 5;
+    cell.textContent = "No matching automation events yet.";
+    row.append(cell);
+    body.append(row);
+  }
+  for (const entry of entries) {
+    const d = entry.details || {};
+    const { jobId, actionId, stage, outcome, target, ...diagnostics } = d;
+    const row = document.createElement("tr");
+    for (const value of [
+      new Date(entry.timestamp).toLocaleTimeString(),
+      `${stage || entry.code} · ${outcome || entry.level}`,
+      targets[target] || "—",
+      `${entry.message}${Object.keys(diagnostics).length ? " " + JSON.stringify(diagnostics) : ""}`,
+      jobId || actionId || "—",
+    ]) {
+      const cell = document.createElement("td");
+      cell.textContent = value;
+      row.append(cell);
+    }
+    body.append(row);
+  }
+}
+$("automation-log-filter").oninput = renderAutomationLogs;
 function renderApiLogs() {
   const entries = logEntries
     .filter((entry) => entry.source === "api")
@@ -860,6 +918,24 @@ $("generator-form").onsubmit = async (event) => {
 setInterval(() => {
   if (loggedIn && ws?.readyState !== WebSocket.OPEN) refreshGeneration();
 }, 3000);
+let logPolling = false;
+setInterval(async () => {
+  if (!loggedIn || logPolling) return;
+  logPolling = true;
+  try {
+    const cursor = logEntries.at(-1)?.id;
+    receiveLogs(
+      await api(
+        "/api/logs" + (cursor ? "?after=" + encodeURIComponent(cursor) : ""),
+      ),
+    );
+  } catch {
+    $("automation-log-status").textContent =
+      "Live log refresh failed; reconnecting. Retained events remain below.";
+  } finally {
+    logPolling = false;
+  }
+}, 2000);
 boot();
 
 $("refresh-results").onclick = refreshGeneration;

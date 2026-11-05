@@ -190,3 +190,29 @@ and the overall job deadline still apply. Transient read-only observation timeou
 can retry during readiness. Ambiguous clicks or prompt submission are never
 blindly repeated. Inspect Chrome if the page remains unresponsive after the
 bounded wait; the delay does not guarantee recovery of a disconnected browser.
+
+### Live automation diagnostics
+
+The dashboard's Live automation table shows the latest 100 matching entries from
+its bounded persistent debug history. Filter by job ID or step; use Export debug
+logs for the protected JSON export. Logs stream live and also refresh every two
+seconds over HTTP independently of browser observation. Retention follows the
+existing 500-entry debug journal and file rotation; history is not unlimited.
+
+For upload failures inspect upload_discovery and upload_click:
+
+- composerFound=0: the prompt composer container was not detected.
+- plusOutsideCount>0 with plusInsideCount=0: plus controls exist outside the
+  eligible composer search scope. Counts describe matches, not proof of intent.
+- menuCount/openerCount or candidateCount>1: several eligible targets; no guess.
+- upload_click started without dispatched: activation failed or did not
+  acknowledge. The recorded rectangle uses Chrome viewport coordinates.
+- upload_files dispatched: Chrome accepted files; this does not prove provider
+  upload completion. attachment_confirmation confirmed is the latter check.
+
+Export a failing job's trace for debugging. It intentionally omits page labels,
+HTML, prompts, credentials, filenames, file paths and transient element tokens.
+A dispatched click means the fixed browser program called click on the validated
+control; it does not claim the intended menu became visible. The next snapshots
+and attachment confirmation establish postconditions. Live provider changes may
+still require a targeted adapter fix after inspecting this evidence.
