@@ -1,0 +1,27 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/styles.css"><title>Dashboard – MarketingAgent</title></head><body data-menu>
+<header class="site-header"><div class="wrap"><a class="brand" href="index.html"><span class="brand-mark">M</span>MarketingAgent</a><nav class="nav" aria-label="Main"><a class="link" href="index.html">Home</a><a class="link" href="index.html#marketplace">Marketplace</a><a class="link" href="index.html#how">How it works</a></nav><div class="actions" id="navActions"></div></div></header>
+<main class="dash"><div class="wrap">
+  <h1 id="hello">Welcome</h1><p class="hint" style="margin-top:-.3rem;margin-bottom:1.5rem">Your account and a summary of your setup.</p>
+  <div class="dash-grid">
+    <div class="stack">
+      <section class="panel wide" id="approval" hidden><h2>Post approval</h2>
+        <p class="sub" style="margin-top:0">Review each post before it goes out. Nothing is published without your approval.</p>
+        <div id="postArea"></div>
+        <p class="hint" style="margin-top:1rem">Draft text is a simple template for now. Publishing to your platforms will be connected later.</p></section>
+    <form class="panel wide" id="accountForm" novalidate>
+      <h2>Account details</h2>
+      <div class="two">
+        <div class="field"><label for="accName">Full name</label><input id="accName" name="name" maxlength="80" autocomplete="name"><div class="err" id="accNameErr"></div></div>
+        <div class="field"><label for="accPhone">Phone (optional)</label><input id="accPhone" name="phone" type="tel" placeholder="+94 77 123 4567" autocomplete="tel"><div class="err" id="accPhoneErr"></div></div>
+      </div>
+      <div class="field"><label for="accEmail">Email</label><input id="accEmail" name="email" readonly></div>
+      <button class="btn btn-primary" type="submit">Save account details</button>
+    </form>
+    </div>
+    <aside><h2 style="font-size:1.2rem">Your setup</h2>
+      <div class="stack" id="overview"></div>
+      <div class="notice" id="notOwner" hidden>Business profiles and post preferences are for business owner accounts. Browse the marketplace to find sellers, or create a business owner account to list your own business.</div>
+    </aside>
+  </div>
+</div></main>
+<script src="js/api.js"></script><script src="js/app.js"></script><script src="js/menu.js"></script><script src="js/dashboard.js"></script></body></html>
