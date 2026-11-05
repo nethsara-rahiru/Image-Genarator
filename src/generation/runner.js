@@ -18,6 +18,17 @@ export class GenerationRunner {
       { ...details, jobId: job.id, stage, outcome },
     );
   }
+  async pace(job, stage, signal) {
+    const delayMs = this.browser.config?.automationStepDelayMs ?? 1000;
+    this.trace(
+      job,
+      stage,
+      "waiting",
+      "Pausing before the next automation step.",
+      { delayMs },
+    );
+    await pause(delayMs, undefined, { signal });
+  }
   async evaluate(request, signal) {
     signal.throwIfAborted();
     const adapter = this.browser.gemini;
@@ -279,12 +290,14 @@ export class GenerationRunner {
             activated,
           );
           lastDiscovery = activated;
+          if (activated.reason === "upload_menu_opened")
+            await this.pace(job, "upload_click", signal);
         }
         if (lastDiscovery.ok) {
           prepared = true;
           break;
         }
-        await pause(250, undefined, { signal });
+        await pause(500, undefined, { signal });
       }
       if (!prepared) {
         this.trace(
@@ -322,6 +335,7 @@ export class GenerationRunner {
           "Gemini's upload input changed. No prompt was submitted.",
         );
       }
+      await this.pace(job, "upload_files", signal);
       this.trace(
         job,
         "upload_files",
@@ -337,6 +351,7 @@ export class GenerationRunner {
         "Chrome acknowledged file delivery; Gemini attachment confirmation is still required.",
         { fileCount: files.length },
       );
+      await this.pace(job, "upload_files", signal);
     } finally {
       await pipe.send(
         "Page.setInterceptFileChooserDialog",
@@ -351,19 +366,33 @@ export class GenerationRunner {
       "Waiting for all reference attachments to be confirmed in the composer.",
       { fileCount: files.length },
     );
-    for (let n = 0; n < 120; n++) {
-      if (
-        (
-          await this.evaluate(
-            {
-              operation: "attachments_ready",
-              accountKey,
-              referenceNames: references.map((reference) => reference.filename),
-            },
-            signal,
-          )
-        ).ok
-      ) {
+    const timeoutMs = this.browser.config?.generationUploadTimeoutMs ?? 60000;
+    const uploadStarted = Date.now();
+    const uploadDeadline = uploadStarted + timeoutMs;
+    let lastStatus;
+    let lastReported = 0;
+    while (Date.now() < uploadDeadline) {
+      const status = await this.evaluate(
+        {
+          operation: "attachments_ready",
+          accountKey,
+          referenceNames: references.map((reference) => reference.filename),
+        },
+        signal,
+      );
+      const signature = JSON.stringify(status);
+      if (signature !== lastStatus || Date.now() - lastReported >= 10000) {
+        this.trace(
+          job,
+          "attachment_confirmation",
+          status.ok ? "confirmed" : "waiting",
+          "Attachment confirmation snapshot; counts only, no filenames.",
+          { ...status, durationMs: Date.now() - uploadStarted },
+        );
+        lastStatus = signature;
+        lastReported = Date.now();
+      }
+      if (status.ok) {
         this.trace(
           job,
           "attachment_confirmation",
@@ -371,20 +400,21 @@ export class GenerationRunner {
           "All expected reference attachments are confirmed.",
           { fileCount: files.length },
         );
+        await this.pace(job, "attachment_confirmation", signal);
         return;
       }
-      await pause(250, undefined, { signal });
+      await pause(1000, undefined, { signal });
     }
     this.trace(
       job,
       "attachment_confirmation",
       "failed",
-      "Gemini did not confirm every expected attachment within the upload wait.",
+      "Gemini did not confirm every expected attachment within the configured upload wait. Inspect the confirmation counts.",
       { fileCount: files.length },
     );
     throw nativeError(
       "GENERATION_UPLOAD_UNCONFIRMED",
-      "Gemini did not confirm all reference attachments within 30 seconds. No prompt was submitted.",
+      `Gemini did not confirm all reference attachments within ${Math.round(timeoutMs / 1000)} seconds. Check attachment confirmation counts in Live automation. No prompt was submitted.`,
     );
   }
   async run(job, { signal, directory, phase: persistPhase, chat }) {
@@ -506,6 +536,7 @@ export class GenerationRunner {
       }
 
       await phase("preparing_prompt", { accountKey });
+      await this.pace(job, "preparing_prompt", signal);
       const filled = await this.evaluate(
         { operation: "fill_prompt", accountKey, prompt: job.submittedPrompt },
         signal,
@@ -515,20 +546,22 @@ export class GenerationRunner {
           "GENERATION_EDITOR",
           "The prompt editor changed. No prompt was submitted.",
         );
+      await this.pace(job, "preparing_prompt", signal);
       let ready;
-      for (let n = 0; n < 20; n++) {
+      for (let n = 0; n < 60; n++) {
         ready = await this.evaluate(
           { operation: "inspect", accountKey, baseline, baselineImages },
           signal,
         );
         if (ready.canSend) break;
-        await pause(150, undefined, { signal });
+        await pause(500, undefined, { signal });
       }
       if (!ready?.canSend)
         throw nativeError(
           "GENERATION_SEND_UNAVAILABLE",
           "The Send button was not available. No prompt was submitted.",
         );
+      await this.pace(job, "submitting_prompt", signal);
       await phase("submitting_prompt", { submissionPossible: true });
       const submitted = await this.evaluate(
         {

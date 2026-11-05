@@ -60,6 +60,7 @@ test("reference inputs persist with a queued job, affect idempotency and are rem
   const sent = [];
   const runner = new GenerationRunner({
     gemini: { session: "fixture" },
+    config: { automationStepDelayMs: 0 },
     pipe: {
       async send(method, params) {
         sent.push({ method, params });
@@ -76,7 +77,7 @@ test("reference inputs persist with a queued job, affect idempotency and are rem
     runner.uploadReferences(
       queue.get(first.id),
       path.dirname(path.dirname(file)),
-      AbortSignal.timeout(20),
+      AbortSignal.timeout(200),
       "account",
     ),
   );

@@ -216,3 +216,21 @@ A dispatched click means the fixed browser program called click on the validated
 control; it does not claim the intended menu became visible. The next snapshots
 and attachment confirmation establish postconditions. Live provider changes may
 still require a targeted adapter fix after inspecting this evidence.
+
+### Slower upload and prompt steps
+
+AUTOMATION_STEP_DELAY_MS defaults to 1000 ms (range 1–5000). It adds cancellable
+pauses between menu actions, file transfer, confirmation and prompt preparation/
+send; the existing five-second post-load pause remains. Restart after editing
+.env. Increase GENERATION_TIMEOUT_SECONDS too if a deliberately slow workflow
+needs a larger total job budget.
+
+GENERATION_UPLOAD_TIMEOUT_SECONDS defaults to 60 (range 1–180). Attachment checks
+poll once per second and log changes plus ten-second heartbeats. Confirmation
+snapshots show expectedCount, matchedCount, previewCount, busyCount, composerFound
+and reason. matchedCount=0 with previewCount>0 and busyCount=0 suggests an
+unrecognized filename/widget layout rather than merely slow upload. busyCount>0
+means a visible upload indicator still exists. Only matched names with no busy
+indicator pass; a thumbnail alone is insufficient proof. Shortened filenames can
+match safe title/tooltip/data-filename metadata near the composer, excluding chat
+history. Send checks again after the pacing delay. No prompt is sent on failure.

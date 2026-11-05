@@ -106,6 +106,11 @@ export class DebugLog {
       "menuCount",
       "openerCount",
       "fileCount",
+      "delayMs",
+      "expectedCount",
+      "matchedCount",
+      "previewCount",
+      "busyCount",
     ])
       if (
         Number.isInteger(details[key]) &&
@@ -144,6 +149,10 @@ export class DebugLog {
         "click_required",
         "target_changed",
         "upload_menu_opened",
+        "no_composer",
+        "upload_busy",
+        "names_not_visible",
+        "attachments_matched",
       ].includes(details.reason)
     )
       safe.reason = details.reason;

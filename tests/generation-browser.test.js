@@ -231,7 +231,7 @@ test(
     const config = {
       ...configuration({ DATA_DIR: data, AUTO_OPEN: "false" }),
       port: 0,
-      generationTimeoutMs: 25000,
+      generationTimeoutMs: 45000,
       generationReadyTimeoutMs: 12000,
     };
     const service = await startServer(config, {
@@ -288,7 +288,7 @@ test(
             "needs_login",
             "cancelled",
           ].includes(service.generation.get(id).state),
-        25000,
+        config.generationTimeoutMs + 10000,
       );
       return service.generation.get(id);
     }
@@ -402,6 +402,7 @@ test(
       config.generationReadyTimeoutMs = 3000;
       service.browser.options.pageSettleMs = 0;
       config.generationTimeoutMs = 15000;
+      config.automationStepDelayMs = 0;
       assert.deepEqual(downloads, ["/img/1-0.png"]);
       const automationEvents = service.log
         .snapshot()

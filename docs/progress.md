@@ -607,3 +607,26 @@ this app does not bypass it or guarantee that Gemini will return an image.
   files menu and lazy image input. Final test/CI evidence is in the PR.
 - Live target-PC generation after updating remains UNVERIFIED; retry the stored
   pre-submission job and inspect the new trace if another upload step fails.
+
+## Slower automation and attachment confirmation diagnostics
+
+- User reports successful reference delivery but UPLOAD_UNCONFIRMED and requested
+  slower steps. Exact live attachment markup is unavailable; no claim that timing
+  alone fixes a provider UI mismatch.
+- Add cancellable one-second pauses between menu activation, file delivery,
+  confirmation, prompt preparation and send. AUTOMATION_STEP_DELAY_MS configures
+  1–5000 ms; existing five-second post-load settling is preserved.
+- Increase provider confirmation wait to 60 seconds by default, configured by
+  GENERATION_UPLOAD_TIMEOUT_SECONDS (1–180). Use a real deadline, one-second
+  polling and count snapshots/ten-second heartbeats with elapsed duration.
+- Confirmation checks visible filename metadata in nearby composer ancestors,
+  stopping before document/body/main or any chat history. Include safe tooltip/
+  data-filename metadata for shortened labels. Visible busy indicators still
+  block confirmation, and previews alone never prove an attachment is ready.
+- Logs expose expected/matched filename counts, preview/busy counts and reasons,
+  never actual names, page content or paths. The final send rechecks attachments;
+  increased pacing does not bypass account, upload or submission guards.
+- Tests cover pacing/cancellation/config bounds and delayed provider metadata
+  outside the editor with busy indicators. Full browser fixture retains actual
+  first-job pacing; fixture-only later jobs run faster. Final CI evidence is in
+  the PR. Live Gemini attachment readiness remains UNVERIFIED.

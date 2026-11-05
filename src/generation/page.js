@@ -90,28 +90,93 @@ export async function generationPage(request) {
     editor?.closest(
       "input-area-v2,input-area,form,.input-area-container,.input-container",
     ) || editor?.parentElement;
-  const attachmentsReady = (names) => {
-    if (!names?.length) return true;
-    if (
-      !composer ||
-      [
-        ...composer.querySelectorAll(
-          '[role="progressbar"],[aria-busy="true"],mat-progress-spinner,mat-progress-bar,.uploading,[data-upload-state="uploading"]',
-        ),
-      ].some(visible)
-    )
-      return false;
-    const text = `${composer.innerText} ${[
-      ...composer.querySelectorAll("[aria-label],img[alt],[title]"),
-    ]
-      .filter(visible)
-      .map(
-        (node) =>
-          `${node.getAttribute("aria-label") || ""} ${node.getAttribute("alt") || ""} ${node.getAttribute("title") || ""}`,
+  const attachmentStatus = (names = []) => {
+    const expectedCount = names.length;
+    if (!expectedCount)
+      return {
+        ok: true,
+        expectedCount,
+        matchedCount: 0,
+        previewCount: 0,
+        busyCount: 0,
+        composerFound: composer ? 1 : 0,
+        reason: "attachments_matched",
+      };
+    const scopes = [];
+    let node = composer;
+    for (let depth = 0; node && depth < 4; depth++, node = node.parentElement) {
+      if (
+        ["BODY", "HTML", "MAIN"].includes(node.tagName) ||
+        responses.some((response) => node.contains(response)) ||
+        node.querySelector('user-query,[data-message-author-role="user"]')
       )
-      .join(" ")}`;
-    return names.every((name) => text.includes(name));
+        break;
+      scopes.push(node);
+    }
+    let best = {
+      ok: false,
+      expectedCount,
+      matchedCount: 0,
+      previewCount: 0,
+      busyCount: 0,
+      composerFound: scopes.length ? 1 : 0,
+      reason: scopes.length ? "names_not_visible" : "no_composer",
+    };
+    for (const scope of scopes) {
+      const busySelector =
+        '[role="progressbar"],[aria-busy="true"],mat-progress-spinner,mat-progress-bar,.uploading,[data-upload-state="uploading"]';
+      const busyCount = [
+        ...(scope.matches(busySelector) ? [scope] : []),
+        ...scope.querySelectorAll(busySelector),
+      ].filter(visible).length;
+      const metadata = [
+        ...scope.querySelectorAll(
+          "[aria-label],[title],[data-tooltip],[data-file-name],[data-filename],img[alt]",
+        ),
+      ]
+        .filter(visible)
+        .map((element) =>
+          [
+            "aria-label",
+            "title",
+            "data-tooltip",
+            "data-file-name",
+            "data-filename",
+            "alt",
+          ]
+            .map((name) => element.getAttribute(name) || "")
+            .join(" "),
+        )
+        .join(" ");
+      const text = `${scope.innerText} ${metadata}`;
+      const matchedCount = names.filter((name) => text.includes(name)).length;
+      const previewCount = [...scope.querySelectorAll("img")].filter(
+        visible,
+      ).length;
+      const status = {
+        ok: matchedCount === expectedCount && busyCount === 0,
+        expectedCount,
+        matchedCount,
+        previewCount,
+        busyCount,
+        composerFound: 1,
+        reason: busyCount
+          ? "upload_busy"
+          : matchedCount === expectedCount
+            ? "attachments_matched"
+            : "names_not_visible",
+      };
+      if (status.ok) return status;
+      if (
+        matchedCount > best.matchedCount ||
+        (matchedCount === best.matchedCount &&
+          previewCount >= best.previewCount)
+      )
+        best = status;
+    }
+    return best;
   };
+  const attachmentsReady = (names) => attachmentStatus(names).ok;
   if (
     ["prepare_attachments", "activate_upload_control"].includes(
       request.operation,
@@ -235,7 +300,7 @@ export async function generationPage(request) {
     };
   }
   if (request.operation === "attachments_ready")
-    return { ok: attachmentsReady(request.referenceNames) };
+    return attachmentStatus(request.referenceNames);
   if (request.operation === "new_chat") {
     const buttons = controls.filter((e) =>
       /^(new chat|start new chat)$/i.test(label(e)),

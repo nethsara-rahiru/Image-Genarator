@@ -123,5 +123,41 @@ test(
       "lazy-input",
     );
     assert.equal(await page.evaluate(() => window.misleadingClicks), 0);
+    const referenceName = "reference-1-12345678.png";
+    let status = await page.evaluate(generationPage, {
+      origin,
+      operation: "attachments_ready",
+      referenceNames: [referenceName],
+    });
+    assert.equal(status.ok, false);
+    await page.evaluate((name) => {
+      const form = document.querySelector("form");
+      const wrapper = document.createElement("div");
+      form.before(wrapper);
+      wrapper.append(form);
+      const preview = document.createElement("div");
+      preview.setAttribute("data-filename", name);
+      preview.textContent = "Shortened reference…";
+      wrapper.append(preview);
+      form.setAttribute("aria-busy", "true");
+    }, referenceName);
+    status = await page.evaluate(generationPage, {
+      origin,
+      operation: "attachments_ready",
+      referenceNames: [referenceName],
+    });
+    assert.equal(status.matchedCount, 1);
+    assert.equal(status.ok, false);
+    assert.ok(status.busyCount > 0);
+    await page
+      .locator("form")
+      .evaluate((form) => form.removeAttribute("aria-busy"));
+    status = await page.evaluate(generationPage, {
+      origin,
+      operation: "attachments_ready",
+      referenceNames: [referenceName],
+    });
+    assert.equal(status.ok, true);
+    assert.equal(status.expectedCount, 1);
   },
 );

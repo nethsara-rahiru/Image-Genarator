@@ -70,10 +70,31 @@ test("only observed sign-in UI requires login; account mismatch and cancellation
 });
 test("readiness timeout has a bounded validated configuration", () => {
   assert.equal(configuration({}).generationReadyTimeoutMs, 45000);
+  assert.equal(configuration({}).automationStepDelayMs, 1000);
+  assert.equal(configuration({}).generationUploadTimeoutMs, 60000);
+  assert.throws(() => configuration({ AUTOMATION_STEP_DELAY_MS: "5001" }));
+  assert.throws(() =>
+    configuration({ GENERATION_UPLOAD_TIMEOUT_SECONDS: "181" }),
+  );
   assert.throws(() => configuration({ GENERATION_READY_TIMEOUT_SECONDS: "0" }));
   assert.throws(() =>
     configuration({ GENERATION_READY_TIMEOUT_SECONDS: "121" }),
   );
+});
+test("step pacing waits and remains cancellable before the next operation", async () => {
+  const instance = runner(async () => ({ kind: "signed_in" }));
+  instance.browser.config.automationStepDelayMs = 30;
+  const started = Date.now();
+  await instance.pace({}, "upload_files", AbortSignal.timeout(1000));
+  assert.ok(Date.now() - started >= 25);
+  instance.browser.config.automationStepDelayMs = 1000;
+  let proceeded = false;
+  await assert.rejects(
+    instance.pace({}, "upload_files", AbortSignal.timeout(20)).then(() => {
+      proceeded = true;
+    }),
+  );
+  assert.equal(proceeded, false);
 });
 
 test("settling waits after readiness, rechecks a reload and keeps its account guard", async () => {
