@@ -175,3 +175,21 @@ on your host. Add your keys locally and complete one real promotion to validate
 those integrations. Google may reject automated browsers, ask for sign-in or
 return no image; four successful images cannot be guaranteed. The image backend
 must stay running and signed in while promotions execute.
+
+### HTTP 403 after Groq creates a prompt
+
+Groq and image generation use separate credentials. With auto-start enabled, the
+first image API call is `/browser/start`, which requires the `browser` token
+scope. Create the image API token in the root Image-Genarator folder using
+`npm run api-client -- create "marketing-agent" read,generate,browser 90`, set it
+as `IMAGE_API_KEY` in backend/.env and restart Marketing Agent. `generate` is
+needed to submit jobs and `read` to poll/download. If you intentionally use a
+read,generate token, set `IMAGE_API_AUTO_START=false` and start the image-generator
+browser manually first.
+
+A 403 can also come from Host, HTTPS or proxy access restrictions. Use the
+image server's configured address in `IMAGE_API_BASE_URL` (including `/api/v1`).
+Errors now identify browser start, submission, status or download and recognize
+known scope/Host/TLS errors. Arbitrary upstream response text is not exposed.
+After resolving the configuration, start a new promotion; inspect any existing
+remote job before repeating a promotion that had already submitted an image.

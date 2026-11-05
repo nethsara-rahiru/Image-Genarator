@@ -24,7 +24,13 @@ async function bodyBytes(response, max) {
   return Buffer.concat(chunks);
 }
 function clients(c, parentSignal) {
-  async function request(url, key, options = {}, binary = false) {
+  async function request(
+    url,
+    key,
+    options = {},
+    binary = false,
+    diagnostic = { label: "Groq prompt generation", keyName: "GROQ_API_KEY" },
+  ) {
     const signal = AbortSignal.any([
       parentSignal || new AbortController().signal,
       AbortSignal.timeout(c.requestMs),
@@ -38,10 +44,43 @@ function clients(c, parentSignal) {
         headers: { Authorization: `Bearer ${key}`, ...options.headers },
       });
       if (!response.ok) {
-        await response.body?.cancel();
+        // Never echo arbitrary upstream text: proxies and APIs may include secrets.
+        let known = "";
+        try {
+          const data = JSON.parse(
+            (await bodyBytes(response, 8192)).toString("utf8"),
+          );
+          if (typeof data.error === "string") known = data.error;
+        } catch {
+          /* oversized, HTML or unknown errors use static guidance below */
+        }
+        const scope = /^API scope required: (read|generate|browser)$/.exec(
+          known,
+        );
+        let help =
+          response.status === 401
+            ? `Check ${diagnostic.keyName}; the token may be invalid, expired or revoked.`
+            : "Check server configuration or service availability.";
+        if (response.status === 403) {
+          if (scope)
+            help = `The image API token requires the ${scope[1]} scope. Create a token with read,generate,browser and set IMAGE_API_KEY in backend/.env.`;
+          else if (known === "Unexpected host. Check PUBLIC_ORIGIN.")
+            help =
+              "IMAGE_API_BASE_URL must use the image server's configured PUBLIC_ORIGIN host and port. Check its reverse proxy configuration.";
+          else if (known === "HTTPS is required")
+            help =
+              "The image server requires HTTPS. Use its configured HTTPS address and trusted certificate.";
+          else if (known === "Unexpected origin")
+            help =
+              "The image server rejected the request Origin. Check its reverse proxy and PUBLIC_ORIGIN settings.";
+          else
+            help = diagnostic.scope
+              ? `Check IMAGE_API_KEY permissions (required scope: ${diagnostic.scope}), the configured Host/HTTPS address and any proxy access rules.`
+              : "Check the Groq key, model permissions and any proxy access rules.";
+        }
         throw fail(
           "UPSTREAM_HTTP",
-          `External service returned HTTP ${response.status}. Check server configuration or service availability.`,
+          `${diagnostic.label} returned HTTP ${response.status}. ${help}`,
         );
       }
       const bytes = await bodyBytes(response, binary ? c.maxBytes : 262144);
@@ -70,8 +109,21 @@ function clients(c, parentSignal) {
       );
     }
   }
-  const image = (path, options, binary) =>
-    request(c.imageBase + path, c.imageKey, options, binary);
+  const image = (path, options, binary) => {
+    const start = path === "/browser/start",
+      submit = path === "/generations";
+    return request(c.imageBase + path, c.imageKey, options, binary, {
+      label: start
+        ? "Image API browser start"
+        : submit
+          ? "Image API generation submission"
+          : binary
+            ? "Image API image download"
+            : "Image API job status",
+      keyName: "IMAGE_API_KEY",
+      scope: start ? "browser" : submit ? "generate" : "read",
+    });
+  };
   const remoteId = (id) => {
     if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,128}$/.test(id))
       throw fail(
