@@ -18,7 +18,6 @@ const agentImage = (value) =>
     products = [],
     offset = 0,
     total = 0,
-    selection = null,
     imageData = "",
     imageVersion = 0,
     imageLoading = false,
@@ -26,35 +25,197 @@ const agentImage = (value) =>
   const status = (message) => {
     agentElement("agentStatus").textContent = message;
   };
-  function openPromotion(type, product) {
+  let submitting = false,
+    promotionOffset = 0,
+    pollTimer,
+    promotionLoading = false;
+  const pendingStates = new Set([
+    "queued",
+    "prompting",
+    "submitting",
+    "generating",
+    "downloading",
+  ]);
+  const promotionCards = new Map(),
+    submissionKeys = new Map();
+  async function openPromotion(type, product) {
+    if (submitting) return;
     if (!profile) {
-      status("Set up your business profile before preparing a promotion.");
+      status("Set up your business profile before promoting.");
       return;
     }
-    selection = {
-      targetType: type,
-      ...(product ? { productId: product._id } : {}),
-    };
-    const name = product?.name || profile.name;
-    const image = agentImage(product?.image || profile.logo);
-    agentElement("promotionTitle").textContent = `Promote ${name}`;
-    agentElement("promotionTarget").textContent = product
-      ? `${profile.name} · ${product.name}`
-      : profile.name;
-    agentElement("promotionImage").hidden = !image;
-    if (image) agentElement("promotionImage").src = image;
-    else agentElement("promotionImage").removeAttribute("src");
-    agentElement("promotionText").value = (
-      product
-        ? `${product.name} from ${profile.name}. ${product.description || ""} Discover more today.`
-        : `${profile.name}: ${profile.description} Get in touch to learn more.`
-    ).slice(0, 800);
-    agentElement("promotionPlatforms").textContent =
-      `Preferred platforms: ${(user.preferences?.platforms || []).join(", ") || "None selected. Update Post preferences to choose platforms."}`;
-    agentElement("promotionError").textContent = "";
-    agentElement("promotionDialog").showModal();
-    agentElement("promotionText").focus();
+    submitting = true;
+    document
+      .querySelectorAll(".agent-promote")
+      .forEach((button) => (button.disabled = true));
+    status("Starting promotion…");
+    try {
+      const targetKey = product?._id || "business";
+      if (!submissionKeys.has(targetKey))
+        submissionKeys.set(
+          targetKey,
+          Array.from(crypto.getRandomValues(new Uint8Array(16)), (n) =>
+            n.toString(16).padStart(2, "0"),
+          ).join(""),
+        );
+      const result = await api("/promotions", {
+        method: "POST",
+        headers: { "Idempotency-Key": submissionKeys.get(targetKey) },
+        body: {
+          targetType: type,
+          ...(product ? { productId: product._id } : {}),
+        },
+      });
+      submissionKeys.delete(targetKey);
+      status(
+        `Promotion started for ${result.promotion.targetName}. Preparing up to four images.`,
+      );
+      promotionOffset = 0;
+      await loadPromotions();
+      agentElement("promotionResults").scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    } catch (error) {
+      status(error.message);
+    } finally {
+      submitting = false;
+      document
+        .querySelectorAll(".agent-promote")
+        .forEach((button) => (button.disabled = !profile));
+    }
   }
+  const make = (tag, text, className) => {
+    const node = document.createElement(tag);
+    if (text) node.textContent = text;
+    if (className) node.className = className;
+    return node;
+  };
+  function renderPromotion(run) {
+    let entry = promotionCards.get(run.id);
+    if (!entry) {
+      const article = make("article", "", "card promotion-run");
+      article.dataset.promotionId = run.id;
+      const title = make("h3"),
+        progress = make("p"),
+        error = make("p", "", "err");
+      const cancel = make("button", "Cancel remaining images", "btn btn-ghost");
+      cancel.type = "button";
+      cancel.onclick = async () => {
+        if (
+          !confirm(
+            "Stop remaining images? A remote job already submitted may still finish. Saved images are kept.",
+          )
+        )
+          return;
+        cancel.disabled = true;
+        try {
+          await api(`/promotions/${run.id}/cancel`, { method: "POST" });
+          await loadPromotions();
+        } catch (err) {
+          error.textContent = err.message;
+        } finally {
+          cancel.disabled = false;
+        }
+      };
+      const grid = make("div", "", "agent-grid");
+      const slots = Array.from({ length: 4 }, (_, i) => {
+        const item = make("section", "", "promotion-image");
+        const heading = make("h4", `Image ${i + 1}`),
+          state = make("p", "Waiting", "hint");
+        const image = make("img");
+        image.alt = `${run.targetName} promotion ${i + 1}`;
+        image.hidden = true;
+        image.loading = "lazy";
+        const download = make("a", "Download original", "btn btn-ghost");
+        download.hidden = true;
+        const details = make("details"),
+          summary = make("summary", "Generation prompt"),
+          prompt = make("p");
+        details.append(summary, prompt);
+        details.hidden = true;
+        item.append(heading, state, image, download, details);
+        grid.append(item);
+        return { state, image, download, details, prompt };
+      });
+      article.append(title, progress, error, cancel, grid);
+      entry = { article, title, progress, error, cancel, slots };
+      promotionCards.set(run.id, entry);
+    }
+    entry.title.textContent = run.targetName;
+    entry.progress.textContent = `${run.completed} / 4 images saved · ${run.state.replaceAll("_", " ")}${pendingStates.has(run.state) ? ` · working on image ${run.current}` : ""}`;
+    entry.error.textContent = run.error
+      ? `${run.error.code}: ${run.error.message}`
+      : "";
+    entry.cancel.hidden = !pendingStates.has(run.state);
+    for (const [i, item] of run.items.entries()) {
+      const slot = entry.slots[i];
+      slot.state.textContent = item.completedAt
+        ? `Saved · ${item.width} × ${item.height} · ${item.bytes < 1024 ? item.bytes + " B" : Math.round(item.bytes / 1024) + " KB"}`
+        : item.remoteState ||
+          (i + 1 === run.current ? run.state.replaceAll("_", " ") : "Waiting");
+      slot.prompt.textContent = item.prompt || "";
+      slot.details.hidden = !item.prompt;
+      slot.image.hidden = slot.download.hidden = !item.imageUrl;
+      if (item.imageUrl && slot.image.getAttribute("src") !== item.imageUrl) {
+        slot.image.src = item.imageUrl;
+        slot.download.href = item.imageUrl + "?download=1";
+      }
+    }
+    return entry.article;
+  }
+  async function loadPromotions() {
+    if (promotionLoading) return;
+    promotionLoading = true;
+    clearTimeout(pollTimer);
+    try {
+      const result = await api(`/promotions?limit=5&offset=${promotionOffset}`);
+      const area = agentElement("promotionRuns");
+      const cards = result.promotions.map(renderPromotion);
+      area.replaceChildren(
+        ...(cards.length
+          ? cards
+          : [
+              make(
+                "p",
+                "No promotions yet. Click Promote on your business or a product to generate four images.",
+              ),
+            ]),
+      );
+      const currentIds = new Set(result.promotions.map((run) => run.id));
+      for (const id of promotionCards.keys())
+        if (!currentIds.has(id)) promotionCards.delete(id);
+      agentElement("promotionPage").textContent = result.total
+        ? `${promotionOffset + 1}–${promotionOffset + cards.length} of ${result.total}`
+        : "0 promotions";
+      agentElement("previousPromotions").disabled = promotionOffset === 0;
+      agentElement("nextPromotions").disabled =
+        promotionOffset + cards.length >= result.total;
+      agentElement("promotionStatus").textContent =
+        "Updates every 3 seconds while a promotion is active. Google sign-in, if required, is manual on the image-generator computer.";
+      if (result.promotions.some((run) => pendingStates.has(run.state)))
+        pollTimer = setTimeout(loadPromotions, 3000);
+    } catch (error) {
+      agentElement("promotionStatus").textContent =
+        error.message + " Retrying…";
+      pollTimer = setTimeout(loadPromotions, 5000);
+    } finally {
+      promotionLoading = false;
+    }
+  }
+  agentElement("refreshPromotions").onclick = loadPromotions;
+  agentElement("previousPromotions").onclick = () => {
+    if (!promotionLoading) {
+      promotionOffset = Math.max(0, promotionOffset - 5);
+      loadPromotions();
+    }
+  };
+  agentElement("nextPromotions").onclick = () => {
+    if (!promotionLoading) {
+      promotionOffset += 5;
+      loadPromotions();
+    }
+  };
   function card(name, image, onPromote) {
     const article = document.createElement("article");
     article.className = "card agent-card";
@@ -180,26 +341,6 @@ const agentImage = (value) =>
     offset += 20;
     load();
   };
-  agentElement("closePromotion").onclick = () =>
-    agentElement("promotionDialog").close();
-  agentElement("promotionForm").onsubmit = async (event) => {
-    event.preventDefault();
-    if (!selection) return;
-    agentElement("savePromotion").disabled = true;
-    try {
-      await api("/posts/draft", {
-        method: "POST",
-        body: { ...selection, text: agentElement("promotionText").value },
-      });
-      agentElement("promotionDialog").close();
-      status("Promotion draft saved. Review it in Dashboard before approval.");
-      toast("Promotion draft saved.");
-    } catch (error) {
-      agentElement("promotionError").textContent = error.message;
-    } finally {
-      agentElement("savePromotion").disabled = false;
-    }
-  };
   agentElement("productImage").onchange = (event) => {
     const file = event.target.files[0],
       version = ++imageVersion;
@@ -288,5 +429,5 @@ const agentImage = (value) =>
       agentElement("saveProduct").disabled = false;
     }
   };
-  await load();
+  await Promise.all([load(), loadPromotions()]);
 })();

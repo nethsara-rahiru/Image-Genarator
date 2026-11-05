@@ -1,4 +1,4 @@
-require("dotenv").config();
+require("dotenv").config({ path: require("path").join(__dirname, ".env") });
 const mongoose = require("mongoose");
 
 const {
@@ -17,9 +17,23 @@ mongoose
   .connect(MONGODB_URI)
   .then(() => {
     console.log("Connected to MongoDB");
-    require("./app").listen(PORT, () =>
+    const server = require("./app").listen(PORT, () =>
       console.log(`Marketing Agent running at http://localhost:${PORT}`),
     );
+    const worker = require("./services/promotionWorker").worker();
+    worker.start();
+    let closing = false;
+    const shutdown = async () => {
+      if (closing) return;
+      closing = true;
+      const deadline = setTimeout(() => process.exit(1), 15000);
+      deadline.unref();
+      await worker.stop();
+      await new Promise((resolve) => server.close(resolve));
+      await mongoose.disconnect();
+    };
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
   })
   .catch((err) => {
     console.error(
