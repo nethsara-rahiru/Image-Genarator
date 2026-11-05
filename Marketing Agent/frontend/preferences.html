@@ -1,24 +1,119 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/styles.css"><title>Post preferences – MarketingAgent</title></head><body data-menu>
-<header class="site-header"><div class="wrap"><a class="brand" href="index.html"><span class="brand-mark">M</span>MarketingAgent</a><nav class="nav" aria-label="Main"><a class="link" href="index.html">Home</a><a class="link" href="index.html#marketplace">Marketplace</a><a class="link" href="index.html#how">How it works</a></nav><div class="actions" id="navActions"></div></div></header>
-<main class="dash"><div class="wrap" style="max-width:680px">
-  <h1>Post preferences</h1><p class="hint" style="margin-top:-.3rem;margin-bottom:1.5rem">We use these when drafting your ad posts. You approve every post before it is published.</p>
-  <form class="panel wide" id="prefsForm" novalidate>
-    <div class="two">
-      <div class="field"><label for="tone">Tone</label><select id="tone" name="tone"><option value="friendly">Friendly</option><option value="professional">Professional</option><option value="playful">Playful</option><option value="luxury">Premium</option></select></div>
-      <div class="field"><label for="language">Language</label><select id="language" name="language"><option>English</option><option>Sinhala</option><option>Tamil</option></select></div>
-    </div>
-    <div class="field"><label>Platforms</label><div class="checks">
-      <label><input type="checkbox" name="platforms" value="Facebook"> Facebook</label>
-      <label><input type="checkbox" name="platforms" value="Instagram"> Instagram</label>
-      <label><input type="checkbox" name="platforms" value="WhatsApp"> WhatsApp</label>
-      <label><input type="checkbox" name="platforms" value="TikTok"> TikTok</label></div><div class="err" id="platErr"></div></div>
-    <div class="two">
-      <div class="field"><label for="postFrequency">How often to post</label><select id="postFrequency" name="postFrequency"><option value="daily">Every day</option><option value="three_weekly">3 times a week</option><option value="weekly">Once a week</option></select></div>
-      <div class="field"><label for="brandColor">Brand colour</label><input id="brandColor" name="brandColor" type="color" value="#1d6b52"></div>
-    </div>
-    <div class="field"><label for="targetAudience">Target audience</label><input id="targetAudience" name="targetAudience" maxlength="150" placeholder="e.g. Young professionals in Colombo"><div class="err" id="audErr"></div></div>
-    <p class="notice" id="summary" style="margin-top:0"></p>
-    <button class="btn btn-primary" type="submit">Save preferences</button>
-  </form>
-</div></main>
-<script src="js/api.js"></script><script src="js/app.js"></script><script src="js/menu.js"></script><script src="js/preferences.js"></script></body></html>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <title>Post preferences – MarketingAgent</title>
+  </head>
+  <body data-menu>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="index.html"
+          ><span class="brand-mark">M</span>MarketingAgent</a
+        >
+        <nav class="nav" aria-label="Main">
+          <a class="link" href="index.html">Home</a
+          ><a class="link" href="index.html#marketplace">Marketplace</a
+          ><a class="link" href="index.html#how">How it works</a>
+        </nav>
+        <div class="actions" id="navActions"></div>
+      </div>
+    </header>
+    <main class="dash">
+      <div class="wrap" style="max-width: 680px">
+        <h1>Post preferences</h1>
+        <p class="hint" style="margin-top: -0.3rem; margin-bottom: 1.5rem">
+          We use these when drafting your ad posts. You approve every post
+          before it is published.
+        </p>
+        <form class="panel wide" id="prefsForm" novalidate>
+          <div class="two">
+            <div class="field">
+              <label for="tone">Tone</label
+              ><select id="tone" name="tone">
+                <option value="friendly">Friendly</option>
+                <option value="professional">Professional</option>
+                <option value="playful">Playful</option>
+                <option value="luxury">Premium</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="language">Language</label
+              ><select id="language" name="language">
+                <option>English</option>
+                <option>Sinhala</option>
+                <option>Tamil</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <label>Platforms</label>
+            <div class="checks">
+              <label
+                ><input type="checkbox" name="platforms" value="Facebook" />
+                Facebook</label
+              >
+              <label
+                ><input type="checkbox" name="platforms" value="Instagram" />
+                Instagram</label
+              >
+              <label
+                ><input type="checkbox" name="platforms" value="WhatsApp" />
+                WhatsApp</label
+              >
+              <label
+                ><input type="checkbox" name="platforms" value="TikTok" />
+                TikTok</label
+              >
+            </div>
+            <div class="err" id="platErr"></div>
+          </div>
+          <div class="two">
+            <div class="field">
+              <label for="postFrequency">How often to post</label
+              ><select id="postFrequency" name="postFrequency">
+                <option value="daily">Every day</option>
+                <option value="three_weekly">3 times a week</option>
+                <option value="weekly">Once a week</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="brandColor">Brand colour</label
+              ><input
+                id="brandColor"
+                name="brandColor"
+                type="color"
+                value="#1d6b52"
+              />
+            </div>
+          </div>
+          <div class="field">
+            <label for="targetAudience">Target audience</label
+            ><input
+              id="targetAudience"
+              name="targetAudience"
+              maxlength="150"
+              placeholder="e.g. Young professionals in Colombo"
+            />
+            <div class="err" id="audErr"></div>
+          </div>
+          <p class="notice" id="summary" style="margin-top: 0"></p>
+          <button class="btn btn-primary" type="submit">
+            Save preferences
+          </button>
+        </form>
+      </div>
+    </main>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/menu.js"></script>
+    <script src="js/preferences.js"></script>
+  </body>
+</html>

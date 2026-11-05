@@ -1,25 +1,114 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/styles.css"><title>Settings – MarketingAgent</title></head><body data-menu>
-<header class="site-header"><div class="wrap"><a class="brand" href="index.html"><span class="brand-mark">M</span>MarketingAgent</a><nav class="nav" aria-label="Main"><a class="link" href="index.html">Home</a><a class="link" href="index.html#marketplace">Marketplace</a><a class="link" href="index.html#how">How it works</a></nav><div class="actions" id="navActions"></div></div></header>
-<main class="dash"><div class="wrap" style="max-width:680px">
-  <h1>Settings</h1>
-  <div class="stack">
-    <section class="panel wide"><h2>Appearance</h2>
-      <div class="radios" role="radiogroup" aria-label="Theme">
-        <label><input type="radio" name="theme" value="system"> Match my device</label>
-        <label><input type="radio" name="theme" value="light"> Light</label>
-        <label><input type="radio" name="theme" value="dark"> Dark</label>
-      </div></section>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <title>Settings – MarketingAgent</title>
+  </head>
+  <body data-menu>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="index.html"
+          ><span class="brand-mark">M</span>MarketingAgent</a
+        >
+        <nav class="nav" aria-label="Main">
+          <a class="link" href="index.html">Home</a
+          ><a class="link" href="index.html#marketplace">Marketplace</a
+          ><a class="link" href="index.html#how">How it works</a>
+        </nav>
+        <div class="actions" id="navActions"></div>
+      </div>
+    </header>
+    <main class="dash">
+      <div class="wrap" style="max-width: 680px">
+        <h1>Settings</h1>
+        <div class="stack">
+          <section class="panel wide">
+            <h2>Appearance</h2>
+            <div class="radios" role="radiogroup" aria-label="Theme">
+              <label
+                ><input type="radio" name="theme" value="system" /> Match my
+                device</label
+              >
+              <label
+                ><input type="radio" name="theme" value="light" /> Light</label
+              >
+              <label
+                ><input type="radio" name="theme" value="dark" /> Dark</label
+              >
+            </div>
+          </section>
 
-    <form class="panel wide" id="pwForm" novalidate><h2>Change password</h2>
-      <div class="field"><label for="curPw">Current password</label><input id="curPw" name="current" type="password" autocomplete="current-password"><div class="err" data-err="current"></div></div>
-      <div class="field"><label for="newPw">New password</label><input id="newPw" name="next" type="password" autocomplete="new-password"><div class="err" data-err="next"></div></div>
-      <div class="field"><label for="newPw2">Confirm new password</label><input id="newPw2" name="confirm" type="password" autocomplete="new-password"><div class="err" data-err="confirm"></div></div>
-      <button class="btn btn-primary" type="submit">Change password</button></form>
+          <form class="panel wide" id="pwForm" novalidate>
+            <h2>Change password</h2>
+            <div class="field">
+              <label for="curPw">Current password</label
+              ><input
+                id="curPw"
+                name="current"
+                type="password"
+                autocomplete="current-password"
+              />
+              <div class="err" data-err="current"></div>
+            </div>
+            <div class="field">
+              <label for="newPw">New password</label
+              ><input
+                id="newPw"
+                name="next"
+                type="password"
+                autocomplete="new-password"
+              />
+              <div class="err" data-err="next"></div>
+            </div>
+            <div class="field">
+              <label for="newPw2">Confirm new password</label
+              ><input
+                id="newPw2"
+                name="confirm"
+                type="password"
+                autocomplete="new-password"
+              />
+              <div class="err" data-err="confirm"></div>
+            </div>
+            <button class="btn btn-primary" type="submit">
+              Change password
+            </button>
+          </form>
 
-    <form class="panel wide danger" id="delForm" novalidate><h2>Delete account</h2>
-      <p class="sub" style="margin-top:0">This permanently deletes your account and business profile. It can't be undone.</p>
-      <div class="field"><label for="delPw">Enter your password to confirm</label><input id="delPw" name="password" type="password" autocomplete="current-password"><div class="err" data-err="password"></div></div>
-      <button class="btn btn-danger" type="submit">Delete my account</button></form>
-  </div>
-</div></main>
-<script src="js/api.js"></script><script src="js/app.js"></script><script src="js/menu.js"></script><script src="js/settings.js"></script></body></html>
+          <form class="panel wide danger" id="delForm" novalidate>
+            <h2>Delete account</h2>
+            <p class="sub" style="margin-top: 0">
+              This permanently deletes your account and business profile. It
+              can't be undone.
+            </p>
+            <div class="field">
+              <label for="delPw">Enter your password to confirm</label
+              ><input
+                id="delPw"
+                name="password"
+                type="password"
+                autocomplete="current-password"
+              />
+              <div class="err" data-err="password"></div>
+            </div>
+            <button class="btn btn-danger" type="submit">
+              Delete my account
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/menu.js"></script>
+    <script src="js/settings.js"></script>
+  </body>
+</html>
