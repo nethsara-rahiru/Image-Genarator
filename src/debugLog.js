@@ -109,6 +109,8 @@ export class DebugLog {
       "delayMs",
       "expectedCount",
       "matchedCount",
+      "nameMatchedCount",
+      "blobMatchedCount",
       "previewCount",
       "busyCount",
     ])
@@ -153,6 +155,7 @@ export class DebugLog {
         "upload_busy",
         "names_not_visible",
         "attachments_matched",
+        "preview_bytes_unverified",
       ].includes(details.reason)
     )
       safe.reason = details.reason;

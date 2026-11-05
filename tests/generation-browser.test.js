@@ -198,7 +198,7 @@ test(
           menu.remove();const input=document.createElement('input');input.type='file';input.accept='image/*,.pdf';input.multiple=true;input.hidden=true;input.dataset.fixtureReference='true';document.querySelector('form').append(input);
           input.onchange=(event)=>{
         window.fixtureUploadAt=Date.now();const attachments=document.querySelector('#attachments');attachments.setAttribute('aria-busy','true');attachments.textContent='Uploading';
-        setTimeout(()=>{attachments.textContent=[...event.target.files].map(file=>file.name).join(' ');attachments.removeAttribute('aria-busy');},200);
+        setTimeout(()=>{attachments.replaceChildren();for(const file of event.target.files){const image=document.createElement('img');image.alt='attachment';image.className='gem-attachment-style-img ng-star-inserted';image.src=URL.createObjectURL(file);attachments.append(image);}attachments.removeAttribute('aria-busy');},200);
           };
         };
       };
@@ -429,6 +429,7 @@ test(
         automationEvents.some(
           (entry) =>
             entry.details.stage === "attachment_confirmation" &&
+            entry.details.blobMatchedCount === 1 &&
             entry.details.outcome === "confirmed",
         ),
       );

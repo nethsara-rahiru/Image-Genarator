@@ -377,6 +377,7 @@ export class GenerationRunner {
           operation: "attachments_ready",
           accountKey,
           referenceNames: references.map((reference) => reference.filename),
+          referenceChecksums: references.map((reference) => reference.checksum),
         },
         signal,
       );
@@ -571,6 +572,9 @@ export class GenerationRunner {
           baseline,
           referenceNames: (job.references || []).map(
             (reference) => reference.filename,
+          ),
+          referenceChecksums: (job.references || []).map(
+            (reference) => reference.checksum,
           ),
         },
         signal,

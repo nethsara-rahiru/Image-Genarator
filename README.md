@@ -647,3 +647,8 @@ settings: `AUTOMATION_STEP_DELAY_MS=2000` for two-second pacing and
 `GENERATION_UPLOAD_TIMEOUT_SECONDS=60` for attachment confirmation. Restart after
 changes. Live automation shows confirmation counts and elapsed wait; pacing does
 not replace attachment verification or increase the overall job timeout.
+
+Filename-free Gemini attachment thumbnails can now be confirmed by matching their
+local blob bytes to the uploaded reference checksum. Live automation shows
+`nameMatchedCount` and `blobMatchedCount`. Upload-busy and final-send checks remain
+required; transformed/unreadable previews can still need an adapter update.

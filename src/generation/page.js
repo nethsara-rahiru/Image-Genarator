@@ -27,9 +27,10 @@ export async function generationPage(request) {
   if (controls.some((e) => /^sign in$/i.test(label(e))))
     return { kind: "needs_login" };
   if (!account) return { kind: "loading" };
+  const accountLabel = account.getAttribute("aria-label");
   const keyBytes = await crypto.subtle.digest(
     "SHA-256",
-    new TextEncoder().encode(account.getAttribute("aria-label")),
+    new TextEncoder().encode(accountLabel),
   );
   const accountKey = [...new Uint8Array(keyBytes)]
     .map((v) => v.toString(16).padStart(2, "0"))
@@ -84,13 +85,58 @@ export async function generationPage(request) {
   );
   const editor = editors.length === 1 ? editors[0] : null;
   const send = controls.filter(
-    (e) => /^(send|send message|submit prompt)$/i.test(label(e)) && !e.disabled,
+    (e) =>
+      /^(send|send message|submit prompt)$/i.test(label(e)) &&
+      !e.disabled &&
+      e.getAttribute("aria-disabled") !== "true",
   );
   const composer =
     editor?.closest(
       "input-area-v2,input-area,form,.input-area-container,.input-container",
     ) || editor?.parentElement;
-  const attachmentStatus = (names = []) => {
+  const attachmentHash = async (image) => {
+    if (!image.complete || image.naturalWidth <= 0) return null;
+    const url = new URL(image.currentSrc || image.src, location.href);
+    if (url.protocol !== "blob:" || url.origin !== origin) return null;
+    state.attachmentHashes ||= new WeakMap();
+    const cached = state.attachmentHashes.get(image);
+    if (cached?.src === url.href) return cached.hash;
+    try {
+      const response = await fetch(url.href, {
+        signal: AbortSignal.timeout(3000),
+      });
+      if (!response.ok || !response.body) return null;
+      const reader = response.body.getReader();
+      const chunks = [];
+      let length = 0;
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        length += value.byteLength;
+        if (length > 10 * 1024 * 1024) {
+          await reader.cancel();
+          return null;
+        }
+        chunks.push(value);
+      }
+      const bytes = new Uint8Array(length);
+      let offset = 0;
+      for (const chunk of chunks) {
+        bytes.set(chunk, offset);
+        offset += chunk.length;
+      }
+      const digest = await crypto.subtle.digest("SHA-256", bytes);
+      const hash = [...new Uint8Array(digest)]
+        .map((value) => value.toString(16).padStart(2, "0"))
+        .join("");
+      if ((image.currentSrc || image.src) !== url.href) return null;
+      state.attachmentHashes.set(image, { src: url.href, hash });
+      return hash;
+    } catch {
+      return null;
+    }
+  };
+  const attachmentStatus = async (names = [], checksums = []) => {
     const expectedCount = names.length;
     if (!expectedCount)
       return {
@@ -125,7 +171,7 @@ export async function generationPage(request) {
     for (const scope of scopes) {
       const busySelector =
         '[role="progressbar"],[aria-busy="true"],mat-progress-spinner,mat-progress-bar,.uploading,[data-upload-state="uploading"]';
-      const busyCount = [
+      let busyCount = [
         ...(scope.matches(busySelector) ? [scope] : []),
         ...scope.querySelectorAll(busySelector),
       ].filter(visible).length;
@@ -149,7 +195,50 @@ export async function generationPage(request) {
         )
         .join(" ");
       const text = `${scope.innerText} ${metadata}`;
-      const matchedCount = names.filter((name) => text.includes(name)).length;
+      const nameMatchedCount = names.filter((name) =>
+        text.includes(name),
+      ).length;
+      let blobMatchedCount = 0;
+      let blobCandidateCount = 0;
+      if (
+        nameMatchedCount < expectedCount &&
+        checksums.length === expectedCount &&
+        checksums.every((hash) => /^[a-f0-9]{64}$/.test(hash))
+      ) {
+        const previews = [
+          ...scope.querySelectorAll(
+            'img.gem-attachment-style-img[alt="attachment"]',
+          ),
+        ]
+          .filter(visible)
+          .slice(0, 8);
+        const sources = previews.map((image) => image.currentSrc || image.src);
+        blobCandidateCount = previews.length;
+        const hashes = await Promise.all(previews.map(attachmentHash));
+        const available = new Map();
+        for (let i = 0; i < hashes.length; i++) {
+          const hash = hashes[i],
+            image = previews[i];
+          if (
+            hash &&
+            image.isConnected &&
+            visible(image) &&
+            scope.contains(image) &&
+            (image.currentSrc || image.src) === sources[i]
+          )
+            available.set(hash, (available.get(hash) || 0) + 1);
+        }
+        for (const hash of checksums)
+          if (available.get(hash) > 0) {
+            blobMatchedCount++;
+            available.set(hash, available.get(hash) - 1);
+          }
+      }
+      busyCount = [
+        ...(scope.matches(busySelector) ? [scope] : []),
+        ...scope.querySelectorAll(busySelector),
+      ].filter(visible).length;
+      const matchedCount = Math.max(nameMatchedCount, blobMatchedCount);
       const previewCount = [...scope.querySelectorAll("img")].filter(
         visible,
       ).length;
@@ -157,6 +246,8 @@ export async function generationPage(request) {
         ok: matchedCount === expectedCount && busyCount === 0,
         expectedCount,
         matchedCount,
+        nameMatchedCount,
+        blobMatchedCount,
         previewCount,
         busyCount,
         composerFound: 1,
@@ -164,7 +255,9 @@ export async function generationPage(request) {
           ? "upload_busy"
           : matchedCount === expectedCount
             ? "attachments_matched"
-            : "names_not_visible",
+            : blobCandidateCount
+              ? "preview_bytes_unverified"
+              : "names_not_visible",
       };
       if (status.ok) return status;
       if (
@@ -176,7 +269,8 @@ export async function generationPage(request) {
     }
     return best;
   };
-  const attachmentsReady = (names) => attachmentStatus(names).ok;
+  const attachmentsReady = async (names, checksums) =>
+    (await attachmentStatus(names, checksums)).ok;
   if (
     ["prepare_attachments", "activate_upload_control"].includes(
       request.operation,
@@ -300,7 +394,7 @@ export async function generationPage(request) {
     };
   }
   if (request.operation === "attachments_ready")
-    return attachmentStatus(request.referenceNames);
+    return attachmentStatus(request.referenceNames, request.referenceChecksums);
   if (request.operation === "new_chat") {
     const buttons = controls.filter((e) =>
       /^(new chat|start new chat)$/i.test(label(e)),
@@ -340,7 +434,31 @@ export async function generationPage(request) {
       (editor.value ?? editor.textContent) !== request.prompt ||
       send.length !== 1 ||
       ids.join(",") !== (request.baseline || []).join(",") ||
-      !attachmentsReady(request.referenceNames)
+      !(await attachmentsReady(
+        request.referenceNames,
+        request.referenceChecksums,
+      ))
+    )
+      return { ok: false };
+    // Attachment hashing is asynchronous: recheck input identity/state after it.
+    const currentResponses = all(
+      'model-response,[data-message-author-role="model"],.model-response',
+    ).filter(
+      (e, i, items) =>
+        !items.some((parent, j) => i !== j && parent.contains(e)),
+    );
+    if (
+      document.readyState !== "complete" ||
+      location.origin !== origin ||
+      new URL(location.href).pathname !== current.pathname ||
+      !account.isConnected ||
+      account.getAttribute("aria-label") !== accountLabel ||
+      !editor.isConnected ||
+      (editor.value ?? editor.textContent) !== request.prompt ||
+      !send[0].isConnected ||
+      send[0].disabled ||
+      send[0].getAttribute("aria-disabled") === "true" ||
+      currentResponses.map(id).join(",") !== (request.baseline || []).join(",")
     )
       return { ok: false };
     send[0].click();
