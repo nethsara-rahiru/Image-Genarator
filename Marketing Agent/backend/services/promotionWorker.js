@@ -1,3 +1,4 @@
+const { isOnline } = require("./availability");
 const mongoose = require("mongoose");
 const { randomUUID } = require("node:crypto");
 const Run = require("../models/PromotionRun");
@@ -57,6 +58,11 @@ function worker({
         "Image API URL or token changed since this promotion was queued. Restore the previous configuration to inspect existing remote jobs; this run was stopped without resubmission.",
       );
     async function check() {
+      if (!isOnline())
+        throw fail(
+          "MAINTENANCE",
+          "Promotion processing is paused for maintenance.",
+        );
       if (controller.signal.aborted || Date.now() >= leaseUntil)
         throw fail(
           "WORKER_STOPPED",
@@ -226,7 +232,8 @@ function worker({
   }
 
   async function tick() {
-    if (busy || stopping || mongoose.connection.readyState !== 1) return;
+    if (!isOnline() || busy || stopping || mongoose.connection.readyState !== 1)
+      return;
     busy = true;
     let run,
       acquired = false;
@@ -260,7 +267,8 @@ function worker({
         run &&
         !controller?.signal.aborted &&
         Date.now() < leaseUntil &&
-        error.code !== "CANCELLED"
+        error.code !== "CANCELLED" &&
+        error.code !== "MAINTENANCE"
       ) {
         const state =
           error.code === "GENERATION_LOGIN_REQUIRED"

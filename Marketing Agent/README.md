@@ -256,3 +256,34 @@ verify custom trust for start/submission/status/original download, inline/file
 PEM, late dotenv loading, rejection of unknown issuers/wrong hostnames, isolation
 from Groq trust and redaction. Actual macOS Keychain/Postman export and your
 specific live certificate remain unverified until checked on your laptop.
+
+## Maintenance switch (Marketing Agent only)
+
+Set this in `backend/.env`:
+
+```dotenv
+ONLINE=true
+```
+
+`true` enables normal operation. Set `ONLINE=false`, stop the running backend
+with Control+C, then start it again with `npm start` or `npm run dev` to enter
+maintenance. To reopen, change back to `true` and restart. `.env` edits are not
+hot-reloaded, including in watch mode.
+
+During maintenance, all Marketing Agent pages, static assets and API routes
+return **HTTP 503**. Visitors see a maintenance page; APIs return
+`{"code":"MAINTENANCE","error":"Marketing Agent is temporarily unavailable for maintenance."}`.
+Login, signup, existing sessions, product data, image downloads and job submission
+are blocked without an administrator bypass. Responses use `Cache-Control: no-store`
+and `Retry-After: 60`. This blocks new server access; it cannot erase images or
+pages that a visitor already downloaded or cached on their own device.
+
+Promotion processing and the image API diagnostic are paused. Maintenance mode
+can start without MongoDB or a valid JWT secret. Existing queued/running records
+are preserved for online restart; normal timeout/review safeguards still apply.
+A request already accepted by the separate image generator may finish there;
+Marketing Agent does not modify or disable that separate application.
+
+If omitted, ONLINE defaults to true for existing installations. Lowercase
+`online` is also accepted. Use only one spelling: if both are set, both must be
+true to open the service. Explicit empty/invalid values fail closed into maintenance.

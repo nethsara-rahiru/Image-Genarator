@@ -3,6 +3,8 @@ const express = require("express");
 const cookieParser = require("cookie-parser");
 
 const app = express();
+// Must precede parsing, authentication, APIs and static files: no user bypass.
+app.use(require("./middleware/maintenance"));
 app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
 

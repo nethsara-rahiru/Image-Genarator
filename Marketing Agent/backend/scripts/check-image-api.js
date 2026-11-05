@@ -3,6 +3,13 @@ require("dotenv").config({ path: path.join(__dirname, "..", ".env") });
 const { config } = require("../services/promotionConfig");
 const { clients } = require("../services/promotionClients");
 (async () => {
+  if (!require("../services/availability").isOnline())
+    throw Object.assign(
+      new Error(
+        "Marketing Agent is offline for maintenance. Set ONLINE=true and restart before contacting the image API.",
+      ),
+      { code: "MAINTENANCE" },
+    );
   const api = clients(config());
   try {
     const health = await api.health();

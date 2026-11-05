@@ -638,6 +638,37 @@ test(
         mode = "normal";
       },
     );
+    await t.test(
+      "maintenance preserves queued work and makes no remote calls until online",
+      async () => {
+        const run = await create(),
+          before = submitCalls,
+          previous = process.env.ONLINE;
+        try {
+          process.env.ONLINE = "false";
+          await Promise.all([w1.tick(), w2.tick()]);
+          assert.equal(submitCalls, before);
+          assert.equal((await Run.findById(run.id)).state, "queued");
+          assert.equal(
+            await mongoose.connection.db
+              .collection("promotionLeases")
+              .countDocuments(),
+            0,
+          );
+          assert.equal(
+            (await request("/promotions", "POST", { targetType: "business" }))
+              .status,
+            503,
+          );
+        } finally {
+          if (previous === undefined) delete process.env.ONLINE;
+          else process.env.ONLINE = previous;
+        }
+        await w1.tick();
+        assert.equal((await Run.findById(run.id)).state, "completed");
+        assert.equal(submitCalls - before, 4);
+      },
+    );
     assert.deepEqual(errors, []);
   },
 );
