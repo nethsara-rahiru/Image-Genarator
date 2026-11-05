@@ -822,3 +822,42 @@ input[readonly] {
 .agent-form-preview[hidden] {
   display: none;
 }
+.promotion-run {
+  margin-block: 1.25rem;
+  overflow-wrap: anywhere;
+}
+.promotion-image {
+  min-width: 0;
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.promotion-image img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  margin-block: 1rem;
+}
+.promotion-image details p {
+  white-space: pre-wrap;
+  font-size: 0.9rem;
+}
+.promotion-image [hidden],
+.promotion-run > [hidden] {
+  display: none;
+}
+#promotionResults {
+  scroll-margin-top: 7rem;
+}
+.ai-agent-page .panel {
+  width: 100%;
+}
+.ai-agent-page #agentBusiness .agent-card {
+  max-width: 380px;
+}
+.ai-agent-page #agentProducts {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+}
+.promotion-run .agent-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+}

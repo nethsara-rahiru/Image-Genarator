@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="css/styles.css" />
     <title>AI Agent – MarketingAgent</title>
   </head>
-  <body data-menu>
+  <body data-menu class="ai-agent-page">
     <header class="site-header">
       <div class="wrap">
         <a class="brand" href="index.html"
@@ -30,7 +30,8 @@
       <div class="wrap">
         <h1>AI Agent</h1>
         <p class="hint">
-          Choose your business or a listed product to prepare a promotion.
+          Promote your business or a product. Groq writes four distinct prompts;
+          the image generator uses your reference images.
         </p>
         <p id="agentStatus" role="status">
           Loading your business and products…
@@ -63,6 +64,43 @@
               disabled
             >
               Next
+            </button>
+          </div>
+        </section>
+        <section
+          class="panel agent-section"
+          id="promotionResults"
+          aria-labelledby="promotionsTitle"
+        >
+          <div class="agent-heading">
+            <h2 id="promotionsTitle">Promotion images</h2>
+            <button class="btn btn-ghost" id="refreshPromotions" type="button">
+              Refresh promotions
+            </button>
+          </div>
+          <p id="promotionStatus" role="status">Loading promotions…</p>
+          <p class="hint">
+            Each Promote request generates up to four images sequentially and
+            saves the originals in the database. Generation can use paid API
+            credits. Nothing is published to social platforms.
+          </p>
+          <div id="promotionRuns"></div>
+          <div class="actions agent-pagination">
+            <button
+              id="previousPromotions"
+              class="btn btn-ghost"
+              type="button"
+              disabled
+            >
+              Previous promotions</button
+            ><span id="promotionPage"></span
+            ><button
+              id="nextPromotions"
+              class="btn btn-ghost"
+              type="button"
+              disabled
+            >
+              Next promotions
             </button>
           </div>
         </section>
@@ -106,52 +144,6 @@
             </button>
           </form>
         </details>
-        <dialog
-          id="promotionDialog"
-          class="agent-dialog"
-          aria-labelledby="promotionTitle"
-        >
-          <form id="promotionForm">
-            <div class="agent-heading">
-              <h2 id="promotionTitle">Promotion composer</h2>
-              <button
-                class="btn btn-ghost"
-                type="button"
-                id="closePromotion"
-                aria-label="Close promotion composer"
-              >
-                Close
-              </button>
-            </div>
-            <img
-              id="promotionImage"
-              class="agent-form-preview"
-              alt="Selected promotion reference"
-              hidden
-            />
-            <p id="promotionTarget" class="hint"></p>
-            <div class="field">
-              <label for="promotionText">Promotion text</label
-              ><textarea
-                id="promotionText"
-                maxlength="800"
-                rows="6"
-                required
-              ></textarea>
-            </div>
-            <p id="promotionPlatforms" class="hint"></p>
-            <p class="hint">
-              This editable draft uses your saved details. Saving does not
-              generate an image or publish to social platforms.
-            </p>
-            <p id="promotionError" class="err" role="alert"></p>
-            <div class="actions">
-              <button class="btn btn-primary" id="savePromotion" type="submit">
-                Save promotion draft</button
-              ><a class="btn btn-ghost" href="dashboard.html">Review drafts</a>
-            </div>
-          </form>
-        </dialog>
       </div>
     </main>
     <script src="js/api.js"></script>

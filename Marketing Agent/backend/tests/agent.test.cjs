@@ -23,7 +23,7 @@ test("product images reject unsafe data and malformed payloads", async () => {
 });
 
 test(
-  "real Mongo API and browser: owner catalog, promotion composer and saved draft review",
+  "real Mongo API and browser: owner catalog and legacy saved draft review",
   { skip: !process.env.TEST_MONGODB_URI, timeout: 120000 },
   async (t) => {
     process.env.JWT_SECRET = randomBytes(32).toString("hex");
@@ -209,38 +209,10 @@ test(
     await page.getByRole("button", { name: "Close menu", exact: true }).click();
     await page.getByRole("button", { name: "Next", exact: true }).click();
     await page.getByText("21–23 of 23", { exact: true }).waitFor();
-    await page.locator("#agentProducts .agent-promote").first().click();
-    assert.ok(
-      (await page.locator("#promotionText").inputValue()).includes(
-        "Ceylon Tea Studio",
-      ),
-    );
-    assert.equal(
-      await page.locator("#promotionImage").getAttribute("src"),
-      image,
-    );
-    await page
-      .getByRole("button", { name: "Close promotion composer" })
-      .click();
-    assert.equal(
-      await Post.countDocuments({ owner: owner._id, status: "draft" }),
-      0,
-    );
-    await page
-      .getByRole("button", { name: "Promote Ceylon Tea Studio", exact: true })
-      .click();
-    await page
-      .locator("#promotionText")
-      .fill("A promotion prepared in the AI Agent composer.");
-    await page
-      .getByRole("button", { name: "Save promotion draft", exact: true })
-      .click();
-    await page
-      .getByText(
-        "Promotion draft saved. Review it in Dashboard before approval.",
-        { exact: true },
-      )
-      .waitFor();
+    await request("/posts/draft", "POST", {
+      targetType: "business",
+      text: "A promotion prepared for review.",
+    });
     const saved = await Post.findOne({ owner: owner._id, status: "draft" });
     assert.equal(saved.targetType, "business");
     assert.equal(saved.targetName, "Ceylon Tea Studio");
