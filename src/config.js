@@ -27,6 +27,8 @@ export function configuration(env = process.env) {
   return {
     authRequired,
     generationTimeoutMs: integer("GENERATION_TIMEOUT_SECONDS", 180, 900) * 1000,
+    generationReadyTimeoutMs:
+      integer("GENERATION_READY_TIMEOUT_SECONDS", 45, 120) * 1000,
     port,
     chromePath: env.CHROME_PATH || "",
     autoOpen: env.AUTO_OPEN !== "false",

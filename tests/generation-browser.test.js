@@ -78,7 +78,8 @@ test(
     });
     let signedIn = true,
       account = "Synthetic A",
-      posts = 0;
+      posts = 0,
+      hydrations = 0;
     const chats = new Map(),
       images = new Map(),
       downloads = [],
@@ -181,6 +182,10 @@ test(
         )
         .join("");
       res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>html{scroll-behavior:smooth}body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><form><div id="attachments"></div><button type="button" id="upload-menu" aria-expanded="false">+</button><div contenteditable="true" role="textbox" class="ql-editor"></div><button type="button" id="send" aria-label="Send message">Send</button></form><script>
+      const accountControl=document.querySelector('[aria-label^="Google Account:"]');
+      const accountLabel=accountControl.getAttribute('aria-label');accountControl.removeAttribute('aria-label');
+      const promptEditor=document.querySelector('[contenteditable]');promptEditor.setAttribute('contenteditable','false');
+      setTimeout(()=>{accountControl.setAttribute('aria-label',accountLabel);promptEditor.setAttribute('contenteditable','true');},${++hydrations === 1 ? 9000 : 600});
       function wire(){for(const b of document.querySelectorAll('[data-download]')){b.onmouseenter=()=>{if(b.dataset.rebound)return;b.dataset.rebound='yes';const clone=b.cloneNode(true);clone.style.marginLeft='24px';b.replaceWith(clone);wire();};b.onclick=async(event)=>{if(!event.isTrusted || !navigator.userActivation.isActive)return;const prepared=await(await fetch('/prepare?file='+encodeURIComponent(b.dataset.download))).json();const frame=document.createElement('iframe');frame.src=prepared.url;document.body.append(frame);};}}
       const unrelated=document.createElement('input');unrelated.type='file';unrelated.accept='audio/*';unrelated.hidden=true;document.body.append(unrelated);
       document.querySelector('#upload-menu').onclick=()=>{
@@ -224,7 +229,8 @@ test(
     const config = {
       ...configuration({ DATA_DIR: data, AUTO_OPEN: "false" }),
       port: 0,
-      generationTimeoutMs: 15000,
+      generationTimeoutMs: 25000,
+      generationReadyTimeoutMs: 12000,
     };
     const service = await startServer(config, {
       test: true,
@@ -374,6 +380,8 @@ test(
         targetId: backgroundTarget,
       });
 
+      config.generationReadyTimeoutMs = 3000;
+      config.generationTimeoutMs = 15000;
       assert.deepEqual(downloads, ["/img/1-0.png"]);
       assert.deepEqual(Buffer.from(receivedReferences[0][0].bytes), png(17));
       const firstMetadata = await (

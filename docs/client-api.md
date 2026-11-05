@@ -224,3 +224,13 @@ deleted with the local job/output. Inputs have no public download endpoint.
 Download-only recovery does not upload references or resubmit a prompt. Manual
 Google sign-in remains unchanged. Real Chromium fixture uploads are tested; live
 Google/Gemini attachment behavior is **UNVERIFIED** until tested on the host PC.
+
+## Gemini page readiness
+
+Accepted jobs may report `waiting_for_page` before prompt preparation or reference
+uploads. The worker observes document completion and the signed-in editor for up
+to `GENERATION_READY_TIMEOUT_SECONDS` (default 45, maximum 120), within the overall
+job deadline. Unknown/loading UI is not proof of a signed-out session.
+`GENERATION_PAGE_NOT_READY` is a readiness timeout; `GENERATION_LOGIN_REQUIRED`
+means sign-in UI was observed after the wait. Both occur before prompt submission
+and may be retried after inspecting/fixing the page. Google login remains manual.
