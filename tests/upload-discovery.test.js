@@ -205,6 +205,26 @@ test(
       ).ok,
       false,
     );
+    await page.locator("#blob-attachment").evaluate((image) => {
+      const clone = image.cloneNode();
+      clone.id = "duplicate-preview";
+      image.after(clone);
+    });
+    await page.waitForFunction(
+      () => document.querySelector("#duplicate-preview").naturalWidth > 0,
+    );
+    assert.equal(
+      (
+        await checkBlob(
+          [checksum, checksum],
+          [referenceName, "reference-2.png"],
+        )
+      ).ok,
+      false,
+    );
+    await page
+      .locator("#duplicate-preview")
+      .evaluate((image) => image.remove());
     await page
       .locator("form")
       .evaluate((form) => form.setAttribute("aria-busy", "true"));

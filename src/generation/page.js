@@ -96,7 +96,12 @@ export async function generationPage(request) {
     ) || editor?.parentElement;
   const attachmentHash = async (image) => {
     if (!image.complete || image.naturalWidth <= 0) return null;
-    const url = new URL(image.currentSrc || image.src, location.href);
+    let url;
+    try {
+      url = new URL(image.currentSrc || image.src, location.href);
+    } catch {
+      return null;
+    }
     if (url.protocol !== "blob:" || url.origin !== origin) return null;
     state.attachmentHashes ||= new WeakMap();
     const cached = state.attachmentHashes.get(image);
@@ -205,12 +210,24 @@ export async function generationPage(request) {
         checksums.length === expectedCount &&
         checksums.every((hash) => /^[a-f0-9]{64}$/.test(hash))
       ) {
+        const seenSources = new Set();
         const previews = [
           ...scope.querySelectorAll(
             'img.gem-attachment-style-img[alt="attachment"]',
           ),
         ]
           .filter(visible)
+          .filter((image) => {
+            const source = image.currentSrc || image.src;
+            if (
+              !image.complete ||
+              image.naturalWidth <= 0 ||
+              seenSources.has(source)
+            )
+              return false;
+            seenSources.add(source);
+            return true;
+          })
           .slice(0, 8);
         const sources = previews.map((image) => image.currentSrc || image.src);
         blobCandidateCount = previews.length;
