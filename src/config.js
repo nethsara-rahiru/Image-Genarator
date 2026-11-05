@@ -27,6 +27,9 @@ export function configuration(env = process.env) {
   return {
     authRequired,
     generationTimeoutMs: integer("GENERATION_TIMEOUT_SECONDS", 180, 900) * 1000,
+    automationStepDelayMs: integer("AUTOMATION_STEP_DELAY_MS", 1000, 5000),
+    generationUploadTimeoutMs:
+      integer("GENERATION_UPLOAD_TIMEOUT_SECONDS", 60, 180) * 1000,
     generationReadyTimeoutMs:
       integer("GENERATION_READY_TIMEOUT_SECONDS", 45, 120) * 1000,
     port,

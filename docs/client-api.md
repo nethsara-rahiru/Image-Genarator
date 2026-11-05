@@ -240,3 +240,10 @@ appears ready, followed by document/chat/account/editor verification before inpu
 A reload repeats the readiness gate. The overall job timeout and cancellation
 still apply. An AUTOMATION_TIMEOUT during an input is not permission to resubmit
 an ambiguous prompt; inspect the job state and saved chat first.
+
+Host automation uses one-second step pacing by default and waits up to 60 seconds
+for reference confirmation (`AUTOMATION_STEP_DELAY_MS` and
+`GENERATION_UPLOAD_TIMEOUT_SECONDS`). The overall job deadline still applies.
+UPLOAD_UNCONFIRMED means the provider's attachment readiness was not verified,
+even if a thumbnail is visible. Inspect Live automation expected/matched/preview/
+busy counts; do not resubmit an ambiguous already-sent prompt.

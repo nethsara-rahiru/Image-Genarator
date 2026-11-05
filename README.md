@@ -641,3 +641,9 @@ candidate counts, attempted targets/viewport rectangles, file delivery and
 attachment confirmation. Filter by job ID and export the debug JSON. It refreshes
 independently of browser observation and omits prompts, credentials, filenames
 and page content. See [diagnostic interpretation](docs/operations.md#live-automation-diagnostics).
+
+Automation now pauses one second between upload/prompt steps. Optional .env
+settings: `AUTOMATION_STEP_DELAY_MS=2000` for two-second pacing and
+`GENERATION_UPLOAD_TIMEOUT_SECONDS=60` for attachment confirmation. Restart after
+changes. Live automation shows confirmation counts and elapsed wait; pacing does
+not replace attachment verification or increase the overall job timeout.
