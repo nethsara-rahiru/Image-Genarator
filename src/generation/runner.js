@@ -100,40 +100,56 @@ export class GenerationRunner {
         );
       files.push(file);
     }
-    let prepared = false;
-    for (let n = 0; n < 20; n++) {
-      if (
-        (
-          await this.evaluate(
-            { operation: "prepare_attachments", accountKey },
-            signal,
-          )
-        ).ok
-      ) {
-        prepared = true;
-        break;
-      }
-      await pause(250, undefined, { signal });
-    }
-    if (!prepared)
-      throw nativeError(
-        "GENERATION_UPLOAD_UNAVAILABLE",
-        "Gemini's image upload control was not uniquely recognized. No prompt was submitted.",
-      );
     const pipe = this.browser.pipe,
       session = this.browser.gemini.session;
-    const { root } = await pipe.send("DOM.getDocument", {}, session);
-    const { nodeId } = await pipe.send(
-      "DOM.querySelector",
-      { nodeId: root.nodeId, selector: '[data-local-reference-input="true"]' },
+    await pipe.send(
+      "Page.setInterceptFileChooserDialog",
+      { enabled: true },
       session,
     );
-    if (!nodeId)
-      throw nativeError(
-        "GENERATION_UPLOAD_UNAVAILABLE",
-        "Gemini's upload input changed. No prompt was submitted.",
+    try {
+      let prepared = false;
+      let lastDiscovery;
+      for (let n = 0; n < 20; n++) {
+        lastDiscovery = await this.evaluate(
+          { operation: "prepare_attachments", accountKey },
+          signal,
+        );
+        if (lastDiscovery.ok) {
+          prepared = true;
+          break;
+        }
+        await pause(250, undefined, { signal });
+      }
+      if (!prepared)
+        throw nativeError(
+          "GENERATION_UPLOAD_UNAVAILABLE",
+          lastDiscovery?.reason === "ambiguous_inputs"
+            ? "Several eligible Gemini image upload inputs remain. No prompt was submitted."
+            : "Gemini's image upload input did not appear after checking its attachment menu. No prompt was submitted.",
+        );
+      const { root } = await pipe.send("DOM.getDocument", {}, session);
+      const { nodeId } = await pipe.send(
+        "DOM.querySelector",
+        {
+          nodeId: root.nodeId,
+          selector: '[data-local-reference-input="true"]',
+        },
+        session,
       );
-    await pipe.send("DOM.setFileInputFiles", { nodeId, files }, session);
+      if (!nodeId)
+        throw nativeError(
+          "GENERATION_UPLOAD_UNAVAILABLE",
+          "Gemini's upload input changed. No prompt was submitted.",
+        );
+      await pipe.send("DOM.setFileInputFiles", { nodeId, files }, session);
+    } finally {
+      await pipe.send(
+        "Page.setInterceptFileChooserDialog",
+        { enabled: false },
+        session,
+      );
+    }
     for (let n = 0; n < 120; n++) {
       if (
         (

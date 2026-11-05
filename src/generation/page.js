@@ -110,11 +110,18 @@ export async function generationPage(request) {
     return names.every((name) => text.includes(name));
   };
   if (request.operation === "prepare_attachments") {
-    const inputs = [...document.querySelectorAll('input[type="file"]')].filter(
+    let inputs = [...document.querySelectorAll('input[type="file"]')].filter(
       (input) =>
+        !input.disabled &&
         !responses.some((response) => response.contains(input)) &&
         (!input.accept || /image|\.png|\.jpe?g|\.webp/i.test(input.accept)),
     );
+    const local = inputs.filter((input) => composer?.contains(input));
+    if (local.length) inputs = local;
+    const explicitImages = inputs.filter((input) =>
+      /image|\.png|\.jpe?g|\.webp/i.test(input.accept),
+    );
+    if (explicitImages.length) inputs = explicitImages;
     if (inputs.length === 1) {
       for (const marked of document.querySelectorAll(
         "[data-local-reference-input]",
@@ -123,19 +130,56 @@ export async function generationPage(request) {
       inputs[0].setAttribute("data-local-reference-input", "true");
       return { ok: true };
     }
-    if (!inputs.length) {
-      let upload = controls.filter((node) =>
-        /^upload files?$/i.test(label(node)),
+    const uploadControls = all(
+      'button,[role="button"],[role="menuitem"],label',
+    ).filter(
+      (node) =>
+        !node.disabled &&
+        node.getAttribute("aria-disabled") !== "true" &&
+        !responses.some((response) => response.contains(node)),
+    );
+    if (inputs.length !== 1) {
+      // Portalled menu items are often outside the composer. Prefer an open
+      // upload menu over its opener, so polling cannot toggle it shut.
+      let upload = uploadControls.filter((node) =>
+        /^(upload files?|upload from (?:computer|device)|from (?:computer|device))$/i.test(
+          label(node),
+        ),
       );
-      if (!upload.length)
-        upload = controls.filter((node) =>
-          /^(add files?|add photos?(?: and files)?|upload photos?(?: and files)?)$/i.test(
+      if (!upload.length) {
+        upload = uploadControls.filter((node) =>
+          /^(open (?:upload file|file upload|upload) menu|add files?(?: and tools)?|add photos?(?: and files)?|upload photos?(?: and files)?)$/i.test(
             label(node),
           ),
         );
-      if (upload.length === 1) upload[0].click();
+        const localControls = upload.filter((node) => composer?.contains(node));
+        if (localControls.length) upload = localControls;
+        if (!upload.length)
+          upload = uploadControls.filter(
+            (node) =>
+              composer?.contains(node) &&
+              /^(\+|add|attach files?)$/i.test(label(node)),
+          );
+        upload = upload.filter(
+          (node) => node.getAttribute("aria-expanded") !== "true",
+        );
+      }
+      if (upload.length === 1 && !state.uploadClicked?.has(upload[0])) {
+        state.uploadClicked ||= new WeakSet();
+        state.uploadClicked.add(upload[0]);
+        upload[0].click();
+        return {
+          ok: false,
+          reason: "upload_menu_opened",
+          candidates: inputs.length,
+        };
+      }
     }
-    return { ok: false };
+    return {
+      ok: false,
+      reason: inputs.length > 1 ? "ambiguous_inputs" : "input_not_found",
+      candidates: inputs.length,
+    };
   }
   if (request.operation === "attachments_ready")
     return { ok: attachmentsReady(request.referenceNames) };
