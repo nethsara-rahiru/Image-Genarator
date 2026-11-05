@@ -662,7 +662,8 @@ this app does not bypass it or guarantee that Gemini will return an image.
   is required for Send in this mode. Keep account, editor, enabled Send, baseline,
   cancellation and ambiguous-submission guards.
 - Dashboard shows a live countdown from server remaining duration using a monotonic
-  client clock, and retains an unverified reference label on job cards. REST job
+  client clock, with independent three-second API refresh even if browser stream
+  observation stalls, and retains an unverified reference label on job cards. REST job
   responses include attachmentWaitUntil/attachmentWaitRemainingMs; generated and
   manually imported metadata include attachmentConfirmation.
 - Restart during this pre-submission stage fails safely for explicit retry. No

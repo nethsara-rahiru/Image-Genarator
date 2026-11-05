@@ -949,7 +949,7 @@ $("generator-form").onsubmit = async (event) => {
   }
 };
 setInterval(() => {
-  if (loggedIn && ws?.readyState !== WebSocket.OPEN) refreshGeneration();
+  if (loggedIn) refreshGeneration();
 }, 3000);
 let logPolling = false;
 setInterval(async () => {

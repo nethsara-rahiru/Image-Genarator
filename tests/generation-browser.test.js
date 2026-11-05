@@ -24,7 +24,7 @@ const enabled =
   process.platform === "linux" && process.env.RUN_NATIVE_TESTS === "1";
 test(
   "real local no-login generator: new/resumed chats, current image download, no-image/login/account/cancel failures",
-  { skip: !enabled, timeout: 120000 },
+  { skip: !enabled, timeout: 180000 },
   async (t) => {
     // Real Chrome must complete with named files even when its completion event is lost.
     let releaseAcks,
@@ -304,16 +304,16 @@ test(
       const page = await client.newPage({
         viewport: { width: 1400, height: 1000 },
       });
-      // Drop log frames to prove the diagnostic table refreshes independently
+      // Drop log/generation frames to prove the diagnostic table and countdown refresh independently
       // of browser/viewer WebSocket observation.
-      let droppedLogFrames = 0;
+      let droppedDiagnosticFrames = 0;
       await page.routeWebSocket("**/stream", (socket) => {
         const upstream = socket.connectToServer();
         upstream.onMessage((message) => {
           if (typeof message === "string") {
             try {
-              if (JSON.parse(message).type === "logs") {
-                droppedLogFrames++;
+              if (["logs", "generation"].includes(JSON.parse(message).type)) {
+                droppedDiagnosticFrames++;
                 return;
               }
             } catch {}
@@ -381,6 +381,20 @@ test(
         5000,
       );
       assert.equal(posts, 0, "Prompt must not submit during countdown");
+      const editorDuringCountdown = await originalSend.call(
+        service.browser.pipe,
+        "Runtime.evaluate",
+        {
+          expression: "document.querySelector('.ql-editor').textContent",
+          returnByValue: true,
+        },
+        service.browser.gemini.session,
+      );
+      assert.equal(
+        editorDuringCountdown.result.value,
+        "",
+        "Prompt must not be entered during countdown",
+      );
       const first = await final(service.generation.data.jobs[0].id);
       assert.equal(first.state, "completed", JSON.stringify(first.error));
       assert.equal(await page.locator("#screen").count(), 0);
@@ -469,7 +483,7 @@ test(
         .first()
         .waitFor();
       assert.ok(
-        droppedLogFrames > 0,
+        droppedDiagnosticFrames > 0,
         "Log frames must be dropped to verify the independent HTTP refresh",
       );
       await page.locator("#automation-log-filter").fill("");
