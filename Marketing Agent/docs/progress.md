@@ -53,3 +53,20 @@
   UNVERIFIED until npm run check-image-api is run on the laptop.
 - Continue in PR #38 (fix/marketing-upstream-diagnostics), now including TLS fix.
   Merge only after current checks pass; user has already authorized main merges.
+
+## Marketing Agent maintenance switch
+
+- ONLINE=true/false in backend/.env controls Marketing Agent only; restart to
+  apply. Defaults online when unset, supports lowercase online, and explicit
+  false/invalid/conflicting values fail closed.
+- First Express middleware blocks all pages/assets/APIs before parsing or auth.
+  HTTP 503 maintenance HTML/JSON, no-store and Retry-After; no session bypass.
+- Offline startup needs neither MongoDB nor JWT, and starts no promotion worker.
+  Worker guards preserve pending runs; image API diagnostic makes no outbound
+  requests offline. Image-generator code and its own availability are unchanged.
+- Tests cover all route types/methods, malformed JSON, existing cookies, forged
+  online query/header, re-opening, database-free startup and graceful shutdown;
+  real Mongo promotion test covers paused queue and resume without extra jobs.
+- Review branch: feat/marketing-maintenance-mode. Final automated evidence in PR.
+- Final local validation: 27 backend tests passed, zero skipped/failed, using
+  MongoDB 8, Chromium and local HTTP/HTTPS fixtures; root lint passed.
