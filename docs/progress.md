@@ -554,3 +554,20 @@ this app does not bypass it or guarantee that Gemini will return an image.
   delays the first account/editor hydration for nine seconds (beyond the old
   eight-second check) before dashboard/API generation.
 - Live Google behavior remains UNVERIFIED; final test/CI evidence is in the PR.
+
+## Five-second post-load settling
+
+- User requested five seconds after Gemini appears loaded, reporting an
+  observation timeout while moving from waiting_for_page to uploading_assets.
+- Added settling_page after observable readiness: cancellable five-second wait,
+  then read-only verification of loaded editor, account, chat and document ID.
+  A changed/loading document repeats readiness and settling under the total job
+  timeout. Fresh-chat navigation uses the same gate before prompt preparation.
+- Retry AUTOMATION_TIMEOUT only for read-only readiness observations. Upload/input
+  actions and prompt submissions are not blindly retried on ambiguous responses.
+- Unit coverage checks a reload during settling, cancellation before next input
+  and transient observation failures. Browser fixture records the time from its
+  delayed signed-in editor appearing to the actual reference file-change event,
+  asserting at least five seconds before reference uploads.
+- Live Gemini remains UNVERIFIED; final test/CI evidence and PR references are in
+  the PR. Failed pre-submission jobs retain their references for safe retry.

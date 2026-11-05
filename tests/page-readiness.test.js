@@ -75,3 +75,74 @@ test("readiness timeout has a bounded validated configuration", () => {
     configuration({ GENERATION_READY_TIMEOUT_SECONDS: "121" }),
   );
 });
+
+test("settling waits after readiness, rechecks a reload and keeps its account guard", async () => {
+  const instance = runner(async () => ({ kind: "signed_in" }));
+  instance.browser.options = { test: true, pageSettleMs: 30 };
+  let reads = 0;
+  const phases = [];
+  instance.waitForPageReady = async (job) => {
+    if (reads) assert.equal(job.accountKey, "fixture");
+    return {
+      kind: "ready",
+      editorReady: true,
+      accountKey: "fixture",
+      documentId: ++reads,
+      chatId: null,
+    };
+  };
+  instance.evaluate = async () => ({
+    kind: "ready",
+    editorReady: true,
+    documentId: 2,
+    chatId: null,
+  });
+  const started = Date.now();
+  await instance.waitForStablePage(
+    {},
+    AbortSignal.timeout(2000),
+    async (phase) => phases.push(phase),
+  );
+  assert.ok(Date.now() - started >= 60);
+  assert.equal(reads, 2);
+  assert.deepEqual(phases, [
+    "settling_page",
+    "waiting_for_page",
+    "settling_page",
+  ]);
+});
+
+test("settling is cancellable before any post-wait operation", async () => {
+  const instance = runner(async () => ({ kind: "signed_in" }));
+  instance.browser.options = { test: true, pageSettleMs: 1000 };
+  instance.waitForPageReady = async () => ({ accountKey: "fixture" });
+  let inspections = 0;
+  instance.evaluate = async () => {
+    inspections++;
+  };
+  await assert.rejects(
+    instance.waitForStablePage({}, AbortSignal.timeout(20), async () => {}),
+  );
+  assert.equal(inspections, 0);
+});
+
+test("read-only observation timeouts are retried within readiness, without inputs", async () => {
+  let observations = 0;
+  const instance = runner(async () => {
+    if (++observations === 1)
+      throw nativeError("AUTOMATION_TIMEOUT", "Observation timed out");
+    return { kind: "signed_in" };
+  });
+  let inspections = 0;
+  instance.evaluate = async (request) => {
+    assert.equal(request.operation, "inspect");
+    if (++inspections === 1)
+      throw nativeError("AUTOMATION_TIMEOUT", "Observation timed out");
+    return { kind: "ready", editorReady: true };
+  };
+  assert.equal(
+    (await instance.waitForPageReady({}, AbortSignal.timeout(2000)))
+      .editorReady,
+    true,
+  );
+});

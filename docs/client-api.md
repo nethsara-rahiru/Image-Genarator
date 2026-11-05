@@ -234,3 +234,9 @@ job deadline. Unknown/loading UI is not proof of a signed-out session.
 `GENERATION_PAGE_NOT_READY` is a readiness timeout; `GENERATION_LOGIN_REQUIRED`
 means sign-in UI was observed after the wait. Both occur before prompt submission
 and may be retried after inspecting/fixing the page. Google login remains manual.
+
+Jobs also report `settling_page`: a five-second pause after the signed-in editor
+appears ready, followed by document/chat/account/editor verification before inputs.
+A reload repeats the readiness gate. The overall job timeout and cancellation
+still apply. An AUTOMATION_TIMEOUT during an input is not permission to resubmit
+an ambiguous prompt; inspect the job state and saved chat first.

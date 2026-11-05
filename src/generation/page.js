@@ -70,6 +70,7 @@ export async function generationPage(request) {
   const chatId = match?.[1] || null;
   const base = {
     kind: "ready",
+    documentId: performance.timeOrigin,
     accountKey,
     chatId,
     chatUrl: chatId ? origin + "/app/" + chatId : null,

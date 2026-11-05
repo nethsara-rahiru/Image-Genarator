@@ -180,3 +180,13 @@ network, changed UI or app loading); inspect Chrome and retry the pre-submission
 job. GENERATION_LOGIN_REQUIRED means sign-in UI was observed after the readiness
 window; sign in manually and retry. Existing reference files are retained. No
 passwords are collected or entered automatically.
+
+### Five-second post-load settling
+
+After waiting_for_page reaches a loaded signed-in editor, the job enters
+settling_page for five seconds. It rechecks document, chat, account and editor
+before uploads/prompt entry. If the document reloads, the wait repeats; cancellation
+and the overall job deadline still apply. Transient read-only observation timeouts
+can retry during readiness. Ambiguous clicks or prompt submission are never
+blindly repeated. Inspect Chrome if the page remains unresponsive after the
+bounded wait; the delay does not guarantee recovery of a disconnected browser.

@@ -62,10 +62,15 @@ export class GenerationRunner {
     let last;
     while (Date.now() < deadline) {
       signal.throwIfAborted();
-      last = await this.browser.gemini.observe({
-        signal,
-        timeout: Math.min(1500, deadline - Date.now()),
-      });
+      try {
+        last = await this.browser.gemini.observe({
+          signal,
+          timeout: Math.min(1500, deadline - Date.now()),
+        });
+      } catch (error) {
+        if (error.code !== "AUTOMATION_TIMEOUT") throw error;
+        last = { kind: "unknown" };
+      }
       if (last.kind === "signed_in") {
         try {
           const page = await this.evaluate(
@@ -75,9 +80,11 @@ export class GenerationRunner {
           if (page.kind === "ready" && page.editorReady) return page;
         } catch (error) {
           if (
-            !["GENERATION_LOGIN_REQUIRED", "GENERATION_PAGE_CHANGED"].includes(
-              error.code,
-            )
+            ![
+              "GENERATION_LOGIN_REQUIRED",
+              "GENERATION_PAGE_CHANGED",
+              "AUTOMATION_TIMEOUT",
+            ].includes(error.code)
           )
             throw error;
         }
@@ -106,6 +113,44 @@ export class GenerationRunner {
       "GENERATION_PAGE_NOT_READY",
       "Gemini did not finish loading its signed-in prompt editor within the readiness timeout. Check the page/network and retry. No prompt was submitted.",
     );
+  }
+  async waitForStablePage(job, signal, phase) {
+    let expectedAccount = job.accountKey;
+    while (true) {
+      const before = await this.waitForPageReady(
+        { ...job, accountKey: expectedAccount },
+        signal,
+      );
+      expectedAccount ||= before.accountKey;
+      await phase("settling_page");
+      const settleMs = this.browser.options?.test
+        ? (this.browser.options.pageSettleMs ?? 5000)
+        : 5000;
+      await pause(settleMs, undefined, { signal });
+      try {
+        const after = await this.evaluate(
+          { operation: "inspect", accountKey: expectedAccount },
+          signal,
+        );
+        if (
+          after.kind === "ready" &&
+          after.editorReady &&
+          after.documentId === before.documentId &&
+          after.chatId === before.chatId
+        )
+          return after;
+      } catch (error) {
+        if (
+          ![
+            "GENERATION_LOGIN_REQUIRED",
+            "GENERATION_PAGE_CHANGED",
+            "AUTOMATION_TIMEOUT",
+          ].includes(error.code)
+        )
+          throw error;
+      }
+      await phase("waiting_for_page");
+    }
   }
   async uploadReferences(job, directory, signal, accountKey) {
     const references = job.references || [];
@@ -234,7 +279,7 @@ export class GenerationRunner {
     const adapter = this.browser.gemini;
     await adapter.open("gemini", job.chatId);
     await phase("waiting_for_page");
-    let before = await this.waitForPageReady(job, signal);
+    let before = await this.waitForStablePage(job, signal, phase);
     if (job.chatId && before.chatId !== job.chatId)
       throw nativeError(
         "GENERATION_CHAT_UNAVAILABLE",
@@ -289,6 +334,17 @@ export class GenerationRunner {
           )
             break;
         }
+        if (
+          before.kind === "ready" &&
+          before.editorReady &&
+          !before.chatId &&
+          !before.responseIds.length
+        )
+          before = await this.waitForStablePage(
+            { accountKey: newChatAccountKey },
+            signal,
+            phase,
+          );
         if (
           before.kind !== "ready" ||
           before.chatId ||
