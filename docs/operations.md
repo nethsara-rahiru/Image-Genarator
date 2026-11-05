@@ -156,3 +156,13 @@ before prompt submission. If Gemini no longer exposes a unique upload input or
 attachment confirmation, inspect the job's GENERATION_UPLOAD_* error and host
 browser. Never force-send an unconfirmed attachment. Live provider UI changes can
 require adapter updates; fixture tests do not certify live Gemini.
+
+### Upload control unavailable
+
+Update to the latest version if an attachment menu uses Open upload file menu or
+Add files and tools. The adapter opens the menu once, recognizes Upload files
+menu items and resolves image inputs near the composer. Several equally eligible
+inputs still stop safely. No prompt is sent for this error; use Retry job after
+updating (the stored reference files are reused). If it persists, report the exact
+attachment menu labels and sanitized job error. Do not provide account credentials
+or private screenshots. Live provider layouts can still require adapter updates.

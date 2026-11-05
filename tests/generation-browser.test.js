@@ -180,15 +180,24 @@ test(
             "</model-response>",
         )
         .join("");
-      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>html{scroll-behavior:smooth}body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><form><div id="attachments"></div><input type="file" accept="image/*" multiple hidden><div contenteditable="true" role="textbox" class="ql-editor"></div><button type="button" id="send" aria-label="Send message">Send</button></form><script>
+      res.end(`<!doctype html><html><head><title>Gemini-like generation fixture</title><style>html{scroll-behavior:smooth}body{font:16px sans-serif}model-response{display:block}.image-container button{display:none}.image-container:hover button{display:inline-block}img{width:64px;height:64px}.ql-editor{border:1px solid;padding:8px;min-height:30px}</style></head><body><button aria-label="Google Account: ${account}">Account</button><main id="responses">${history}</main><form><div id="attachments"></div><button type="button" id="upload-menu" aria-expanded="false">+</button><div contenteditable="true" role="textbox" class="ql-editor"></div><button type="button" id="send" aria-label="Send message">Send</button></form><script>
       function wire(){for(const b of document.querySelectorAll('[data-download]')){b.onmouseenter=()=>{if(b.dataset.rebound)return;b.dataset.rebound='yes';const clone=b.cloneNode(true);clone.style.marginLeft='24px';b.replaceWith(clone);wire();};b.onclick=async(event)=>{if(!event.isTrusted || !navigator.userActivation.isActive)return;const prepared=await(await fetch('/prepare?file='+encodeURIComponent(b.dataset.download))).json();const frame=document.createElement('iframe');frame.src=prepared.url;document.body.append(frame);};}}
-      document.querySelector('input[type=file]').onchange=(event)=>{
+      const unrelated=document.createElement('input');unrelated.type='file';unrelated.accept='audio/*';unrelated.hidden=true;document.body.append(unrelated);
+      document.querySelector('#upload-menu').onclick=()=>{
+        const opener=document.querySelector('#upload-menu');opener.setAttribute('aria-expanded','true');
+        const menu=document.createElement('div');menu.setAttribute('role','menu');
+        const item=document.createElement('div');item.setAttribute('role','menuitem');item.setAttribute('aria-label','Upload files');item.textContent='Upload files';menu.append(item);document.body.append(menu);
+        item.onclick=()=>{
+          menu.remove();const input=document.createElement('input');input.type='file';input.accept='image/*,.pdf';input.multiple=true;input.hidden=true;input.dataset.fixtureReference='true';document.querySelector('form').append(input);
+          input.onchange=(event)=>{
         const attachments=document.querySelector('#attachments');attachments.setAttribute('aria-busy','true');attachments.textContent='Uploading';
         setTimeout(()=>{attachments.textContent=[...event.target.files].map(file=>file.name).join(' ');attachments.removeAttribute('aria-busy');},200);
+          };
+        };
       };
       wire();document.querySelector('#send').onclick=async()=>{
         if(document.querySelector('#attachments').getAttribute('aria-busy')==='true')throw Error('Sent before upload completion');
-        const references=await Promise.all([...document.querySelector('input[type=file]').files].map(async(file)=>({name:file.name,bytes:[...new Uint8Array(await file.arrayBuffer())]})));
+        const references=await Promise.all([...(document.querySelector('[data-fixture-reference]')?.files || [])].map(async(file)=>({name:file.name,bytes:[...new Uint8Array(await file.arrayBuffer())]})));
         const editor=document.querySelector('[contenteditable]'),prompt=editor.textContent;document.querySelector('#send').disabled=true;
         for(const old of document.querySelectorAll('model-response'))old.replaceWith(old.cloneNode(true));
         const query=document.createElement('user-query');query.textContent=prompt;document.querySelector('#responses').append(query);
@@ -196,7 +205,7 @@ test(
         const stop=document.createElement('button');stop.setAttribute('aria-label','Stop response');stop.textContent='Stop';document.body.append(stop);
         const data=await(await fetch('/mock/generate',{method:'POST',body:JSON.stringify({prompt,references,chatId:location.pathname.split('/')[2]||null})})).json();
         history.replaceState({},'', '/app/'+data.id);
-        setTimeout(()=>{response.innerHTML=data.html;response.removeAttribute('aria-busy');stop.remove();document.querySelector('#send').disabled=false;editor.textContent='';document.querySelector('#attachments').textContent='';document.querySelector('input[type=file]').value='';wire();},data.delay);
+        setTimeout(()=>{response.innerHTML=data.html;response.removeAttribute('aria-busy');stop.remove();document.querySelector('#send').disabled=false;editor.textContent='';document.querySelector('#attachments').textContent='';if(document.querySelector('[data-fixture-reference]'))document.querySelector('[data-fixture-reference]').value='';wire();},data.delay);
       };
     </script></body></html>`);
     });

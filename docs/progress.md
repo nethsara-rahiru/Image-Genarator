@@ -516,3 +516,22 @@ this app does not bypass it or guarantee that Gemini will return an image.
   exact reference bytes, confirmation before send, metadata and image download.
 - Live Gemini attachment integration remains UNVERIFIED until tested on the host
   PC. Final CI/test evidence and commit/PR references are recorded in the PR.
+
+## Gemini upload-control discovery fix
+
+- Reported GENERATION_UPLOAD_UNAVAILABLE occurred before prompt submission. Found
+  unsupported attachment-menu labels/roles and a page-global file-input uniqueness
+  guard that rejected unrelated inputs; exact live DOM remains unavailable.
+- User confirmed plus button then Upload files. Added a unique composer-only plus
+  fallback alongside Open upload file menu / Add files and tools labels and portalled menuitem
+  discovery. Prefer composer inputs and explicitly image-capable inputs, ignore
+  disabled/response/audio controls, and never guess among equivalent candidates.
+- Open a given menu control once, rather than toggling it closed on each poll.
+  Intercept the native file picker during discovery/set-files and restore it in
+  finally, preventing an OS picker from blocking automated file delivery.
+- Tests use lazy two-step menu creation and an unrelated audio input through the
+  full dashboard/API generation fixture. Separate browser coverage exercises
+  portalled menu items, duplicate image inputs, misleading response buttons,
+  disabled inputs and single-open behavior. Confirmation-before-send is retained.
+- Exact live Gemini verification remains UNVERIFIED. CI and merge references are
+  recorded in the PR; failed jobs remain safe to retry before submission.
