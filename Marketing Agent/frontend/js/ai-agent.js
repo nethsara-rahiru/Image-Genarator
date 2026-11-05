@@ -123,6 +123,11 @@ const agentImage = (value) =>
         const item = make("section", "", "promotion-image");
         const heading = make("h4", `Image ${i + 1}`),
           state = make("p", "Waiting", "hint");
+        const remote = make("p", "", "hint"),
+          chat = make("a", "Open Gemini chat");
+        chat.target = "_blank";
+        chat.rel = "noopener noreferrer";
+        chat.hidden = true;
         const image = make("img");
         image.alt = `${run.targetName} promotion ${i + 1}`;
         image.hidden = true;
@@ -134,9 +139,9 @@ const agentImage = (value) =>
           prompt = make("p");
         details.append(summary, prompt);
         details.hidden = true;
-        item.append(heading, state, image, download, details);
+        item.append(heading, state, remote, chat, image, download, details);
         grid.append(item);
-        return { state, image, download, details, prompt };
+        return { state, remote, chat, image, download, details, prompt };
       });
       article.append(title, progress, error, cancel, grid);
       entry = { article, title, progress, error, cancel, slots };
@@ -154,6 +159,11 @@ const agentImage = (value) =>
         ? `Saved · ${item.width} × ${item.height} · ${item.bytes < 1024 ? item.bytes + " B" : Math.round(item.bytes / 1024) + " KB"}`
         : item.remoteState ||
           (i + 1 === run.current ? run.state.replaceAll("_", " ") : "Waiting");
+      slot.remote.textContent = item.remoteJobId
+        ? `Remote job: ${item.remoteJobId}`
+        : "";
+      slot.chat.hidden = !item.chatUrl;
+      if (item.chatUrl) slot.chat.href = item.chatUrl;
       slot.prompt.textContent = item.prompt || "";
       slot.details.hidden = !item.prompt;
       slot.image.hidden = slot.download.hidden = !item.imageUrl;
