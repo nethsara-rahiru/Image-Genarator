@@ -1,23 +1,122 @@
-<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet"><link rel="stylesheet" href="css/styles.css"><title>Business profile – MarketingAgent</title></head><body data-menu>
-<header class="site-header"><div class="wrap"><a class="brand" href="index.html"><span class="brand-mark">M</span>MarketingAgent</a><nav class="nav" aria-label="Main"><a class="link" href="index.html">Home</a><a class="link" href="index.html#marketplace">Marketplace</a><a class="link" href="index.html#how">How it works</a></nav><div class="actions" id="navActions"></div></div></header>
-<main class="dash"><div class="wrap">
-  <h1>Business profile</h1><p class="hint" style="margin-top:-.3rem;margin-bottom:1.5rem">This is what customers see in the marketplace.</p>
-  <div class="dash-grid">
-    <form class="panel wide" id="profileForm" novalidate>
-      <div class="field"><label for="bizName">Business name</label><input id="bizName" name="name" maxlength="80" placeholder="e.g. Ceylon Leaf Tea Co."><div class="err" id="nameErr"></div></div>
-      <div class="field"><label for="logo">Business logo</label>
-        <div class="logo-row"><div class="logo-box" id="logoBox">No logo yet</div>
-          <div><input id="logo" type="file" accept="image/png,image/jpeg,image/webp"><button type="button" class="btn btn-ghost" id="removeLogo" hidden style="margin-top:.5rem;padding:.35rem .8rem">Remove logo</button>
-          <div class="hint">Square images work best. Max 3 MB.</div></div></div>
-        <div class="err" id="logoErr"></div></div>
-      <div class="two">
-        <div class="field"><label for="category">Category</label><select id="category" name="category"><option value="">Choose a category</option><option>Food &amp; Drink</option><option>Fashion</option><option>Home &amp; Living</option><option>Services</option><option>Other</option></select></div>
-        <div class="field"><label for="city">City</label><input id="city" name="city" maxlength="40" placeholder="e.g. Kandy"></div>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <title>Business profile – MarketingAgent</title>
+  </head>
+  <body data-menu>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="index.html"
+          ><span class="brand-mark">M</span>MarketingAgent</a
+        >
+        <nav class="nav" aria-label="Main">
+          <a class="link" href="index.html">Home</a
+          ><a class="link" href="index.html#marketplace">Marketplace</a
+          ><a class="link" href="index.html#how">How it works</a>
+        </nav>
+        <div class="actions" id="navActions"></div>
       </div>
-      <div class="field"><label for="description">Business description</label><textarea id="description" name="description" rows="5" placeholder="What do you sell, and what makes it special?"></textarea><div class="counter" id="count">0 / 500</div><div class="err" id="descErr"></div></div>
-      <button class="btn btn-primary" type="submit">Save business profile</button>
-    </form>
-    <aside><h2 style="font-size:1.2rem">Marketplace preview</h2><div class="card accent" id="preview"></div><p class="hint"><a href="index.html#marketplace">View the marketplace</a></p></aside>
-  </div>
-</div></main>
-<script src="js/api.js"></script><script src="js/app.js"></script><script src="js/menu.js"></script><script src="js/business.js"></script></body></html>
+    </header>
+    <main class="dash">
+      <div class="wrap">
+        <h1>Business profile</h1>
+        <p class="hint" style="margin-top: -0.3rem; margin-bottom: 1.5rem">
+          This is what customers see in the marketplace.
+        </p>
+        <div class="dash-grid">
+          <form class="panel wide" id="profileForm" novalidate>
+            <div class="field">
+              <label for="bizName">Business name</label
+              ><input
+                id="bizName"
+                name="name"
+                maxlength="80"
+                placeholder="e.g. Ceylon Leaf Tea Co."
+              />
+              <div class="err" id="nameErr"></div>
+            </div>
+            <div class="field">
+              <label for="logo">Business logo</label>
+              <div class="logo-row">
+                <div class="logo-box" id="logoBox">No logo yet</div>
+                <div>
+                  <input
+                    id="logo"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                  /><button
+                    type="button"
+                    class="btn btn-ghost"
+                    id="removeLogo"
+                    hidden
+                    style="margin-top: 0.5rem; padding: 0.35rem 0.8rem"
+                  >
+                    Remove logo
+                  </button>
+                  <div class="hint">Square images work best. Max 3 MB.</div>
+                </div>
+              </div>
+              <div class="err" id="logoErr"></div>
+            </div>
+            <div class="two">
+              <div class="field">
+                <label for="category">Category</label
+                ><select id="category" name="category">
+                  <option value="">Choose a category</option>
+                  <option>Food &amp; Drink</option>
+                  <option>Fashion</option>
+                  <option>Home &amp; Living</option>
+                  <option>Services</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="city">City</label
+                ><input
+                  id="city"
+                  name="city"
+                  maxlength="40"
+                  placeholder="e.g. Kandy"
+                />
+              </div>
+            </div>
+            <div class="field">
+              <label for="description">Business description</label
+              ><textarea
+                id="description"
+                name="description"
+                rows="5"
+                placeholder="What do you sell, and what makes it special?"
+              ></textarea>
+              <div class="counter" id="count">0 / 500</div>
+              <div class="err" id="descErr"></div>
+            </div>
+            <button class="btn btn-primary" type="submit">
+              Save business profile
+            </button>
+          </form>
+          <aside>
+            <h2 style="font-size: 1.2rem">Marketplace preview</h2>
+            <div class="card accent" id="preview"></div>
+            <p class="hint">
+              <a href="index.html#marketplace">View the marketplace</a>
+            </p>
+          </aside>
+        </div>
+      </div>
+    </main>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/menu.js"></script>
+    <script src="js/business.js"></script>
+  </body>
+</html>

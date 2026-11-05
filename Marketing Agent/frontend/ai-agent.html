@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;800&family=DM+Sans:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/styles.css" />
+    <title>AI Agent – MarketingAgent</title>
+  </head>
+  <body data-menu>
+    <header class="site-header">
+      <div class="wrap">
+        <a class="brand" href="index.html"
+          ><span class="brand-mark">M</span>MarketingAgent</a
+        >
+        <nav class="nav" aria-label="Main">
+          <a class="link" href="index.html">Home</a
+          ><a class="link" href="index.html#marketplace">Marketplace</a
+          ><a class="link" href="index.html#how">How it works</a>
+        </nav>
+        <div class="actions" id="navActions"></div>
+      </div>
+    </header>
+    <main class="dash">
+      <div class="wrap">
+        <h1>AI Agent</h1>
+        <p class="hint">
+          Choose your business or a listed product to prepare a promotion.
+        </p>
+        <p id="agentStatus" role="status">
+          Loading your business and products…
+        </p>
+        <section class="panel" aria-labelledby="brandTitle">
+          <h2 id="brandTitle">Your business</h2>
+          <div id="agentBusiness"></div>
+        </section>
+        <section class="panel agent-section" aria-labelledby="productsTitle">
+          <div class="agent-heading">
+            <h2 id="productsTitle">Listed products</h2>
+            <button class="btn btn-ghost" id="reloadAgent" type="button">
+              Refresh
+            </button>
+          </div>
+          <div id="agentProducts" class="agent-grid"></div>
+          <div class="actions agent-pagination">
+            <button
+              class="btn btn-ghost"
+              id="previousProducts"
+              type="button"
+              disabled
+            >
+              Previous</button
+            ><span id="productPage" role="status"></span
+            ><button
+              class="btn btn-ghost"
+              id="nextProducts"
+              type="button"
+              disabled
+            >
+              Next
+            </button>
+          </div>
+        </section>
+        <details class="panel agent-section">
+          <summary>Add a product</summary>
+          <form id="productForm" class="agent-section">
+            <div class="field">
+              <label for="productName">Product name</label
+              ><input id="productName" maxlength="80" required />
+            </div>
+            <div class="field">
+              <label for="productDescription">Description</label
+              ><textarea
+                id="productDescription"
+                maxlength="500"
+                rows="3"
+              ></textarea>
+            </div>
+            <div class="field">
+              <label for="productImage">Product image</label
+              ><input
+                id="productImage"
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                required
+              />
+              <p class="hint">
+                PNG, JPEG or WebP up to 3 MB. Images are resized for the
+                catalog.
+              </p>
+              <img
+                id="productPreview"
+                class="agent-form-preview"
+                alt="Selected product preview"
+                hidden
+              />
+            </div>
+            <p id="productError" class="err" role="alert"></p>
+            <button class="btn btn-primary" id="saveProduct" type="submit">
+              List product
+            </button>
+          </form>
+        </details>
+        <dialog
+          id="promotionDialog"
+          class="agent-dialog"
+          aria-labelledby="promotionTitle"
+        >
+          <form id="promotionForm">
+            <div class="agent-heading">
+              <h2 id="promotionTitle">Promotion composer</h2>
+              <button
+                class="btn btn-ghost"
+                type="button"
+                id="closePromotion"
+                aria-label="Close promotion composer"
+              >
+                Close
+              </button>
+            </div>
+            <img
+              id="promotionImage"
+              class="agent-form-preview"
+              alt="Selected promotion reference"
+              hidden
+            />
+            <p id="promotionTarget" class="hint"></p>
+            <div class="field">
+              <label for="promotionText">Promotion text</label
+              ><textarea
+                id="promotionText"
+                maxlength="800"
+                rows="6"
+                required
+              ></textarea>
+            </div>
+            <p id="promotionPlatforms" class="hint"></p>
+            <p class="hint">
+              This editable draft uses your saved details. Saving does not
+              generate an image or publish to social platforms.
+            </p>
+            <p id="promotionError" class="err" role="alert"></p>
+            <div class="actions">
+              <button class="btn btn-primary" id="savePromotion" type="submit">
+                Save promotion draft</button
+              ><a class="btn btn-ghost" href="dashboard.html">Review drafts</a>
+            </div>
+          </form>
+        </dialog>
+      </div>
+    </main>
+    <script src="js/api.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/menu.js"></script>
+    <script src="js/ai-agent.js"></script>
+  </body>
+</html>

@@ -52,3 +52,29 @@ jobs:
         run: docker build --build-arg BROWSER_UID=1001 --build-arg BROWSER_GID=1001 -f container/Dockerfile -t local-browser-ci .
       - name: Verify non-root sandboxed Chromium and private capture
         run: docker run --rm --init --user 1001:1001 --shm-size=1g --tmpfs /tmp:rw,nosuid,mode=1777,size=1g --security-opt seccomp=container/seccomp.json local-browser-ci node scripts/container-smoke.js
+  marketing-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mongo:
+        image: mongo:8.0
+        ports:
+          - 27017:27017
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm ci --prefix 'Marketing Agent/backend'
+      - run: npm test --prefix 'Marketing Agent/backend'
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27017
+          TEST_CHROME: /usr/bin/google-chrome
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: marketing-agent-previews
+          path: Marketing Agent/backend/test-results/
+          if-no-files-found: ignore
