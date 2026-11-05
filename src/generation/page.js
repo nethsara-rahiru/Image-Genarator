@@ -112,8 +112,13 @@ export async function generationPage(request) {
       .join(" ")}`;
     return names.every((name) => text.includes(name));
   };
-  if (request.operation === "prepare_attachments") {
-    let inputs = [...document.querySelectorAll('input[type="file"]')].filter(
+  if (
+    ["prepare_attachments", "activate_upload_control"].includes(
+      request.operation,
+    )
+  ) {
+    const allInputs = [...document.querySelectorAll('input[type="file"]')];
+    let inputs = allInputs.filter(
       (input) =>
         !input.disabled &&
         !responses.some((response) => response.contains(input)) &&
@@ -125,13 +130,19 @@ export async function generationPage(request) {
       /image|\.png|\.jpe?g|\.webp/i.test(input.accept),
     );
     if (explicitImages.length) inputs = explicitImages;
+    const diagnostic = {
+      inputCount: allInputs.length,
+      candidateCount: inputs.length,
+      composerInputCount: local.length,
+      composerFound: composer ? 1 : 0,
+    };
     if (inputs.length === 1) {
       for (const marked of document.querySelectorAll(
         "[data-local-reference-input]",
       ))
         marked.removeAttribute("data-local-reference-input");
       inputs[0].setAttribute("data-local-reference-input", "true");
-      return { ok: true };
+      return { ok: true, target: "file_input", ...diagnostic };
     }
     const uploadControls = all(
       'button,[role="button"],[role="menuitem"],label',
@@ -141,6 +152,17 @@ export async function generationPage(request) {
         node.getAttribute("aria-disabled") !== "true" &&
         !responses.some((response) => response.contains(node)),
     );
+    diagnostic.controlCount = uploadControls.length;
+    diagnostic.plusInsideCount = uploadControls.filter(
+      (node) =>
+        composer?.contains(node) &&
+        /^(\+|add|attach files?)$/i.test(label(node)),
+    ).length;
+    diagnostic.plusOutsideCount = uploadControls.filter(
+      (node) =>
+        !composer?.contains(node) &&
+        /^(\+|add|attach files?)$/i.test(label(node)),
+    ).length;
     if (inputs.length !== 1) {
       // Portalled menu items are often outside the composer. Prefer an open
       // upload menu over its opener, so polling cannot toggle it shut.
@@ -149,7 +171,10 @@ export async function generationPage(request) {
           label(node),
         ),
       );
+      diagnostic.menuCount = upload.length;
+      let target = "upload_menu_item";
       if (!upload.length) {
+        target = "attachment_opener";
         upload = uploadControls.filter((node) =>
           /^(open (?:upload file|file upload|upload) menu|add files?(?: and tools)?|add photos?(?: and files)?|upload photos?(?: and files)?)$/i.test(
             label(node),
@@ -157,17 +182,40 @@ export async function generationPage(request) {
         );
         const localControls = upload.filter((node) => composer?.contains(node));
         if (localControls.length) upload = localControls;
-        if (!upload.length)
+        if (!upload.length) {
+          target = "composer_plus";
           upload = uploadControls.filter(
             (node) =>
               composer?.contains(node) &&
               /^(\+|add|attach files?)$/i.test(label(node)),
           );
+        }
         upload = upload.filter(
           (node) => node.getAttribute("aria-expanded") !== "true",
         );
       }
+      diagnostic.openerCount =
+        target === "upload_menu_item" ? 0 : upload.length;
       if (upload.length === 1 && !state.uploadClicked?.has(upload[0])) {
+        const targetToken = id(upload[0]);
+        const rect = upload[0].getBoundingClientRect();
+        const detail = {
+          ...diagnostic,
+          target,
+          targetToken,
+          documentId: performance.timeOrigin,
+          rectX: Math.round(rect.x),
+          rectY: Math.round(rect.y),
+          rectWidth: Math.round(rect.width),
+          rectHeight: Math.round(rect.height),
+        };
+        if (request.operation === "prepare_attachments")
+          return { ok: false, reason: "click_required", ...detail };
+        if (
+          request.targetToken !== targetToken ||
+          request.documentId !== performance.timeOrigin
+        )
+          return { ok: false, reason: "target_changed", ...detail };
         state.uploadClicked ||= new WeakSet();
         state.uploadClicked.add(upload[0]);
         upload[0].click();
@@ -175,6 +223,7 @@ export async function generationPage(request) {
           ok: false,
           reason: "upload_menu_opened",
           candidates: inputs.length,
+          ...detail,
         };
       }
     }
@@ -182,6 +231,7 @@ export async function generationPage(request) {
       ok: false,
       reason: inputs.length > 1 ? "ambiguous_inputs" : "input_not_found",
       candidates: inputs.length,
+      ...diagnostic,
     };
   }
   if (request.operation === "attachments_ready")

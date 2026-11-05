@@ -58,6 +58,64 @@ export class DebugLog {
     this.last.set(key, now);
     if (this.last.size > 100) this.last.delete(this.last.keys().next().value);
     const safe = {};
+    const traceStages = [
+      "waiting_for_page",
+      "settling_page",
+      "uploading_assets",
+      "preparing_prompt",
+      "submitting_prompt",
+      "generating",
+      "downloading",
+      "upload_discovery",
+      "upload_click",
+      "upload_files",
+      "attachment_confirmation",
+    ];
+    if (traceStages.includes(details.stage)) safe.stage = details.stage;
+    if (
+      [
+        "started",
+        "waiting",
+        "selected",
+        "dispatched",
+        "confirmed",
+        "failed",
+        "changed",
+      ].includes(details.outcome)
+    )
+      safe.outcome = details.outcome;
+    if (
+      [
+        "file_input",
+        "upload_menu_item",
+        "attachment_opener",
+        "composer_plus",
+        "none",
+      ].includes(details.target)
+    )
+      safe.target = details.target;
+    for (const key of [
+      "attempt",
+      "inputCount",
+      "candidateCount",
+      "composerInputCount",
+      "composerFound",
+      "controlCount",
+      "plusInsideCount",
+      "plusOutsideCount",
+      "menuCount",
+      "openerCount",
+      "fileCount",
+    ])
+      if (
+        Number.isInteger(details[key]) &&
+        details[key] >= 0 &&
+        details[key] <= 10000
+      )
+        safe[key] = details[key];
+    for (const key of ["rectX", "rectY", "rectWidth", "rectHeight"])
+      if (Number.isFinite(details[key]) && Math.abs(details[key]) <= 100000)
+        safe[key] = Math.round(details[key]);
     if (
       ["GET", "POST", "PATCH", "DELETE", "PUT", "HEAD", "OPTIONS"].includes(
         details.method,
@@ -81,6 +139,11 @@ export class DebugLog {
         "PRIVATE_HOSTNAME",
         "NO_DNS_ADDRESSES",
         "NON_PUBLIC_DNS_ADDRESS",
+        "input_not_found",
+        "ambiguous_inputs",
+        "click_required",
+        "target_changed",
+        "upload_menu_opened",
       ].includes(details.reason)
     )
       safe.reason = details.reason;

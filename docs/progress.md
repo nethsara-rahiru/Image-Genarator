@@ -571,3 +571,24 @@ this app does not bypass it or guarantee that Gemini will return an image.
   asserting at least five seconds before reference uploads.
 - Live Gemini remains UNVERIFIED; final test/CI evidence and PR references are in
   the PR. Failed pre-submission jobs retain their references for safe retry.
+
+## Live automation diagnostics
+
+- Added always-visible Live automation table with job/step filter and existing
+  protected debug export. Uses persistent bounded logs plus an independent
+  two-second HTTP delta refresh, even if browser/WebSocket observation stalls.
+- Trace phase entry, discovery counts, composer presence, eligible inputs, plus
+  buttons inside/outside the composer, matching menu/opener controls and selected
+  target viewport rectangles. No page content, labels, credentials, prompts,
+  filenames, filesystem paths or transient DOM tokens are persisted.
+- Split upload target discovery from activation so a started event is persisted
+  before the click request. Revalidate the exact target token before clicking;
+  report dispatched, changed or failed honestly. Input already appearing skips
+  the click. Preserve ambiguity, account and attachment-confirmation guards.
+- Trace file delivery separately from provider attachment confirmation. Late or
+  failed acknowledgement does not produce a fake successful step or blind retry.
+- Tests cover pre-click event ordering, sanitized persistence/replay, target
+  discovery without mutation, full plus/menu upload and live UI events with all
+  WebSocket log frames deliberately dropped. Final CI evidence is in the PR.
+- Actual live Gemini layout/cause remains UNVERIFIED until user supplies the new
+  sanitized trace from a target-PC job. No raw DOM or screenshots are captured.

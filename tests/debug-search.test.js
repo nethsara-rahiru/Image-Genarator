@@ -6,6 +6,51 @@ import path from "node:path";
 import { navigationTarget } from "../src/navigation.js";
 import { DebugLog } from "../src/debugLog.js";
 import { actionError } from "../src/actionErrors.js";
+test("automation diagnostics retain safe targets/counts but omit page text, paths and tokens", async () => {
+  const data = await fs.mkdtemp(path.join(os.tmpdir(), "automation-trace-"));
+  try {
+    const log = new DebugLog(data, { stdout: false });
+    const entry = log.write(
+      "info",
+      "browser",
+      "AUTOMATION_TRACE",
+      "Upload discovery snapshot.",
+      {
+        stage: "upload_discovery",
+        outcome: "waiting",
+        target: "composer_plus",
+        reason: "click_required",
+        jobId: "12345678-1234-1234-1234-123456789abc",
+        candidateCount: 0,
+        composerFound: 1,
+        plusInsideCount: 1,
+        plusOutsideCount: 2,
+        rectX: 22.4,
+        rectY: 200,
+        rectWidth: 32,
+        rectHeight: 32,
+        label: "Google Account: private@example.test",
+        prompt: "secret prompt",
+        token: "secret token",
+        path: "/private/profile",
+        targetToken: "private-node-token",
+        inputCount: -1,
+      },
+    );
+    assert.equal(entry.details.target, "composer_plus");
+    assert.equal(entry.details.rectX, 22);
+    assert.equal(entry.details.plusOutsideCount, 2);
+    assert.equal(entry.details.inputCount, undefined);
+    assert.doesNotMatch(
+      JSON.stringify(entry),
+      /private@example|secret prompt|secret token|private-node-token|private\/profile/,
+    );
+    const restored = new DebugLog(data, { stdout: false }).snapshot().entries;
+    assert.deepEqual(restored[0].details, entry.details);
+  } finally {
+    await fs.rm(data, { recursive: true, force: true });
+  }
+});
 test("address bar distinguishes Google searches, domains, ports and explicit schemes", () => {
   assert.equal(
     navigationTarget("weather in colombo"),

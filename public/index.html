@@ -360,6 +360,49 @@
           </p>
           <div id="download-list"></div>
         </section>
+        <section class="panel" aria-labelledby="automation-log-heading">
+          <div class="workspace-heading">
+            <h2 id="automation-log-heading">Live automation</h2>
+            <a href="/api/logs/export" download="automation-debug.json"
+              >Export debug logs</a
+            >
+          </div>
+          <p class="muted">
+            Live generation steps, upload-control candidates and click attempts.
+            Rectangles use the managed Chrome viewport, not this dashboard. No
+            page content, prompts, credentials or filenames are recorded.
+          </p>
+          <label for="automation-log-filter">Filter by job ID or step</label>
+          <input
+            id="automation-log-filter"
+            type="search"
+            placeholder="Job ID, upload_discovery, upload_click…"
+          />
+          <p id="automation-log-status" class="muted" role="status">
+            No automation events yet.
+          </p>
+          <div class="api-log-scroll">
+            <table class="api-log-table">
+              <caption class="sr-only">
+                Latest automation events, newest first
+              </caption>
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Step / result</th>
+                  <th>Target</th>
+                  <th>Message / diagnostics</th>
+                  <th>Job ID</th>
+                </tr>
+              </thead>
+              <tbody id="automation-log-rows">
+                <tr>
+                  <td colspan="5">No automation events yet.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
         <section class="panel" aria-labelledby="api-log-heading">
           <div class="workspace-heading">
             <h2 id="api-log-heading">API requests</h2>
