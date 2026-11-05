@@ -79,9 +79,11 @@ router.post("/", async (req, res) => {
   try {
     settings = config();
   } catch (error) {
-    return res
-      .status(503)
-      .json({ error: error.message, code: "PROMOTION_CONFIG" });
+    return res.status(503).json({
+      error: error.message,
+      code:
+        error.code === "PROMOTION_TLS_CONFIG" ? error.code : "PROMOTION_CONFIG",
+    });
   }
   if (
     (await Run.countDocuments({

@@ -44,6 +44,13 @@ function worker({
   async function processRun(run) {
     const c = getConfig(),
       api = makeClients(c, controller.signal);
+    try {
+      return await processImages(run, c, api);
+    } finally {
+      await api.close?.();
+    }
+  }
+  async function processImages(run, c, api) {
     if (run.provider !== fingerprint(c))
       throw fail(
         "PROMOTION_CONFIG",
@@ -217,6 +224,7 @@ function worker({
       { $set: { completedAt: run.completedAt } },
     );
   }
+
   async function tick() {
     if (busy || stopping || mongoose.connection.readyState !== 1) return;
     busy = true;
@@ -262,6 +270,8 @@ function worker({
               : "failed";
         const safe = [
           "PROMOTION_CONFIG",
+          "PROMOTION_TLS_CONFIG",
+          "UPSTREAM_TLS",
           "GROQ_PROMPT",
           "IMAGE_INVALID",
           "IMAGE_SIZE",
