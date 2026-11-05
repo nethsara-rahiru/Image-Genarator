@@ -592,3 +592,18 @@ this app does not bypass it or guarantee that Gemini will return an image.
   WebSocket log frames deliberately dropped. Final CI evidence is in the PR.
 - Actual live Gemini layout/cause remains UNVERIFIED until user supplies the new
   sanitized trace from a target-PC job. No raw DOM or screenshots are captured.
+
+## Exact live upload opener label
+
+- User supplied live Material button markup with aria-label="Upload & tools".
+  The old allowlist lacked that exact label, explaining the zero opener/plus
+  matches despite a visible icon. Its hidden plus icon does not supply button
+  text; the touch-target span is not the clickable control.
+- Add the exact semantic label to attachment opener discovery without relying on
+  generated Angular attributes, jslog IDs or unstable Material classes. Preserve
+  exact-target/document checks, ambiguity guards, tracing and confirmation.
+- Real Chromium generation and discovery fixtures now use Upload &amp; tools with
+  a hidden plus mat-icon and Material touch-target span, then a portalled Upload
+  files menu and lazy image input. Final test/CI evidence is in the PR.
+- Live target-PC generation after updating remains UNVERIFIED; retry the stored
+  pre-submission job and inspect the new trace if another upload step fails.

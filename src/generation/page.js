@@ -176,7 +176,7 @@ export async function generationPage(request) {
       if (!upload.length) {
         target = "attachment_opener";
         upload = uploadControls.filter((node) =>
-          /^(open (?:upload file|file upload|upload) menu|add files?(?: and tools)?|add photos?(?: and files)?|upload photos?(?: and files)?)$/i.test(
+          /^(upload & tools|open (?:upload file|file upload|upload) menu|add files?(?: and tools)?|add photos?(?: and files)?|upload photos?(?: and files)?)$/i.test(
             label(node),
           ),
         );

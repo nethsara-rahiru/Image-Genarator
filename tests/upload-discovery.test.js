@@ -57,8 +57,19 @@ test(
     );
     assert.equal((await discover()).reason, "ambiguous_inputs");
     assert.equal(await page.locator("[data-local-reference-input]").count(), 0);
+    for (const label of ["Add files and tools", "Open upload file menu", "+"]) {
+      await render(
+        `<form><textarea></textarea><button type="button" aria-label="${label}">${label}</button></form>`,
+      );
+      const found = await inspect();
+      assert.equal(found.reason, "click_required");
+      assert.equal(
+        found.target,
+        label === "+" ? "composer_plus" : "attachment_opener",
+      );
+    }
     await render(
-      '<form><textarea></textarea><button type="button" aria-label="Add files and tools" aria-expanded="false">Add</button><input type="file" accept="image/*" disabled></form><input type="file" accept="audio/*"><model-response><button aria-label="Upload files">Misleading response</button></model-response>',
+      '<form><textarea></textarea><button type="button" class="mdc-icon-button mat-mdc-icon-button" aria-label="Upload &amp; tools" aria-haspopup="menu" aria-disabled="false" aria-expanded="false"><gem-icon><mat-icon aria-hidden="true" data-mat-icon-name="plus" fonticon="plus"></mat-icon></gem-icon><span class="mat-mdc-button-touch-target"></span></button><input type="file" accept="image/*" disabled></form><input type="file" accept="audio/*"><model-response><button aria-label="Upload files">Misleading response</button></model-response>',
     );
     await page.evaluate(() => {
       window.uploadClicks = 0;
